@@ -1,98 +1,168 @@
-# Plataforma CTF del laboratorio
+# Plataforma CTF de Entrenamiento en Ciberseguridad
 
-Primera entrega funcional de una plataforma CTF interna para el laboratorio MITRE ATT&CK. Implementa FastAPI, React/TypeScript, PostgreSQL, Redis, Docker Compose, control de acceso por roles, retos iniciales, validación de flags, ranking en tiempo real y el ciclo de una conexión exclusiva a Guacamole.
+## Descripción
 
-## Arranque local
+Plataforma web de entrenamiento en ciberseguridad con experiencia estilo CTF
+(Capture The Flag), diseñada para un laboratorio académico. Permite que los
+estudiantes resuelvan retos asociados a escenarios de ataque, envíen flags y
+reciban una validación, puntuación y seguimiento de su progreso.
 
-1. Copia `.env.example` como `.env` y sustituye sus secretos.
-2. Ejecuta `docker compose up --build`.
-3. Abre `http://localhost:8080`.
+La plataforma es la capa de entrenamiento, interacción y evaluación del
+laboratorio. **No reemplaza a Security Onion ni es el mecanismo de detección**:
+Security Onion conserva sus funciones de monitoreo y detección.
 
-En modo de demostración se crean las cuentas `admin`, `instructor`, `usuario` y `guest`. Todas usan el valor de `CTF_DEMO_PASSWORD`. Estas cuentas existen solo para la primera instalación de desarrollo; cámbialas o desactívalas antes de una sesión real.
+## Objetivos
 
-La API queda disponible tras el proxy en `/api/v1` y su documentación en `/docs`.
+- Proporcionar un entorno controlado para practicar escenarios de ataque.
+- Relacionar los retos con técnicas de MITRE ATT&CK y distintos niveles de
+  dificultad.
+- Validar flags y registrar los intentos de los jugadores.
+- Medir el avance mediante puntuación, progreso y ranking.
+- Facilitar a los instructores la organización de retos y a los estudiantes el
+  acceso a las máquinas víctima autorizadas.
 
-## Integración con el laboratorio
+## Características principales
 
-- Sitúa `LAB-CTFWEB` en la VLAN de administración y permite el acceso humano desde las estaciones autorizadas a través de Guacamole.
-- Mantén el segmento de monitoreo aislado: la aplicación no se comunica con Security Onion.
-- El adaptador predeterminado de Guacamole (`GUACAMOLE_MODE=stub`) permite probar el ciclo de inicio/cierre sin modificar la infraestructura.
-- Antes de seleccionar `GUACAMOLE_MODE=managed`, implementa y pruebe el adaptador para la versión y autenticación instaladas de Guacamole. No almacenes credenciales de usuarios o de máquinas objetivo en el frontend.
-- La plataforma modela el control de escenario y la restauración de snapshots como puertos. No modifica automáticamente firewall, Nutanix ni máquinas víctima.
+- Autenticación y control de acceso basado en roles (RBAC).
+- Gestión de usuarios.
+- Gestión de retos.
+- Definición y validación de flags.
+- Registro de intentos.
+- Ranking y progreso del jugador.
+- Filtrado de retos por dificultad.
+- Filtrado por técnica MITRE ATT&CK.
+- Instrucciones de acceso a máquinas víctima.
+- Actualización del ranking en tiempo real.
+- Exportación de reportes y del ranking.
+
+## Niveles de dificultad
+
+La dificultad representa la complejidad del reto y determina su puntuación:
+
+| Nivel | Puntos |
+| --- | ---: |
+| Básico | 100 |
+| Medio | 250 |
+| Avanzado | 500 |
+
+## Escenarios CTF
+
+Los escenarios agrupan retos relacionados con una técnica MITRE ATT&CK, una
+dificultad y una o más máquinas víctima del laboratorio. Las flags se validan
+como parte del flujo de resolución del reto.
+
+| Escenario | Técnica MITRE ATT&CK | Dificultad | VM(s) víctima | Flags |
+| --- | --- | --- | --- | --- |
+| `ESC-01-RECON` | T1046 — Network Service Scanning | Básico | `LAB-LNXVICT`, `LAB-SRVWEB` | Flags de reconocimiento |
+| `ESC-02-BRUTEFORCE` | T1110.001 — Password Guessing | Medio | Máquinas víctima del laboratorio | Flags de fuerza bruta |
+| `ESC-03-WEBEXPLOIT` | T1190 — Exploit Public-Facing Application | Medio | `LAB-SRVWEB` | Flags de explotación web |
+| `ESC-04-LATERAL` | T1021.002 — SMB/Windows Admin Shares | Avanzado | `LAB-LNXVICT` | Flags de movimiento lateral |
+| `ESC-05-EXFIL` | T1048 — Exfiltration Over Alternative Protocol | Avanzado | Máquinas víctima del laboratorio | Flags de exfiltración |
+
+Las instrucciones de cada reto delimitan el alcance de las actividades y los
+activos autorizados. Las flags concretas pertenecen a la configuración del
+reto y no se documentan en este archivo.
+
+## Roles
+
+El control de acceso utiliza **RBAC (Role-Based Access Control)**.
+
+| Rol | Responsabilidades |
+| --- | --- |
+| Administrador | Gestionar usuarios, roles y la configuración general de la plataforma. |
+| Instructor / Diseñador de retos | Diseñar, gestionar y publicar retos, flags e instrucciones. |
+| Jugador (Estudiante) | Consultar retos, acceder al laboratorio autorizado, enviar flags y revisar su progreso y posición. |
+| Invitado (opcional) | Consultar el contenido que la configuración permita sin participar en la evaluación. |
 
 ## Arquitectura
 
-El backend mantiene el núcleo de negocio en servicios y puertos explícitos. Los adaptadores de PostgreSQL, Redis, WebSockets y Guacamole se encuentran fuera de los casos de uso. Las asignaciones de acceso remoto se crean al iniciar un reto y se revocan al cerrarlo o expirar.
+La plataforma utiliza **Arquitectura Hexagonal (Ports & Adapters)** para
+separar las reglas del dominio de la infraestructura:
 
-Los retos semilla corresponden al mapeo acordado: ESC-01-RECON (Básico, 100), ESC-02-BRUTEFORCE y ESC-03-WEBEXPLOIT (Medio, 250), y ESC-04-LATERAL y ESC-05-EXFIL (Avanzado, 500). Un reto de varias flags concede sus puntos una sola vez, cuando se completa.
+- **Núcleo de dominio:** entidades y reglas de retos, flags, puntuación,
+  progreso y ranking.
+- **Casos de uso:** autenticación, gestión de retos, validación de flags,
+  registro de intentos, actualización del ranking y gestión del acceso a
+  máquinas víctima.
+- **Puertos:** contratos que el núcleo utiliza para persistencia, publicación
+  de eventos y acceso al laboratorio.
+- **Adaptadores:** API HTTP, interfaz web, base de datos, comunicación en
+  tiempo real y acceso remoto al laboratorio.
+- **Persistencia:** almacenamiento de usuarios, retos, flags, intentos,
+  progreso y resultados.
+- **Comunicación en tiempo real:** publicación de cambios para mantener
+  actualizado el ranking.
 
-## Seguridad operativa
+```mermaid
+flowchart LR
+    UI[Frontend web] --> HTTP[Adaptador HTTP / API]
+    HTTP --> UC[Casos de uso]
+    UC --> D[ Nucleo de dominio ]
+    UC --> P[(Puertos)]
+    P --> DB[Adaptador de persistencia]
+    DB --> DATA[(Base de datos)]
+    P --> RT[Adaptador tiempo real]
+    RT --> WS[Clientes suscritos]
+    P --> LAB[Adaptador de acceso al laboratorio]
+    LAB --> VM[Maquinas victima]
+```
 
-- Las contraseñas y flags usan Argon2; el historial de intentos conserva únicamente un HMAC del valor enviado.
-- Los intentos de flags están limitados por usuario y reto.
-- Las URLs de Guacamole no contienen secretos y se asignan por usuario, reto y ejecución.
-- Usa HTTPS con un proxy TLS del laboratorio antes de exponer la plataforma fuera de localhost.
-- Las flags de los retos semilla deben configurarse desde el panel de instructor antes de publicar una sesión de entrenamiento.
+Security Onion permanece fuera de este flujo como componente de monitoreo y
+detección del laboratorio.
 
-## Estado de la interfaz (fase actual)
+## Patrones de diseño
 
-La plataforma incluye Login y vistas separadas por rol. El Jugador dispone de dashboard, categorías, catálogo, detalle de reto, envío de flags, progreso, ranking y laboratorio. El panel de Administración/Instructor permite gestionar el catálogo desde la interfaz: crear y editar retos, publicarlos o dejarlos inactivos y conservar el historial mediante archivado lógico. El Administrador puede además cambiar el rol y habilitar/deshabilitar usuarios. El ranking se muestra con datos reales calculados por el backend.
+- **Strategy:** permite encapsular y seleccionar la estrategia de validación
+  de flags o de resolución de un reto.
+- **Repository:** abstrae el acceso a usuarios, retos, flags, intentos y
+  resultados persistidos.
+- **Observer / Publicador-Suscriptor:** comunica cambios del ranking a los
+  clientes conectados en tiempo real.
+- **Factory:** centraliza la creación de adaptadores y objetos de ejecución
+  según la configuración del entorno.
 
-El modo claro utiliza una paleta de bajo deslumbramiento con contraste reforzado en textos, tablas, selectores y etiquetas de dificultad. La preferencia de tema se conserva en el navegador.
+## Stack tecnológico
 
-## Integración con el laboratorio
+| Componente | Tecnología |
+| --- | --- |
+| Backend | Python + FastAPI |
+| Frontend | React + TypeScript + TailwindCSS |
 
-- Sitúa `LAB-CTFWEB` en la VLAN de administración y permite el acceso humano desde las estaciones autorizadas a través de Guacamole.
-- Mantén el segmento de monitoreo aislado: la aplicación no se comunica con Security Onion.
-- El adaptador predeterminado de Guacamole (`GUACAMOLE_MODE=stub`) permite probar el ciclo de inicio/cierre sin modificar la infraestructura.
-- Antes de seleccionar `GUACAMOLE_MODE=managed`, implementa y pruebe el adaptador para la versión y autenticación instaladas de Guacamole. No almacenes credenciales de usuarios o de máquinas objetivo en el frontend.
-- La plataforma modela el control de escenario y la restauración de snapshots como puertos. No modifica automáticamente firewall, Nutanix ni máquinas víctima.
+La ejecución local utiliza Docker Compose para levantar la aplicación y sus
+servicios de soporte definidos por el proyecto.
 
-## Arquitectura
+## Ejecución general
 
-El backend mantiene el núcleo de negocio en servicios y puertos explícitos. Los adaptadores de PostgreSQL, Redis, WebSockets y Guacamole se encuentran fuera de los casos de uso. Las asignaciones de acceso remoto se crean al iniciar un reto y se revocan al cerrarlo o expirar.
+### Requisitos
 
-Los retos semilla corresponden al mapeo acordado: ESC-01-RECON (Básico, 100), ESC-02-BRUTEFORCE y ESC-03-WEBEXPLOIT (Medio, 250), y ESC-04-LATERAL y ESC-05-EXFIL (Avanzado, 500). Un reto de varias flags concede sus puntos una sola vez, cuando se completa.
+- Docker y Docker Compose.
+- Un archivo de configuración basado en [`.env.example`](./.env.example).
 
-## Seguridad operativa
+### Inicio
 
-- Las contraseñas y flags usan Argon2; el historial de intentos conserva únicamente un HMAC del valor enviado.
-- Los intentos de flags están limitados por usuario y reto.
-- Las URLs de Guacamole no contienen secretos y se asignan por usuario, reto y ejecución.
-- Usa HTTPS con un proxy TLS del laboratorio antes de exponer la plataforma fuera de localhost.
-- Las flags de los retos semilla deben configurarse desde el panel de instructor antes de publicar una sesión de entrenamiento.
+1. Copia `.env.example` como `.env`.
+2. Configura en `.env` las contraseñas y secretos del entorno.
+3. Ejecuta:
 
-## Estado de la interfaz (fase actual)
+   ```bash
+   docker compose up --build
+   ```
 
-La fase actual del frontend está enfocada únicamente en **Login + experiencia del Jugador**. Se implementó una interfaz CTF oscura y responsive con navegación de jugador, dashboard, categorías, catálogo de retos, detalle del reto, envío de flags, progreso, ranking y acceso al laboratorio mediante las APIs existentes.
+4. Abre `http://localhost:8081` (o el puerto definido mediante `WEB_PORT`).
 
-El panel de administración/instructor no se desarrolla en esta fase; el backend y sus endpoints existentes se conservan para una siguiente etapa.
+La documentación interactiva de la API está disponible en `/docs` cuando el
+servicio está en ejecución.
 
+## Relación con el laboratorio
 
-## Fase UI actualizada — Login, jugador y vistas por rol
+La plataforma entrega el contexto de los retos, las instrucciones y el acceso
+controlado a las máquinas víctima. El laboratorio conserva la separación entre
+los activos de entrenamiento y el monitoreo. Las actividades de los jugadores
+deben limitarse a los escenarios y activos autorizados por el instructor.
 
-Esta versión incorpora: modo oscuro/claro persistente, texto actualizado de selección de reto y vistas diferenciadas para Administrador, Instructor, Jugador e Invitado. La vista de Administración incluye un inventario conceptual de 11 activos/VMs previstos para la integración futura con Nutanix AHV, sin afirmar que todavía estén conectados a Prism.
+## Documentación adicional
 
-### Arranque con Docker en Windows
-
-1. Copia `.env.example` a `.env` y cambia las contraseñas/secretos.
-2. El puerto web por defecto es `8081`, configurable con `WEB_PORT`.
-3. Ejecuta `docker compose up --build`.
-4. Abre `http://localhost:8081`.
-
-Para una instalación nueva en Windows CMD: `copy .env.example .env`. No versionar el archivo `.env`.
-
-
-## Fase 3 — categorías y catálogo de retos
-
-Esta versión añade un modelo explícito de categoría y escenario al reto, un catálogo de datos demo y una vista de detalle más completa. Los retos demo están pensados para mostrar el flujo de la interfaz; las flags demo solo se incluyen cuando `CTF_SEED_DEMO_DATA=true`.
-
-### Categorías demo
-
-WEB, CRIPTOGRAFÍA, FORENSE, REVERSING, PWN / EXPLOITING, OSINT, ESTEGANOGRAFÍA y MISC.
-
-### Nota de base de datos
-
-El arranque aplica `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` para añadir `category` y `scenario` en instalaciones que ya tenían el volumen PostgreSQL creado por versiones anteriores.
-
-- Fase 5 UI: detalle del reto con paneles desplegables, laboratorio ampliado, envío de flag destacado y ranking de demostración Top 10 con distintivos para los tres primeros puestos.
+- [Configuración de entorno](./.env.example)
+- [Backend](./backend/)
+- [Frontend](./frontend/)
+- Documentación interactiva de la API: `/docs` con la aplicación ejecutándose
