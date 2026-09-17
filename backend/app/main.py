@@ -27,7 +27,7 @@ from .core import (
 )
 from .db import create_schema, make_session_factory
 from .guacamole import GuacamoleApiError, make_guacamole_adapter, make_guacamole_admin
-from .models import AuditEvent, Challenge, ChallengeCompletion, ChallengeFlag, ChallengeRun, ChallengeRunFlag, Laboratory, RemoteAccessAssignment, Role, Submission, User, VMAsset, StudentGroup, GroupMembership, ChallengeGroupAssignment, UserVMConnection
+from .models import AuditEvent, Challenge, ChallengeCompletion, ChallengeFlag, ChallengeRun, ChallengeRunFlag, Laboratory, RemoteAccessAssignment, Role, Submission, User, VMAsset, StudentGroup, GroupMembership, ChallengeGroupAssignment
 from .schemas import (
     ChallengeCreate,
     ChallengeView,
@@ -53,7 +53,6 @@ from .schemas import (
     GroupView,
     GroupMemberAdd,
     ChallengeGroupAssignmentRequest,
-    GroupRemoteConnectionsCreate, StudentRemoteConnectionView,
     GuacamoleStatus,
     GuacamoleUserCreate,
     GuacamoleUserUpdate,
@@ -890,76 +889,6 @@ async def unassign_challenge_group(code: str, group_id: int, request: Request, a
     return await _group_view(request, group_id)
 
 
-@app.get("/api/v1/groups/{group_id}/remote-connections", response_model=list[StudentRemoteConnectionView])
-async def list_group_remote_connections(group_id: int, request: Request, actor=Depends(require_roles("admin", "instructor"))):
-    async with request.app.state.session_factory() as session:
-        group = await session.get(StudentGroup, group_id)
-        if group is None:
-            raise HTTPException(status_code=404, detail="Grupo no encontrado")
-        rows = (await session.execute(
-            select(UserVMConnection, User.username, VMAsset.name, VMAsset.id)
-            .join(User, User.id == UserVMConnection.user_id)
-            .join(VMAsset, VMAsset.id == UserVMConnection.vm_id)
-            .join(GroupMembership, GroupMembership.user_id == UserVMConnection.user_id)
-            .where(GroupMembership.group_id == group_id)
-            .order_by(User.username, VMAsset.name)
-        )).all()
-    connections = await request.app.state.guacamole_admin.list_connections()
-    by_id = {c.identifier: c for c in connections}
-    return [StudentRemoteConnectionView(
-        id=row.id, user_id=row.user_id, username=username, vm_id=vm_id, vm_name=vm_name,
-        guacamole_connection_id=row.guacamole_connection_id, connection_name=row.connection_name,
-        protocol=(by_id.get(row.guacamole_connection_id).protocol if by_id.get(row.guacamole_connection_id) else "ssh"),
-        hostname=(by_id.get(row.guacamole_connection_id).hostname if by_id.get(row.guacamole_connection_id) else None),
-    ) for row, username, vm_name, vm_id in rows]
-
-@app.post("/api/v1/groups/{group_id}/remote-connections", response_model=list[StudentRemoteConnectionView], status_code=status.HTTP_201_CREATED)
-async def create_group_remote_connections(group_id: int, payload: GroupRemoteConnectionsCreate, request: Request, actor=Depends(require_roles("admin"))):
-    async with request.app.state.session_factory() as session:
-        group = await session.get(StudentGroup, group_id, options=[selectinload(StudentGroup.members).selectinload(GroupMembership.user)])
-        vm = await session.get(VMAsset, payload.vm_id)
-        if group is None:
-            raise HTTPException(status_code=404, detail="Grupo no encontrado")
-        if vm is None:
-            raise HTTPException(status_code=404, detail="VM no encontrada")
-        if not group.members:
-            raise HTTPException(status_code=422, detail="El grupo no tiene estudiantes activos")
-        if any(not member.user.is_active or member.user.role != "player" for member in group.members):
-            raise HTTPException(status_code=422, detail="El grupo contiene estudiantes inactivos o roles no válidos")
-    connections = await request.app.state.guacamole_admin.list_connections()
-    source = next((c for c in connections if c.identifier == payload.source_connection_id), None)
-    if source is None:
-        raise HTTPException(status_code=404, detail="Conexión Guacamole origen no encontrada")
-    created: list[StudentRemoteConnectionView] = []
-    async with request.app.state.session_factory() as session:
-        group = await session.get(StudentGroup, group_id, options=[selectinload(StudentGroup.members).selectinload(GroupMembership.user)])
-        vm = await session.get(VMAsset, payload.vm_id)
-        for member in group.members:
-            user = member.user
-            existing = await session.scalar(select(UserVMConnection).where(UserVMConnection.user_id == user.id, UserVMConnection.vm_id == vm.id))
-            if existing:
-                try:
-                    await request.app.state.guacamole_admin.get_user_permissions(user.username)
-                    await request.app.state.guacamole_admin.patch_user_permissions(user.username, system_permissions=[], connection_permissions={existing.guacamole_connection_id:["READ"]})
-                    created.append(StudentRemoteConnectionView(id=existing.id,user_id=user.id,username=user.username,vm_id=vm.id,vm_name=vm.name,guacamole_connection_id=existing.guacamole_connection_id,connection_name=existing.connection_name,protocol=source.protocol,hostname=source.hostname))
-                    continue
-                except GuacamoleApiError:
-                    await session.delete(existing)
-                    await session.flush()
-            connection_name = f"CTF-{group.code}-{user.username}-{vm.name}"[:160]
-            try:
-                cloned = await request.app.state.guacamole_admin.clone_connection(payload.source_connection_id, name=connection_name)
-                await request.app.state.guacamole_admin.patch_user_permissions(user.username, system_permissions=[], connection_permissions={cloned.identifier:["READ"]})
-            except GuacamoleApiError as exc:
-                raise HTTPException(status_code=502, detail=f"No se pudo crear la conexión para {user.username}: {exc.detail or exc}") from exc
-            row = UserVMConnection(user_id=user.id, vm_id=vm.id, guacamole_connection_id=cloned.identifier, connection_name=cloned.name, created_by=actor.id)
-            session.add(row)
-            await session.flush()
-            created.append(StudentRemoteConnectionView(id=row.id,user_id=user.id,username=user.username,vm_id=vm.id,vm_name=vm.name,guacamole_connection_id=cloned.identifier,connection_name=cloned.name,protocol=cloned.protocol,hostname=cloned.hostname))
-        await write_audit(session, actor.id, "group.remote_connections.create", "group", str(group_id), {"vm_id": vm.id, "source_connection_id": payload.source_connection_id, "created": len(created)})
-        await session.commit()
-    return created
-
 @app.get("/api/v1/laboratories", response_model=list[LaboratoryView])
 async def list_laboratories(request: Request, _=Depends(require_roles("admin", "instructor"))):
     async with request.app.state.session_factory() as session:
@@ -990,7 +919,6 @@ async def list_player_laboratories(request: Request, user=Depends(require_roles(
         )).unique().all()
         response: list[LaboratoryView] = []
         normalized_refs = {_asset_ref_key(ref) for ref in refs}
-        user_connections = {row.vm_id: row.guacamole_connection_id for row in (await session.scalars(select(UserVMConnection).where(UserVMConnection.user_id == user.id))).all()}
         for lab in labs:
             lab_keys = {_asset_ref_key(lab.name), _asset_ref_key(lab.code or "")}
             matching_lab = bool(normalized_refs.intersection(lab_keys))
@@ -1000,11 +928,10 @@ async def list_player_laboratories(request: Request, user=Depends(require_roles(
                     continue
                 guac_url = None
                 guac_protocol = None
-                selected_connection_id = user_connections.get(vm.id)
-                if selected_connection_id:
+                if vm.guacamole_connection_id:
                     try:
                         connections = await request.app.state.guacamole_admin.list_connections()
-                        conn = next((item for item in connections if item.identifier == selected_connection_id), None)
+                        conn = next((item for item in connections if item.identifier == vm.guacamole_connection_id), None)
                         if conn:
                             guac_protocol = conn.protocol
                             guac_url = await request.app.state.guacamole.direct_connection_url(conn.identifier)
@@ -1113,6 +1040,89 @@ async def delete_vm(vm_id: int, request: Request, actor=Depends(require_roles("a
         await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+
+@app.post("/api/v1/admin/lab-ssh/prepare")
+async def prepare_ssh_demo_lab(request: Request, actor=Depends(require_roles("admin"))):
+    """Prepara el laboratorio real SSH de demostración usando la VM/IP actuales y una conexión SSH existente en Guacamole."""
+    target_ip = "192.168.164.137"
+    attacker_ip = "192.168.146.134"
+    lab_code = "LAB-SSH-01"
+    vm_name = "LAB-LNXVICT"
+    challenge_code = "LAB-01"
+    static_flag = "FLAG{ssh_lab_demo}"
+
+    try:
+        connections = await request.app.state.guacamole_admin.list_connections()
+    except GuacamoleApiError as exc:
+        raise HTTPException(status_code=502, detail=f"No se pudo consultar Guacamole: {exc.detail or exc}") from exc
+
+    connection = next((c for c in connections if c.protocol == "ssh" and (c.hostname or "").strip() == target_ip), None)
+    if connection is None:
+        raise HTTPException(status_code=409, detail=f"No existe una conexión SSH de Guacamole asociada a {target_ip}. Créala primero en Administración > Guacamole.")
+
+    async with request.app.state.session_factory() as session:
+        lab = await session.scalar(select(Laboratory).options(selectinload(Laboratory.vms)).where(Laboratory.code == lab_code))
+        if lab is None:
+            lab = Laboratory(code=lab_code, name="Laboratorio SSH · Demostración", description="Laboratorio real de reconocimiento controlado sobre la VM LAB-LNXVICT.", segment="Red actual · Víctima 192.168.164.137", status="ready")
+            session.add(lab)
+            await session.flush()
+        else:
+            lab.status = "ready"
+
+        vm = await session.scalar(select(VMAsset).where(VMAsset.name == vm_name))
+        if vm is None:
+            vm = VMAsset(laboratory_id=lab.id, name=vm_name, os="Linux / VM de laboratorio", ip_address=target_ip, vlan="RED ACTUAL", role="Víctima", network_role="Víctimas", subnet="192.168.164.0/24", profile="vulnerable", status="ready", guacamole_connection_id=connection.identifier)
+            session.add(vm)
+        else:
+            vm.laboratory_id = lab.id
+            vm.ip_address = target_ip
+            vm.network_role = "Víctimas"
+            vm.role = "Víctima"
+            vm.guacamole_connection_id = connection.identifier
+            vm.status = "ready"
+
+        challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == challenge_code))
+        challenge_payload = {
+            "name": "Reconocimiento SSH controlado",
+            "description": "Identifica el servicio SSH de la máquina víctima del laboratorio y localiza la evidencia del ejercicio.",
+            "instructions": "Trabaja únicamente dentro del laboratorio autorizado. Desde la Kali atacante identifica el servicio SSH en 192.168.164.137, conéctate con las credenciales proporcionadas por el instructor y localiza /opt/ctf/flag.txt. No realices acciones fuera del entorno.",
+            "difficulty": "Básico",
+            "category": "MISC",
+            "scenario": "LAB-SSH-REAL",
+            "mitre_technique": "T1046 — Network Service Scanning",
+            "asset_references": [vm_name, lab_code, target_ip],
+            "points": 100,
+            "is_published": True,
+        }
+        if challenge is None:
+            challenge = Challenge(**challenge_payload, created_by=actor.id)
+            session.add(challenge)
+            await session.flush()
+        else:
+            for key, value in challenge_payload.items():
+                setattr(challenge, key, value)
+
+        active_static = next((f for f in challenge.flags if f.is_active and f.mode == "static"), None)
+        if active_static is None:
+            session.add(ChallengeFlag(challenge_id=challenge.id, label="Flag SSH", flag_hash=hash_password(static_flag), flag_order=1, is_active=True, mode="static"))
+        else:
+            active_static.flag_hash = hash_password(static_flag)
+            active_static.mode = "static"
+            active_static.template = None
+            active_static.label = "Flag SSH"
+            active_static.flag_order = 1
+        await write_audit(session, actor.id, "lab.demo.prepare", "laboratory", str(lab.id), {"lab_code": lab_code, "vm": vm_name, "ip": target_ip, "attacker_ip": attacker_ip, "guacamole_connection": connection.identifier, "challenge": challenge_code})
+        await session.commit()
+
+    return {
+        "laboratory": {"id": lab.id, "code": lab.code, "name": lab.name},
+        "vm": {"id": vm.id, "name": vm.name, "ip": vm.ip_address, "protocol": connection.protocol, "guacamole_connection_id": connection.identifier, "guacamole_connection_name": connection.name},
+        "challenge": {"code": challenge.code, "name": challenge.name, "points": challenge.points, "flag_mode": "static"},
+        "attacker_ip": attacker_ip,
+        "victim_ip": target_ip,
+        "flag": "FLAG{ssh_lab_demo}",
+        "note": "La flag estática se valida por hash. La VM ya debe contener /opt/ctf/flag.txt con el mismo valor.",
+    }
 
 @app.post("/api/v1/challenges", response_model=ChallengeView, status_code=status.HTTP_201_CREATED)
 async def create_challenge(payload: ChallengeCreate, request: Request, user=Depends(require_roles("admin", "instructor"))):
@@ -1280,27 +1290,19 @@ async def _sync_player_guacamole_permissions(request: Request, user_id: int) -> 
         for vm in lab_vms:
             vm_by_lab.setdefault(vm.laboratory_id, []).append(vm)
 
-        user_vm_connections = {(row.user_id, row.vm_id): row.guacamole_connection_id for row in (await session.scalars(select(UserVMConnection).where(UserVMConnection.user_id == user_id))).all()}
         desired: dict[str, list[str]] = {}
         for challenge in assigned_challenges:
             for raw_ref in challenge.asset_references or []:
                 key = _asset_ref_key(raw_ref)
                 direct = refs_to_connections.get(key)
                 if direct:
-                    lab_id = labs_by_key.get(key)
-                    if lab_id:
-                        for vm in vm_by_lab.get(lab_id, []):
-                            custom = user_vm_connections.get((user_id, vm.id))
-                            desired[custom or direct] = ["READ"]
-                    else:
-                        desired[direct] = ["READ"]
+                    desired[direct] = ["READ"]
                     continue
                 lab_id = labs_by_key.get(key)
                 if lab_id:
                     for vm in vm_by_lab.get(lab_id, []):
-                        custom = user_vm_connections.get((user_id, vm.id))
-                        if custom:
-                            desired[custom] = ["READ"]
+                        if vm.guacamole_connection_id:
+                            desired[vm.guacamole_connection_id] = ["READ"]
 
     try:
         await request.app.state.guacamole_admin.patch_user_permissions(
@@ -1339,9 +1341,16 @@ async def _sync_guacamole_group_permissions(request: Request, group_id: int) -> 
         labs_by_key.update({_asset_ref_key(l.name): l.id for l in labs})
         vm_by_lab: dict[int, list[VMAsset]] = {}
         for vm in vms: vm_by_lab.setdefault(vm.laboratory_id, []).append(vm)
-        # Las conexiones quedan aisladas por estudiante. El User Group de Guacamole
-        # representa la pertenencia académica, pero no recibe acceso compartido a una VM.
         desired: dict[str, list[str]] = {}
+        for challenge in assigned_challenges:
+            for raw_ref in challenge.asset_references or []:
+                key = _asset_ref_key(raw_ref)
+                direct = refs_to_connections.get(key)
+                if direct: desired[direct] = ["READ"]; continue
+                lab_id = labs_by_key.get(key)
+                if lab_id:
+                    for vm in vm_by_lab.get(lab_id, []):
+                        if vm.guacamole_connection_id: desired[vm.guacamole_connection_id] = ["READ"]
         guac_identifier = group.guacamole_group_identifier
     try:
         try:
@@ -1417,21 +1426,15 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
         target_url: str
         target_protocol = None
         laboratory_code = target_lab.code if target_lab else None
-        user_connection = None
-        if target_vm:
-            user_connection = await session.scalar(select(UserVMConnection).where(UserVMConnection.user_id == user.id, UserVMConnection.vm_id == target_vm.id))
 
-        if target_vm and user_connection:
-            selected_connection_id = user_connection.guacamole_connection_id
-        elif target_vm and target_vm.guacamole_connection_id:
-            raise HTTPException(status_code=409, detail="El laboratorio requiere una conexión individual de Guacamole para este estudiante. Solicita al administrador que genere la conexión del grupo.")
+        if target_vm and target_vm.guacamole_connection_id:
             try:
                 # Reutilizamos una conexión real ya administrada por Guacamole; no creamos una conexión por cada ejecución.
-                target_url = await request.app.state.guacamole.direct_connection_url(selected_connection_id)
+                target_url = await request.app.state.guacamole.direct_connection_url(target_vm.guacamole_connection_id)
                 connections = await request.app.state.guacamole_admin.list_connections()
-                connection = next((item for item in connections if item.identifier == selected_connection_id), None)
+                connection = next((item for item in connections if item.identifier == target_vm.guacamole_connection_id), None)
                 target_protocol = connection.protocol if connection else None
-                external_reference = f"vm:{target_vm.id}:connection:{selected_connection_id}:run:{run.id}"
+                external_reference = f"vm:{target_vm.id}:connection:{target_vm.guacamole_connection_id}:run:{run.id}"
             except RuntimeError as exc:
                 run.status = "provisioning_failed"
                 await session.commit()

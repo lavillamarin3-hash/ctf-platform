@@ -219,23 +219,6 @@ class RunView(BaseModel):
 
 
 
-class GroupRemoteConnectionsCreate(BaseModel):
-    vm_id: int = Field(ge=1)
-    source_connection_id: str = Field(min_length=1, max_length=160)
-
-
-class StudentRemoteConnectionView(BaseModel):
-    id: int
-    user_id: int
-    username: str
-    vm_id: int
-    vm_name: str
-    guacamole_connection_id: str
-    connection_name: str
-    protocol: str
-    hostname: str | None = None
-
-
 class GroupCreate(BaseModel):
     name: str = Field(min_length=2, max_length=120)
     code: str = Field(min_length=2, max_length=64, pattern=r"^[A-Z0-9_-]+$")

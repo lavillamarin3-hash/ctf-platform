@@ -204,19 +204,6 @@ class ResetOperation(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
 
 
-class UserVMConnection(Base):
-    __tablename__ = "user_vm_connections"
-    __table_args__ = (UniqueConstraint("user_id", "vm_id", name="uq_user_vm_connection"),)
-    id: Mapped[int] = mapped_column(primary_key=True)
-    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
-    vm_id: Mapped[int] = mapped_column(ForeignKey("vm_assets.id", ondelete="CASCADE"), index=True)
-    guacamole_connection_id: Mapped[str] = mapped_column(String(160), index=True)
-    connection_name: Mapped[str] = mapped_column(String(160))
-    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    user: Mapped[User] = relationship(foreign_keys=[user_id])
-    vm: Mapped["VMAsset"] = relationship(foreign_keys=[vm_id])
-
 class VMAsset(Base):
     __tablename__ = "vm_assets"
     id: Mapped[int] = mapped_column(primary_key=True)

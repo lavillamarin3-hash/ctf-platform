@@ -71,7 +71,6 @@ class GuacamoleAdminPort:
     async def delete_user(self, username: str) -> None: raise NotImplementedError
     async def list_connections(self) -> list[GuacamoleConnection]: raise NotImplementedError
     async def create_connection(self, *, name: str, protocol: str, hostname: str, port: int, username: str | None = None, password: str | None = None, domain: str | None = None, parent_identifier: str = "ROOT") -> GuacamoleConnection: raise NotImplementedError
-    async def clone_connection(self, source_identifier: str, *, name: str, parent_identifier: str = "ROOT") -> GuacamoleConnection: raise NotImplementedError
     async def update_connection(self, identifier: str, *, name: str, protocol: str, hostname: str, port: int, username: str | None = None, password: str | None = None, domain: str | None = None, parent_identifier: str = "ROOT") -> GuacamoleConnection: raise NotImplementedError
     async def delete_connection(self, identifier: str) -> None: raise NotImplementedError
     async def get_user_permissions(self, username: str) -> dict: raise NotImplementedError
@@ -139,13 +138,6 @@ class StubGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
         if username == "guacadmin": raise GuacamoleApiError("No puedes eliminar guacadmin",409)
         self.users.pop(username,None); self.permissions.pop(username,None)
     async def list_connections(self) -> list[GuacamoleConnection]: return list(self.connections.values())
-    async def clone_connection(self, source_identifier: str, *, name: str, parent_identifier: str = "ROOT") -> GuacamoleConnection:
-        source = self.connections.get(source_identifier)
-        if source is None:
-            raise GuacamoleApiError("Conexión origen no encontrada", 404)
-        params = dict(source.parameters or {})
-        return await self.create_connection(name=name, protocol=source.protocol, hostname=source.hostname or params.get("hostname") or "", port=int(source.port or params.get("port") or 22), username=params.get("username"), password=params.get("password"), domain=params.get("domain"), parent_identifier=parent_identifier)
-
     async def create_connection(self, *, name, protocol, hostname, port, username=None, password=None, domain=None, parent_identifier="ROOT"):
         ident=str(self._next_connection); self._next_connection+=1; params={"hostname":hostname,"port":str(port)}
         if username is not None: params["username"]=username
@@ -247,14 +239,6 @@ class ManagedGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
         return await self.get_user_group_permissions(identifier)
     async def list_connections(self):
         p=await self._api_request('GET','/connections'); return [self._conn(k,v) for k,v in (p or {}).items()] if isinstance(p,dict) else []
-    async def clone_connection(self, source_identifier: str, *, name: str, parent_identifier: str = "ROOT") -> GuacamoleConnection:
-        p = await self._api_request('GET', f'/connections/{quote(source_identifier, safe="")}')
-        if not isinstance(p, dict):
-            raise GuacamoleApiError("Conexión origen no encontrada", 404)
-        payload = {"parentIdentifier": parent_identifier, "name": name, "protocol": p.get("protocol") or "ssh", "parameters": dict(p.get("parameters") or {}), "attributes": dict(p.get("attributes") or {})}
-        created = await self._api_request('POST', '/connections', data=payload)
-        return self._conn((created or {}).get('identifier',''), created or payload)
-
     async def create_connection(self,*,name,protocol,hostname,port,username=None,password=None,domain=None,parent_identifier='ROOT'):
         params={"hostname":hostname,"port":str(port)}; 
         if username is not None: params['username']=username
