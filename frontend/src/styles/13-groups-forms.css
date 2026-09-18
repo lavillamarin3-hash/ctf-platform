@@ -1,0 +1,136 @@
+/* ============================================================
+   FORMULARIO Y CABECERA DEL GRUPO SELECCIONADO
+   ============================================================
+
+/* Formulario de creación */
+.group-create-box {
+  display: grid;
+  gap: 10px;
+  margin: 0 10px 12px;
+  padding: 14px;
+  border: 1px solid #1b2d43;
+  border-radius: 12px;
+  background:
+    linear-gradient(145deg, rgba(13, 25, 41, .88), rgba(8, 17, 29, .68));
+}
+
+.group-create-box .eyebrow {
+  margin-bottom: 2px;
+}
+
+.group-create-box input,
+.group-create-box textarea {
+  width: 100%;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid #22374f;
+  border-radius: 9px;
+  background: #091522;
+  color: #e4edf7;
+  padding: 10px 11px;
+  font-size: 9px;
+  line-height: 1.45;
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
+}
+
+.group-create-box input {
+  min-height: 40px;
+}
+
+.group-create-box textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+
+.group-create-box input::placeholder,
+.group-create-box textarea::placeholder {
+  color: #62738a;
+}
+
+.group-create-box input:focus,
+.group-create-box textarea:focus {
+  outline: none;
+  border-color: #5f64e9;
+  box-shadow: 0 0 0 3px rgba(95, 100, 233, .12);
+  background: #0b1726;
+}
+
+.group-create-box input:disabled {
+  opacity: .6;
+  cursor: not-allowed;
+}
+
+.group-create-box .primary-action,
+.group-create-box .secondary-action {
+  width: 100%;
+  min-height: 40px;
+}
+
+.group-create-box .secondary-action {
+  justify-content: center;
+}
+
+/* Área del grupo seleccionado */
+.group-workspace {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.group-hero-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 240px;
+  gap: 18px;
+  align-items: stretch;
+  padding: 18px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 78% 30%, rgba(102, 88, 245, .10), transparent 32%),
+    linear-gradient(145deg, rgba(11, 22, 36, .98), rgba(7, 15, 25, .98));
+}
+
+.group-hero-content {
+  min-width: 0;
+}
+
+.group-hero-content h2 {
+  margin: 6px 0 7px;
+  color: #edf4ff;
+  font-size: 24px;
+  letter-spacing: -.035em;
+}
+
+.group-hero-content p {
+  max-width: 760px;
+  margin: 0;
+  color: #71839a;
+  font-size: 9px;
+  line-height: 1.7;
+}
+
+.group-sync-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid #1d3148;
+  border-radius: 12px;
+  background: rgba(7, 16, 28, .64);
+}
+
+.group-sync-card strong {
+  margin-top: 10px;
+  color: #dbe6f3;
+  font-size: 11px;
+}
+
+.group-sync-card small {
+  margin-top: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #5f7289;
+  font-size: 8px;
+}
+

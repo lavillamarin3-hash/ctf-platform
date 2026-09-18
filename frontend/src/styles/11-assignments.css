@@ -1,0 +1,261 @@
+/* ============================================================
+   Asignación de estudiantes a conexiones Guacamole.
+   Archivo separado para facilitar futuras modificaciones.
+   ============================================================ */
+
+/* ============================================================
+   ASIGNACIÓN ESTUDIANTE -> GUACAMOLE
+   ============================================================ */
+
+.connection-assignment-panel {
+  overflow: hidden;
+}
+
+.assignment-rule-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(103, 91, 244, .25);
+  border-radius: 10px;
+  background: rgba(103, 91, 244, .08);
+  color: #b7b1ff;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.assignment-rule-badge .icon {
+  width: 15px;
+  height: 15px;
+}
+
+.assignment-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin: 0 0 13px;
+  padding: 10px 12px;
+  border: 1px solid #23364c;
+  border-radius: 10px;
+  background: rgba(12, 26, 42, .72);
+  color: #8fa4ba;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.assignment-note .icon {
+  width: 15px;
+  min-width: 15px;
+  color: #9a8dff;
+}
+
+.assignment-table {
+  border: 1px solid #182a3e;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.assignment-table-head,
+.assignment-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.35fr) 120px minmax(250px, 1.7fr) 75px 135px;
+  gap: 12px;
+  align-items: center;
+}
+
+.assignment-table-head {
+  min-height: 38px;
+  padding: 0 12px;
+  background: rgba(13, 27, 43, .92);
+  border-bottom: 1px solid #1b2e44;
+  color: #63778d;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+}
+
+.assignment-row {
+  min-height: 66px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #16283b;
+  background: rgba(7, 17, 28, .55);
+}
+
+.assignment-row:last-child {
+  border-bottom: 0;
+}
+
+.assignment-student {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.assignment-student > div:last-child {
+  min-width: 0;
+}
+
+.assignment-student strong {
+  display: block;
+  color: #e4edf7;
+  font-size: 10px;
+}
+
+.assignment-student small {
+  display: block;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #70869d;
+  font-size: 8px;
+}
+
+.assignment-avatar {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: linear-gradient(145deg, #4d3b99, #1d294f);
+  color: #ddd9ff;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.assignment-select-wrap select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid #22384e;
+  border-radius: 9px;
+  padding: 9px 10px;
+  background: #091522;
+  color: #dfeaf5;
+  font-size: 9px;
+}
+
+.assignment-select-wrap select:focus {
+  outline: none;
+  border-color: #5f64e9;
+  box-shadow: 0 0 0 3px rgba(95, 100, 233, .13);
+}
+
+.assignment-select-wrap select:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
+.permission-read-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 38px;
+  padding: 5px 8px;
+  border: 1px solid rgba(76, 201, 135, .24);
+  border-radius: 7px;
+  background: rgba(76, 201, 135, .10);
+  color: #65d995;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.assignment-empty {
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  min-height: 120px;
+  padding: 18px;
+  color: #70859b;
+  font-size: 10px;
+  text-align: center;
+}
+
+.assignment-empty strong {
+  color: #dce8f3;
+  font-size: 11px;
+}
+
+/* ============================================================
+   LABORATORIOS — BLOQUE DE CONEXIONES
+   ============================================================ */
+
+.laboratory-access-panel .table-panel {
+  margin-top: 10px;
+}
+
+.laboratory-access-panel .page-actions {
+  justify-content: flex-end;
+}
+
+/* ============================================================
+   GRUPOS — PEQUEÑOS AJUSTES
+   ============================================================ */
+
+.groups-page .page-heading {
+  align-items: flex-start;
+}
+
+.groups-page .group-create-box {
+  margin-top: 12px;
+}
+
+.groups-page .inline-add-row select {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.groups-page .group-list {
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+/* ============================================================
+   MODO CLARO
+   ============================================================ */
+
+html[data-theme="light"] .assignment-table {
+  border-color: #d6e0ea;
+}
+
+html[data-theme="light"] .assignment-table-head {
+  background: #f3f6fa;
+  border-bottom-color: #dbe3eb;
+  color: #66788c;
+}
+
+html[data-theme="light"] .assignment-row {
+  background: #fff;
+  border-bottom-color: #e2e8ef;
+}
+
+html[data-theme="light"] .assignment-student strong {
+  color: #273648;
+}
+
+html[data-theme="light"] .assignment-student small {
+  color: #718295;
+}
+
+html[data-theme="light"] .assignment-note {
+  border-color: #d6e0ea;
+  background: #f5f8fb;
+  color: #687b90;
+}
+
+html[data-theme="light"] .assignment-select-wrap select {
+  border-color: #cbd7e4;
+  background: #fff;
+  color: #2f4053;
+}
+
+html[data-theme="light"] .assignment-rule-badge {
+  background: rgba(103, 91, 244, .06);
+  border-color: rgba(103, 91, 244, .18);
+  color: #6554c7;
+}
+

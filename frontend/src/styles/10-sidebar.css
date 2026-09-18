@@ -1,0 +1,92 @@
+/* ============================================================
+   Tema claro y navegación administrativa.
+   Archivo separado para facilitar futuras modificaciones.
+   ============================================================ */
+
+/* ============================================================
+   MODO CLARO — mantener contraste y separación
+   ============================================================ */
+html[data-theme="light"] .sidebar {
+  background: linear-gradient(180deg, #eef2f7 0%, #e6ebf1 100%);
+  border-right-color: #d3dce6;
+  box-shadow: 8px 0 28px rgba(55,70,90,.08);
+}
+
+html[data-theme="light"] .sidebar-brand {
+  background: linear-gradient(180deg, #eef2f7 78%, rgba(238,242,247,0));
+}
+
+html[data-theme="light"] .nav-item {
+  color: #5e7086;
+}
+
+html[data-theme="light"] .nav-item:hover {
+  color: #26384d;
+  border-color: #cdd8e4;
+  background: rgba(210,220,231,.46);
+}
+
+html[data-theme="light"] .nav-item.active {
+  color: #27354a;
+  background: linear-gradient(100deg, rgba(111,91,245,.16), rgba(75,103,183,.08));
+  border-color: rgba(111,91,245,.18);
+}
+
+html[data-theme="light"] .glass-panel,
+html[data-theme="light"] .connection-card,
+html[data-theme="light"] .permission-row,
+html[data-theme="light"] .guac-group-card {
+  box-shadow: 0 12px 28px rgba(48,66,88,.07);
+}
+
+/* ============================================================
+   ADMIN UX — NAVEGACIÓN Y ACCESO REMOTO
+   Sección separada para que futuros cambios de interfaz no obliguen
+   a tocar las reglas generales de tarjetas y tablas.
+   ============================================================ */
+
+/* La navegación ocupa todo el alto disponible y permite desplazarse. */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  overflow: hidden;
+}
+
+.sidebar-brand {
+  flex: 0 0 auto;
+}
+
+.sidebar-nav,
+.sidebar nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 4px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(103, 91, 244, .45) transparent;
+}
+
+.sidebar-nav::-webkit-scrollbar,
+.sidebar nav::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb,
+.sidebar nav::-webkit-scrollbar-thumb {
+  background: rgba(103, 91, 244, .38);
+  border-radius: 999px;
+}
+
+.sidebar-footer {
+  flex: 0 0 auto;
+  margin-top: 12px;
+}
+
+/* Acciones de cabecera más compactas cuando hay varias opciones. */
+.compact-actions {
+  gap: 8px;
+  flex-wrap: wrap;
+}
+

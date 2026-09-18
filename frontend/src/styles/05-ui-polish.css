@@ -1,0 +1,310 @@
+/* ============================================================
+   Ajustes visuales Fase 11, formularios, tablas y jerarquía visual.
+   Archivo separado para facilitar futuras modificaciones.
+   ============================================================ */
+
+/* Contenedores principales */
+.main-content {
+  padding: 30px 32px 42px;
+}
+
+.dashboard-grid {
+  gap: 22px;
+  margin-top: 22px;
+}
+
+.stats-grid {
+  gap: 18px;
+}
+
+.admin-grid {
+  gap: 22px;
+  margin-top: 22px;
+}
+
+.side-stack {
+  gap: 18px;
+}
+
+/* Tarjetas con separación visual más clara */
+.glass-panel {
+  box-shadow: 0 14px 38px rgba(0, 0, 0, .16);
+}
+
+.stat-card,
+.category-card,
+.challenge-card,
+.connection-card,
+.admin-action,
+.workspace-card,
+.flag-panel,
+.attempt-panel {
+  transition: border-color .18s ease, transform .18s ease, box-shadow .18s ease;
+}
+
+.stat-card:hover,
+.connection-card:hover,
+.category-card:hover,
+.admin-action:hover {
+  border-color: #294463;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, .16);
+}
+
+/* Laboratorio / conexiones */
+.connections-grid {
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.connection-card {
+  min-height: 180px;
+  padding: 18px;
+  border: 1px solid #1a2d43;
+  border-radius: 14px;
+  background: linear-gradient(145deg, rgba(9, 19, 32, .98), rgba(7, 14, 24, .98));
+}
+
+.connection-card h3 {
+  margin: 14px 0 7px;
+  font-size: 14px;
+}
+
+.connection-card p {
+  margin: 0 0 7px;
+}
+
+.connection-card small {
+  display: block;
+  line-height: 1.7;
+}
+
+.connection-card .primary-action,
+.connection-card .secondary-action {
+  margin-top: 16px;
+}
+
+/* Títulos de sección */
+.page-heading {
+  margin-bottom: 6px;
+}
+
+.page-heading h1 {
+  line-height: 1.08;
+}
+
+.page-heading p {
+  margin-top: 8px;
+  line-height: 1.6;
+}
+
+/* Panel de permisos de Guacamole */
+.permission-table {
+  display: grid;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.permission-row {
+  display: grid;
+  grid-template-columns: minmax(190px, .85fr) minmax(320px, 1.15fr);
+  align-items: center;
+  gap: 20px;
+  padding: 15px 16px;
+  border: 1px solid #1b2d43;
+  border-radius: 13px;
+  background: linear-gradient(145deg, rgba(10, 20, 33, .95), rgba(7, 14, 24, .9));
+}
+
+.permission-row > div:first-child {
+  min-width: 0;
+}
+
+.permission-row strong {
+  display: block;
+  color: #e5edf7;
+  font-size: 10px;
+  line-height: 1.35;
+}
+
+.permission-row small {
+  display: block;
+  margin-top: 5px;
+  color: #71849a;
+  font-size: 8px;
+  line-height: 1.5;
+}
+
+.permission-checks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+
+.permission-checks label,
+.permission-checks .check-row,
+.check-row {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: flex-start;
+  gap: 7px;
+  min-width: max-content;
+  margin: 0;
+  padding: 7px 9px;
+  border: 1px solid #22364e;
+  border-radius: 8px;
+  color: #a8b6c8;
+  background: rgba(12, 25, 41, .78);
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.permission-checks label:hover,
+.permission-checks .check-row:hover,
+.check-row:hover {
+  border-color: #405779;
+  background: rgba(18, 34, 55, .9);
+}
+
+.permission-checks input,
+.check-row input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  flex: 0 0 14px;
+  accent-color: #7659ff;
+}
+
+/* Filas de grupos y publicación de retos */
+.check-row {
+  width: fit-content;
+}
+
+/* Modal: evitar textos pegados y mejorar lectura */
+.modal-card {
+  padding: 24px;
+}
+
+.modal-head {
+  margin-bottom: 20px;
+}
+
+.modal-actions {
+  margin-top: 20px;
+  padding-top: 16px;
+  gap: 10px;
+}
+
+.form-grid {
+  gap: 16px;
+}
+
+.form-grid label,
+.form-full {
+  line-height: 1.45;
+}
+
+.form-grid input,
+.form-grid select,
+.form-full textarea {
+  margin-top: 8px;
+  min-height: 40px;
+}
+
+/* Tabla de Guacamole */
+.table-panel {
+  margin-top: 20px;
+  border-radius: 14px;
+}
+
+.table-panel th,
+.table-panel td {
+  padding: 13px 15px;
+}
+
+/* Acciones */
+.row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Mensajes */
+.global-message {
+  margin-bottom: 22px;
+  min-height: 48px;
+}
+
+/* Paneles de información */
+.info-panel {
+  margin-top: 18px;
+  border-radius: 14px;
+}
+
+/* Mejor lectura del ranking */
+.ranking-panel {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, .16);
+}
+
+.ranking-panel li {
+  padding: 12px 15px;
+  min-height: 50px;
+}
+
+/* Responsive */
+@media (max-width: 1180px) {
+  .connections-grid {
+    grid-template-columns: repeat(2, minmax(220px, 1fr));
+  }
+
+  .permission-row {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 900px) {
+  .main-content {
+    padding: 24px 20px 34px;
+  }
+
+  .dashboard-grid,
+  .admin-grid {
+    gap: 18px;
+  }
+
+  .connections-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .permission-checks {
+    width: 100%;
+  }
+}
+
+@media (max-width: 620px) {
+  .main-content {
+    padding: 20px 14px 30px;
+  }
+
+  .stats-grid,
+  .category-grid,
+  .side-stack {
+    gap: 13px;
+  }
+
+  .connection-card {
+    min-height: 165px;
+  }
+
+  .modal-card {
+    padding: 17px;
+  }
+}
+
+

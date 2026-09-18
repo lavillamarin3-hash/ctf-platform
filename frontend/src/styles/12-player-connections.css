@@ -1,0 +1,167 @@
+/* ============================================================
+   Experiencia del jugador y mis conexiones.
+   Archivo separado para facilitar futuras modificaciones.
+   ============================================================ */
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+
+@media (max-width: 980px) {
+  .assignment-table-head {
+    display: none;
+  }
+
+  .assignment-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    padding: 13px;
+  }
+
+  .assignment-student {
+    grid-column: 1 / -1;
+  }
+
+  .assignment-row > div:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .assignment-row > div:nth-child(4),
+  .assignment-row > div:nth-child(5) {
+    align-self: start;
+  }
+}
+
+@media (max-width: 760px) {
+  .sidebar {
+    overflow-y: auto;
+  }
+
+  .assignment-row {
+    grid-template-columns: 1fr;
+  }
+
+  .assignment-row > div,
+  .assignment-row > div:nth-child(3),
+  .assignment-student {
+    grid-column: auto;
+  }
+
+  .assignment-rule-badge {
+    display: none;
+  }
+}
+
+
+/* ============================================================
+   PLAYER UX — MIS CONEXIONES
+   ============================================================ */
+
+.student-connections-panel {
+  margin-top: 18px;
+}
+
+.student-no-connections {
+  margin-top: 18px;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-height: 180px;
+  text-align: center;
+}
+
+.student-no-connections .icon {
+  width: 30px;
+  height: 30px;
+  color: #9a8dff;
+}
+
+.student-no-connections strong {
+  color: #e1eaf4;
+  font-size: 13px;
+}
+
+.student-no-connections span {
+  max-width: 520px;
+  color: #778ca2;
+  font-size: 10px;
+  line-height: 1.5;
+}
+
+
+/* ============================================================
+   NAVEGACIÓN — SCROLL INTERNO DEL SIDEBAR
+   El encabezado y el pie permanecen visibles mientras el menú
+   central se desplaza cuando crecen las opciones administrativas.
+   ============================================================ */
+.sidebar {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.sidebar-nav {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding-right: 3px;
+  scrollbar-width: thin;
+}
+
+.sidebar-nav::-webkit-scrollbar {
+  width: 5px;
+}
+
+.sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(110, 121, 168, .32);
+  border-radius: 999px;
+}
+
+.sidebar-footer {
+  flex: 0 0 auto;
+  margin-top: 10px;
+}
+
+/* ============================================================
+   GUACAMOLE — COMPLEMENTOS DE ADMINISTRACIÓN
+   ============================================================ */
+.guacamole-admin-grid {
+  display: grid;
+  gap: 13px;
+}
+
+.permission-editor {
+  display: grid;
+  gap: 14px;
+}
+
+.permission-block {
+  padding: 14px;
+  border: 1px solid #1a2b40;
+  border-radius: 12px;
+  background: rgba(7, 15, 26, .55);
+}
+
+.permission-block .panel-head {
+  margin-bottom: 10px;
+}
+
+.permission-block .panel-head h3 {
+  margin-top: 5px;
+}
+
+html[data-theme="light"] .sidebar-nav::-webkit-scrollbar-thumb {
+  background: rgba(89, 103, 126, .28);
+}
+
+html[data-theme="light"] .permission-block {
+  border-color: #d4dde6;
+  background: rgba(255,255,255,.55);
+}
+
+/* ============================================================
+   FASE 11 — GRUPOS DE ESTUDIANTES / REDISEÑO VISUAL
+   Sección aislada para no alterar la lógica existente.
+   ============================================================ */
+

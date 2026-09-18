@@ -1,0 +1,188 @@
+/* ============================================================
+   Ajustes responsive generales.
+   Archivo separado para facilitar futuras modificaciones.
+   ============================================================ */
+
+/* ============================================================
+   BUSCADOR / FILTROS
+   ============================================================ */
+.filter-row,
+.filter-toolbar {
+  gap: 9px;
+}
+
+.filter,
+.table-select {
+  transition: border-color .18s ease, background .18s ease;
+}
+
+.filter:hover {
+  border-color: #314966;
+}
+
+/* ============================================================
+   PROGRESO
+   ============================================================ */
+.progress-grid {
+  gap: 18px;
+  margin-top: 20px;
+}
+
+.progress-big,
+.progress-list {
+  box-shadow: var(--ui-shadow);
+}
+
+.progress-row {
+  min-height: 56px;
+  padding: 12px 16px;
+}
+
+/* ============================================================
+   ACCESIBILIDAD / FOCUS
+   ============================================================ */
+button,
+a,
+input,
+select,
+textarea {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid rgba(118,89,255,.95);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(118,89,255,.12);
+}
+
+/* ============================================================
+   RESPONSIVE — SIDEBAR DESLIZABLE
+   ============================================================ */
+@media (max-width: 1180px) {
+  .main-content {
+    padding: 28px 26px 44px;
+  }
+
+  .page-shell {
+    width: calc(100vw - 236px);
+  }
+
+  .connections-grid {
+    grid-template-columns: repeat(2,minmax(220px,1fr));
+  }
+
+  .permission-row {
+    grid-template-columns: 1fr;
+    gap: 13px;
+  }
+
+  .guac-group-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 900px) {
+  body {
+    overflow-x: hidden;
+  }
+
+  .app-shell {
+    display: block;
+  }
+
+  .page-shell {
+    width: 100%;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 258px;
+    height: 100vh;
+    transform: translateX(-105%);
+    transition: transform .24s ease, box-shadow .24s ease;
+    box-shadow: none;
+    will-change: transform;
+  }
+
+  .sidebar.open {
+    left: 0;
+    transform: translateX(0);
+    box-shadow: 20px 0 70px rgba(0,0,0,.42);
+  }
+
+  .topbar {
+    padding: 0 20px;
+  }
+
+  .main-content {
+    padding: 24px 20px 38px;
+  }
+
+  .page-heading {
+    margin-bottom: 20px;
+  }
+
+  .connections-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .topbar {
+    height: 62px;
+    padding: 0 14px;
+  }
+
+  .main-content {
+    padding: 19px 14px 30px;
+  }
+
+  .sidebar {
+    width: min(286px, 88vw);
+  }
+
+  .stats-grid,
+  .category-grid,
+  .side-stack {
+    gap: 12px;
+  }
+
+  .dashboard-grid,
+  .admin-grid,
+  .challenge-layout,
+  .workspace-grid {
+    gap: 14px;
+  }
+
+  .modal-backdrop {
+    padding: 10px;
+  }
+
+  .modal-card {
+    max-height: 94vh;
+    padding: 17px;
+    border-radius: 14px;
+  }
+
+  .permission-row {
+    padding: 13px;
+  }
+
+  .permission-checks label,
+  .permission-checks .check-row,
+  .check-row {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .guac-group-grid {
+    padding: 12px;
+  }
+}
+

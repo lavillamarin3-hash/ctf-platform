@@ -1,0 +1,203 @@
+/* ============================================================
+   Layout general Cyber Lab: estructura, cabecera y navegación.
+   Archivo separado para facilitar futuras modificaciones.
+   ============================================================ */
+
+/* ============================================================
+   CYBER LAB UI/UX PRO — FASE 11
+   Mejora integral de navegación, espaciado, jerarquía visual,
+   paneles, formularios, tablas, ranking y laboratorio.
+   No modifica lógica ni endpoints.
+   ============================================================ */
+
+:root {
+  --ui-bg: #050b14;
+  --ui-surface: #081321;
+  --ui-surface-2: #0a1727;
+  --ui-surface-3: #0d1b2d;
+  --ui-border: #1a2d43;
+  --ui-border-soft: #132438;
+  --ui-text: #edf4ff;
+  --ui-muted: #71839a;
+  --ui-muted-2: #53657c;
+  --ui-accent: #7659ff;
+  --ui-accent-2: #5b8cff;
+  --ui-success: #53d88a;
+  --ui-warning: #f0b95a;
+  --ui-danger: #ef6b78;
+  --ui-radius: 14px;
+  --ui-shadow: 0 18px 50px rgba(0,0,0,.20);
+}
+
+html, body, #root {
+  min-height: 100%;
+}
+
+body {
+  overflow-x: hidden;
+  background:
+    radial-gradient(circle at 78% 14%, rgba(86,82,255,.045), transparent 28%),
+    radial-gradient(circle at 12% 82%, rgba(40,124,255,.035), transparent 26%),
+    var(--ui-bg);
+}
+
+/* ============================================================
+   ESTRUCTURA PRINCIPAL
+   ============================================================ */
+.app-shell {
+  min-height: 100vh;
+  display: flex;
+  background: transparent;
+}
+
+.page-shell {
+  min-width: 0;
+  flex: 1;
+  width: calc(100vw - 236px);
+}
+
+.main-content {
+  width: min(100%, 1680px);
+  margin: 0 auto;
+  padding: 30px 34px 52px;
+}
+
+.hero,
+.page-heading {
+  margin-bottom: 24px;
+}
+
+.hero h1,
+.page-heading h1 {
+  line-height: 1.04;
+}
+
+.hero p,
+.page-heading p {
+  max-width: 840px;
+  line-height: 1.65;
+}
+
+/* ============================================================
+   BARRA SUPERIOR
+   ============================================================ */
+.topbar {
+  height: 68px;
+  padding: 0 32px;
+  background: rgba(5,11,20,.88);
+  border-bottom: 1px solid rgba(35,55,80,.70);
+  box-shadow: 0 10px 28px rgba(0,0,0,.10);
+  backdrop-filter: blur(18px);
+}
+
+.topbar-title strong {
+  font-size: 13px;
+  letter-spacing: -.01em;
+}
+
+.topbar-actions {
+  gap: 10px;
+}
+
+/* ============================================================
+   SIDEBAR — DESKTOP FIJA + MOBILE DESLIZABLE
+   ============================================================ */
+.sidebar {
+  width: 236px;
+  flex: 0 0 236px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  padding: 18px 12px 16px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: #263a53 transparent;
+  border-right: 1px solid rgba(24,42,63,.88);
+  background:
+    linear-gradient(180deg, rgba(6,16,29,.99) 0%, rgba(5,12,22,.99) 100%);
+  box-shadow: 10px 0 35px rgba(0,0,0,.10);
+  z-index: 40;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: #22354c;
+  border-radius: 999px;
+}
+
+.sidebar::-webkit-scrollbar-thumb:hover {
+  background: #334c69;
+}
+
+.sidebar-brand {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin-bottom: 8px;
+  padding: 8px 10px 18px;
+  background: linear-gradient(180deg, #06101d 78%, rgba(6,16,29,0));
+}
+
+.sidebar nav {
+  padding-top: 8px;
+}
+
+.nav-group-label {
+  margin-top: 8px;
+  padding: 14px 10px 8px;
+  color: #4f627b;
+  font-size: 8px;
+  letter-spacing: .20em;
+}
+
+.nav-item {
+  min-height: 42px;
+  margin: 3px 0;
+  padding: 10px 12px;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  gap: 12px;
+  color: #7b8da4;
+  transition: background .18s ease, color .18s ease, border-color .18s ease, transform .18s ease;
+}
+
+.nav-item .icon {
+  width: 17px;
+  height: 17px;
+  opacity: .92;
+}
+
+.nav-item:hover {
+  transform: translateX(1px);
+  color: #dce7f6;
+  border-color: rgba(50,74,104,.42);
+  background: rgba(26,43,65,.42);
+}
+
+.nav-item.active {
+  color: #f0efff;
+  border-color: rgba(111,91,245,.22);
+  background: linear-gradient(100deg, rgba(107,87,242,.22), rgba(66,91,190,.10));
+  box-shadow: inset 3px 0 0 #735dff, 0 8px 22px rgba(53,43,150,.10);
+}
+
+.sidebar-footer {
+  position: sticky;
+  bottom: 0;
+  margin-top: 24px;
+  padding: 12px 11px;
+  border: 1px solid rgba(27,46,68,.90);
+  border-radius: 10px;
+  background: rgba(7,16,28,.92);
+  backdrop-filter: blur(10px);
+}
+

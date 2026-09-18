@@ -358,7 +358,7 @@ export function ChallengeDetail({
         </div>
         {challenge.code === "LAB-01" ? (
           <div className="hint-list">
-            <details><summary>Pista 1 · reconocimiento</summary><p>Comienza identificando qué servicios escucha la víctima <strong>192.168.164.137</strong>. Desde la Kali atacante puedes usar <code>nmap -sV 192.168.164.137</code>.</p></details>
+            <details><summary>Pista 1 · reconocimiento</summary><p>Comienza identificando qué servicios escucha la víctima <strong>192.168.146.137</strong>. Desde la Kali atacante puedes usar <code>nmap -sV 192.168.146.137</code>.</p></details>
             <details><summary>Pista 2 · acceso</summary><p>Cuando confirmes SSH, utiliza las credenciales entregadas por el instructor y entra por el puerto identificado. No necesitas cambiar la configuración del servidor.</p></details>
             <details><summary>Pista 3 · localización</summary><p>Una vez dentro, piensa en archivos destinados a ejercicios CTF. La ruta preparada para este laboratorio es <code>/opt/ctf/flag.txt</code>.</p></details>
           </div>

@@ -1,0 +1,99 @@
+/* ============================================================
+   Flags dinámicas, permisos, contención y ajustes base de administración.
+   Archivo separado para facilitar futuras modificaciones.
+   ============================================================ */
+
+/* ============================================================
+   FASE API · FLAGS DINÁMICAS + GUACAMOLE ADMIN
+   Mantiene la paleta existente; añade únicamente componentes.
+   ============================================================ */
+.flag-builder{margin-top:14px;padding:15px}
+.flag-builder-row{margin-top:12px;padding:13px;border:1px solid #1c2c43;border-radius:12px;background:rgba(8,17,29,.46)}
+.flag-builder-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+.flag-builder-head strong{font-size:11px;color:#dbe6f2}
+.flag-builder-row small,.form-help{display:block;margin-top:5px;color:#71839a;font-size:9px;line-height:1.45}
+.form-span-2{grid-column:span 2}
+.permission-modal{max-width:900px}
+.permission-table{display:grid;gap:8px;margin-top:10px}
+.permission-row{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:12px;border:1px solid #1b2c42;border-radius:11px;background:rgba(8,17,29,.38)}
+.permission-row>div:first-child{min-width:180px}
+.permission-row strong{display:block;font-size:10px;color:#dce6f2}
+.permission-row small{display:block;margin-top:3px;color:#728399;font-size:8px}
+.permission-checks{display:flex;flex-wrap:wrap;gap:9px}
+.permission-checks label,.check-row{display:flex;align-items:center;gap:6px;color:#97a9bd;font-size:9px}
+.permission-checks input,.check-row input{accent-color:#7659ff}
+@media (max-width:900px){.form-span-2{grid-column:auto}.permission-row{align-items:flex-start;flex-direction:column}.permission-checks{width:100%}}
+
+/* FASE 8: evitar desbordamiento de paneles y tablas de infraestructura */
+.admin-grid > * { min-width: 0; }
+.admin-panel { min-width: 0; overflow: hidden; }
+.admin-actions, .admin-action, .admin-action > span { min-width: 0; }
+.admin-action strong, .admin-action small { overflow-wrap: anywhere; word-break: break-word; }
+.admin-panel .table-panel { width: 100%; max-width: 100%; min-width: 0; overflow-x: auto; overflow-y: hidden; }
+.admin-panel .table-panel table { width: max-content; min-width: 100%; }
+@media (max-width: 1180px) { .admin-grid { grid-template-columns: minmax(0, 1fr); } }
+
+.challenge-run-card { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:14px 0; }
+.challenge-run-card h3 { margin:5px 0 3px; font-size:13px; }
+.challenge-run-card p { margin:0; color:#6f8198; font-size:8px; }
+@media (max-width:700px){.challenge-run-card{align-items:flex-start; flex-direction:column}.challenge-run-card .primary-action{width:100%; justify-content:center}}
+
+.field-with-helper { display:grid; gap:5px; }
+.field-with-helper small { color:#5e7087; font-size:7px; font-weight:500; letter-spacing:0; line-height:1.4; }
+
+/* Ajustes de contención para inventario y formularios de administración */
+.admin-grid { grid-template-columns: minmax(0, .9fr) minmax(0, 1.25fr); }
+.admin-panel { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.admin-panel .panel-head, .table-panel .panel-head { min-width: 0; }
+.admin-panel .row-actions { flex-wrap: wrap; }
+.table-panel { max-width: 100%; box-sizing: border-box; overflow-x: auto; }
+.table-panel table { min-width: 920px; width: max-content; }
+.field-help { display:block; margin-top:6px; color:#607188; font-size:7.5px; line-height:1.45; font-weight:600; letter-spacing:0; }
+@media (max-width: 1100px) { .admin-grid { grid-template-columns: 1fr; } }
+@media (max-width: 720px) { .table-panel table { min-width: 780px; } }
+
+.role-protected { opacity:.78; white-space:nowrap; }
+.user-role-filter { min-width: 130px; }
+@media (max-width: 1180px) {
+  .admin-grid { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* UX: señalización del ciclo de flags dinámicas y evidencia del reto */
+.challenge-flag-policy { margin: 14px 0 0; }
+.challenge-flag-policy p { margin: 6px 0 0; }
+.hint-box { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 12px; background: var(--panel); display: grid; gap: 4px; }
+.hint-box strong { font-size: 0.88rem; }
+.hint-box span { color: var(--muted); font-size: 0.82rem; line-height: 1.45; }
+.hint-box code { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+
+
+/* ===== FASE UI: espaciado y separación visual ===== */
+.dashboard-grid { gap: 24px; }
+.admin-grid { gap: 24px; }
+.connections-grid { gap: 18px; }
+.category-grid { gap: 16px; }
+.stats-grid { gap: 16px; }
+.dashboard-grid > .glass-panel,
+.dashboard-grid > section.glass-panel { min-width: 0; }
+.page-heading + .dashboard-grid { margin-top: 22px; }
+
+/* El ranking debe conservar presencia visible aun con pocos jugadores. */
+.ranking-panel { min-height: 120px; }
+.ranking-panel ol:empty::after {
+  content: "Aún no hay resultados de retos completados.";
+  display: block;
+  padding: 28px 18px;
+  color: #607188;
+  font-size: 10px;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .dashboard-grid, .admin-grid, .connections-grid { gap: 18px; }
+}
+
+/* ============================================================
+   MEJORAS VISUALES - FASE 11
+   Espaciado, formularios, permisos y tarjetas de laboratorio
+   ============================================================ */
+
