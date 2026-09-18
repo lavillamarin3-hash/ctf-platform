@@ -880,70 +880,108 @@ export function PlayerApp({
             </section>
           )}
 
+          {/* ==================================================
+              LABORATORIO — MIS CONEXIONES
+              El estudiante no navega por el inventario completo de
+              VMs. Las conexiones visibles son las de sus ejecuciones
+              activas; Guacamole controla además el permiso READ real.
+             ================================================== */}
           {view === "laboratory" && (
             <section>
               <div className="page-heading">
                 <div>
                   <span className="eyebrow accent">LABORATORIO</span>
-                  <h1>Entorno de práctica</h1>
-                  <p>Accede a las máquinas habilitadas para el laboratorio mediante Apache Guacamole.</p>
+                  <h1>Mis conexiones</h1>
+                  <p>
+                    Aquí aparecen únicamente tus sesiones activas.
+                    Para acceder a un entorno inicia primero el reto
+                    correspondiente.
+                  </p>
                 </div>
               </div>
 
-              <div className="dashboard-grid">
-                {laboratories.map((lab) => (
-                  <div className="glass-panel" key={lab.id}>
-                    <div className="section-title">
-                      <div>
-                        <span className="eyebrow">{lab.code || "LABORATORIO"}</span>
-                        <h2>{lab.name}</h2>
-                      </div>
-                      <span className="status-published">{lab.status === "ready" ? "DISPONIBLE" : lab.status.toUpperCase()}</span>
+              {runs.length > 0 ? (
+                <section className="glass-panel student-connections-panel">
+                  <div className="section-title">
+                    <div>
+                      <span className="eyebrow">ACCESO REMOTO</span>
+                      <h2>Mis conexiones activas</h2>
                     </div>
-                    <p>{lab.description}</p>
-                    <small>{lab.segment}</small>
-                    <div className="connections-grid" style={{ marginTop: 16 }}>
-                      {lab.vms.map((vm) => (
-                        <div className="connection-card" key={vm.id}>
-                          <div className="connection-state"><span className="status-dot" />{vm.status === "ready" ? "Disponible" : vm.status}</div>
-                          <h3>{vm.name}</h3>
-                          <p>{vm.os}</p>
-                          <small>{vm.ip_address || "IP no asignada"} · {vm.network_role} · {vm.guacamole_protocol ? vm.guacamole_protocol.toUpperCase() : "Guacamole"}</small>
-                          {vm.guacamole_url ? (
-                            <a href={vm.guacamole_url} target="_blank" rel="noreferrer" className="primary-action full" style={{ marginTop: 12 }}>
-                              <Icon name="play" /> Abrir en Guacamole
-                            </a>
-                          ) : (
-                            <button className="secondary-action full" disabled style={{ marginTop: 12 }}>Conexión no asociada</button>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                    <span className="user-count">
+                      {runs.length}
+                    </span>
                   </div>
-                ))}
 
-                {laboratories.length === 0 && (
-                  <div className="empty-card">
-                    <Icon name="lab" />
-                    <strong>No hay laboratorios publicados</strong>
-                    <span>El administrador debe asociar al menos una VM a una conexión de Guacamole.</span>
-                  </div>
-                )}
-              </div>
-
-              {runs.length > 0 && (
-                <div className="glass-panel" style={{ marginTop: 20 }}>
-                  <div className="section-title"><div><span className="eyebrow">SESIONES</span><h2>Mis ejecuciones de retos</h2></div></div>
                   <div className="connections-grid">
                     {runs.map((run) => (
-                      <div className="connection-card" key={run.id}>
-                        <div className="connection-state"><span className="status-dot" />{run.status}</div>
-                        <h3>{run.challenge_code}</h3>
-                        <small>Hasta {new Date(run.expires_at).toLocaleString("es-ES")}</small>
-                        {run.launch_url && <a href={run.launch_url} target="_blank" rel="noreferrer" className="primary-action full" style={{ marginTop: 12 }}><Icon name="play" /> Abrir sesión</a>}
+                      <div
+                        className="connection-card"
+                        key={run.id}
+                      >
+                        <div className="connection-state">
+                          <span className="status-dot" />
+                          {run.status}
+                        </div>
+
+                        <h3>
+                          {run.target_vm_name ||
+                            run.challenge_code}
+                        </h3>
+
+                        <p>
+                          {run.challenge_code}
+                          {run.target_protocol
+                            ? ` · ${run.target_protocol.toUpperCase()}`
+                            : ""}
+                        </p>
+
+                        <small>
+                          {run.target_vm_ip ||
+                            "IP administrada por el laboratorio"}
+                          {" · Hasta "}
+                          {new Date(
+                            run.expires_at
+                          ).toLocaleString("es-ES")}
+                        </small>
+
+                        {run.launch_url ? (
+                          <a
+                            href={run.launch_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="primary-action full"
+                            style={{ marginTop: 12 }}
+                          >
+                            <Icon name="play" />
+                            Abrir conexión
+                          </a>
+                        ) : (
+                          <button
+                            className="secondary-action full"
+                            disabled
+                            style={{ marginTop: 12 }}
+                          >
+                            Conexión no disponible
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
+                </section>
+              ) : (
+                <div className="empty-card student-no-connections">
+                  <Icon name="lab" />
+                  <strong>No tienes conexiones activas</strong>
+                  <span>
+                    Inicia un reto asignado para preparar tu sesión
+                    de acceso remoto.
+                  </span>
+                  <button
+                    className="primary-action"
+                    onClick={() => setView("challenges")}
+                  >
+                    Explorar retos
+                  </button>
                 </div>
               )}
             </section>

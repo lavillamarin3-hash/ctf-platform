@@ -122,7 +122,11 @@ export function ChallengeDetail({
       kind: "error" | "success";
     } | null>(null);
 
-  const [hintLevel, setHintLevel] = useState(0);
+  const [submissionResult, setSubmissionResult] = useState<{
+    correct: boolean;
+    completed: boolean;
+    awarded: number;
+  } | null>(null);
 
   if (!challenge) {
     return (
@@ -160,12 +164,13 @@ export function ChallengeDetail({
         );
 
       setFlag("");
+      setSubmissionResult({ correct: result.correct, completed: result.challenge_completed, awarded: result.awarded_points });
 
       setNotice({
-        message: result.challenge_completed
-          ? `${result.message} +${result.awarded_points} puntos.`
-          : result.message,
-        kind: result.correct ? "success" : "error",
+        message: result.message,
+        kind: result.correct
+          ? "success"
+          : "error",
       });
     } catch (err) {
       setNotice({
@@ -208,21 +213,45 @@ export function ChallengeDetail({
         {challenge.description}
       </p>
 
-      {activeRun && (
-        <div className="workspace-card challenge-run-card">
-          <div>
-            <span className="eyebrow accent">LABORATORIO ASIGNADO</span>
-            <h3>{activeRun.target_vm_name || "Entorno de práctica"}</h3>
-            <p>{activeRun.laboratory_code || "Laboratorio CTF"}{activeRun.target_vm_ip ? ` · ${activeRun.target_vm_ip}` : ""}{activeRun.target_protocol ? ` · ${activeRun.target_protocol.toUpperCase()}` : ""}</p>
-            <small>Cuenta CTF / Guacamole: <strong>{username || "usuario actual"}</strong></small>
-          </div>
-          {activeRun.launch_url && (
-            <a href={activeRun.launch_url} target="_blank" rel="noreferrer" className="primary-action">
-              <Icon name="play" /> Abrir máquina asignada
-            </a>
-          )}
+      <div className="workspace-card challenge-run-card">
+        <div>
+          <span className="eyebrow accent">LABORATORIO ASIGNADO</span>
+          <h3>{activeRun?.target_vm_name || "Entorno de práctica"}</h3>
+          <p>
+            {activeRun?.laboratory_code || "Laboratorio CTF"}
+            {activeRun?.target_vm_ip ? ` · ${activeRun.target_vm_ip}` : ""}
+            {activeRun?.target_protocol
+              ? ` · ${activeRun.target_protocol.toUpperCase()}`
+              : " · SSH"}
+          </p>
+          <small>
+            Cuenta CTF / Guacamole: <strong>{username || "usuario actual"}</strong>
+          </small>
         </div>
-      )}
+
+        {activeRun?.launch_url ? (
+          <a
+            href={activeRun.launch_url}
+            target="_blank"
+            rel="noreferrer"
+            className="primary-action"
+          >
+            <Icon name="play" /> Abrir máquina asignada
+          </a>
+        ) : (
+          <button
+            type="button"
+            className="primary-action"
+            onClick={() => onStart(challenge.code)}
+            disabled={busy || challenge.completed}
+          >
+            <Icon name="play" />
+            {challenge.completed
+              ? "Reto completado"
+              : "Abrir máquina asignada"}
+          </button>
+        )}
+      </div>
 
       <details className="challenge-accordion">
         <summary>
@@ -322,26 +351,27 @@ export function ChallengeDetail({
         </div>
       </details>
 
-      {challenge.code === "LAB-01" && (
-        <section className="hint-panel glass-panel">
-          <div className="panel-head">
-            <div><span className="eyebrow accent">AYUDA</span><h3>Pistas del laboratorio</h3><small>Usa una pista solo cuando te quedes bloqueado.</small></div>
-            <span className="hint-count">{hintLevel}/3</span>
+      <div className="hint-panel challenge-hints">
+        <div className="hint-panel-head">
+          <div><span className="eyebrow accent">AYUDAS DEL INSTRUCTOR</span><h3>Pistas y sugerencias</h3></div>
+          <span className="hint-badge">sin revelar la flag</span>
+        </div>
+        {challenge.code === "LAB-01" ? (
+          <div className="hint-list">
+            <details><summary>Pista 1 · reconocimiento</summary><p>Comienza identificando qué servicios escucha la víctima <strong>192.168.164.137</strong>. Desde la Kali atacante puedes usar <code>nmap -sV 192.168.164.137</code>.</p></details>
+            <details><summary>Pista 2 · acceso</summary><p>Cuando confirmes SSH, utiliza las credenciales entregadas por el instructor y entra por el puerto identificado. No necesitas cambiar la configuración del servidor.</p></details>
+            <details><summary>Pista 3 · localización</summary><p>Una vez dentro, piensa en archivos destinados a ejercicios CTF. La ruta preparada para este laboratorio es <code>/opt/ctf/flag.txt</code>.</p></details>
           </div>
-          {hintLevel > 0 && <div className="hint-item"><strong>Pista {hintLevel}</strong><p>{[
-            "Desde la máquina atacante identifica qué servicio de red expone la víctima.",
-            "El objetivo utiliza SSH. Revisa el servicio y conecta con las credenciales entregadas para el laboratorio.",
-            "Ya dentro de la víctima, revisa el directorio /opt/ctf y localiza el archivo de evidencia.",
-          ][hintLevel - 1]}</p></div>}
-          {hintLevel < 3 && <button type="button" className="secondary-action" onClick={() => setHintLevel((level) => Math.min(3, level + 1))}>Mostrar siguiente pista</button>}
-        </section>
-      )}
+        ) : (
+          <div className="hint-list"><details><summary>Sugerencia</summary><p>Lee el objetivo y divide el reto en pequeñas comprobaciones antes de intentar una respuesta final.</p></details></div>
+        )}
+      </div>
 
-      {notice && (
-        <div className={`submission-result ${notice.kind}`}>
-          <span className="submission-result-label">RESULTADO DE CAPTURA</span>
-          <strong>{notice.kind === "success" ? "FLAG CORRECTA" : "FLAG NO VALIDADA"}</strong>
-          <p>{notice.message}</p>
+      {submissionResult && (
+        <div className={`result-card ${submissionResult.correct ? "success" : "error"}`}>
+          <div className="result-icon">{submissionResult.correct ? "✓" : "!"}</div>
+          <div><span className="eyebrow">RESULTADO DE LA RESPUESTA</span><h3>{submissionResult.correct ? (submissionResult.completed ? "Reto completado" : "Flag correcta") : "Respuesta incorrecta"}</h3><p>{submissionResult.correct ? (submissionResult.completed ? `Has obtenido +${submissionResult.awarded} puntos.` : "Continúa con los objetivos restantes del ejercicio.") : "La respuesta no coincide con la flag esperada. Revisa las pistas y vuelve a intentarlo."}</p></div>
+          {submissionResult.completed && <strong className="result-score">+{submissionResult.awarded} pts</strong>}
         </div>
       )}
 

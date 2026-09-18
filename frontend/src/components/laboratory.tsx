@@ -242,7 +242,8 @@ export function VMForm({
   const usedIps = laboratory.vms.map((item) => item.ip).filter(Boolean);
   const availableIps = NETWORK_IPS[networkRole].filter((candidate) => !usedIps.includes(candidate) || candidate === initial?.ip);
   const selectedIp = ip || availableIps[0] || "";
-  const subnet = networkRole === "Atacantes" ? "192.168.146.0/24" : "192.168.164.0/24";
+  // La red real actual del laboratorio es 192.168.146.0/24 para ambos roles.
+  const subnet = "192.168.146.0/24";
   const segmentLabel = LAB_NETWORK_METADATA[networkRole].segment;
 
   const connectionForIp = (candidateIp: string) =>
@@ -256,6 +257,7 @@ export function VMForm({
     }
   }, [guacamoleConnectionId, ip, guacamoleConnections]);
 
+  /** Guarda la VM y conserva la conexión de Guacamole seleccionada. */
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim() || !operatingSystem) return;
@@ -296,6 +298,10 @@ export function VMForm({
     </div>
   );
 }
+
+// ============================================================
+/* TRANSFORMACIÓN DE RESPUESTAS DEL BACKEND */
+// ============================================================
 
 export function mapBackendVM(item: import("../api").BackendVM): LabVM {
   return {

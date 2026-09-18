@@ -7,7 +7,7 @@
 import { createElement, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, User, Challenge, RankingRow } from "../api";
-import { Theme, ThemePreference, PlayerView, ManagementView, ManagedUser, USER_FUNCTIONS, DEMO_USERS, difficultyStyle, categoryMeta, DEFAULT_LABORATORIES, demoLabCount, VM_OS_OPTIONS, NETWORK_IPS, Laboratory, LabVM, DEMO_RANKING } from "../config";
+import { Theme, ThemePreference, PlayerView, ManagementView, ManagedUser, USER_FUNCTIONS, DEMO_USERS, difficultyStyle, categoryMeta, DEFAULT_LABORATORIES, demoLabCount, VM_OS_OPTIONS, NETWORK_IPS, Laboratory, LabVM } from "../config";
 
 export function ErrorMessage({
   message,
@@ -600,15 +600,19 @@ export function ManagementSidebar({
   onClose: () => void;
   role: User["role"];
 }) {
+  /**
+   * Construye una opción del menú.
+   * Mantener esta función pequeña facilita agregar o quitar módulos
+   * sin duplicar el comportamiento de navegación.
+   */
   const item = (
     key: ManagementView,
     icon: string,
     label: string
   ) => (
     <button
-      className={`nav-item ${
-        view === key ? "active" : ""
-      }`}
+      type="button"
+      className={`nav-item ${view === key ? "active" : ""}`}
       onClick={() => {
         setView(key);
         onClose();
@@ -619,103 +623,78 @@ export function ManagementSidebar({
     </button>
   );
 
-  const admin =
-    role === "admin";
-
-  const canViewUsers =
-    role === "admin" ||
-    role === "instructor";
+  const isAdmin = role === "admin";
+  const canManage = role === "admin" || role === "instructor";
 
   return (
     <aside
-      className={`sidebar ${
-        open ? "open" : ""
-      }`}
+      className={`sidebar ${open ? "open" : ""}`}
+      aria-label="Navegación de administración"
     >
       <div className="sidebar-brand">
         <Logo />
-
         <button
+          type="button"
           className="icon-btn mobile-only"
           onClick={onClose}
+          aria-label="Cerrar menú"
         >
           ×
         </button>
       </div>
 
-      <nav>
-        <div className="nav-group-label">
-          GESTIÓN
-        </div>
+      <nav className="sidebar-nav">
+        <div className="nav-group-label">GESTIÓN</div>
 
-        {item(
-          "dashboard",
-          "home",
-          "Dashboard"
+        {item("dashboard", "home", "Dashboard")}
+        {item("challenges", "flag", "Retos")}
+        {item("laboratory", "lab", "Laboratorios / VMs")}
+        {item("ranking", "trophy", "Ranking")}
+
+        {canManage && (
+          <>
+            <div className="nav-group-label">ORGANIZACIÓN</div>
+
+            {item(
+              "groups",
+              "users",
+              "Grupos de estudiantes"
+            )}
+
+            {item(
+              "monitoring",
+              "chart",
+              isAdmin ? "Seguimiento" : "Seguimiento"
+            )}
+          </>
         )}
 
-        {item(
-          "challenges",
-          "flag",
-          "Retos"
-        )}
-
-        {item(
-          "laboratory",
-          "lab",
-          "Laboratorios / VMs"
-        )}
-
-        {canViewUsers && item(
-          "groups",
-          "users",
-          "Grupos de estudiantes"
-        )}
-
-        {canViewUsers && item(
-          "monitoring",
-          "chart",
-          "Seguimiento"
-        )}
-
-        {item(
-          "ranking",
-          "trophy",
-          "Ranking"
-        )}
-
-        {canViewUsers && (
+        {canManage && (
           <>
             <div className="nav-group-label">
-              {admin
-                ? "ADMINISTRACIÓN"
-                : "SUPERVISIÓN"}
+              {isAdmin ? "ADMINISTRACIÓN" : "SUPERVISIÓN"}
             </div>
 
             {item(
               "users",
               "users",
-              admin
-                ? "Gestionar usuarios"
-                : "Usuarios"
+              isAdmin ? "Gestionar usuarios" : "Usuarios"
             )}
 
-            {admin &&
+            {isAdmin && (
               item(
                 "guacamole",
                 "settings",
                 "Guacamole"
-              )}
+              )
+            )}
           </>
         )}
       </nav>
 
       <div className="sidebar-footer">
         <span className="status-dot" />
-
-        {admin
-          ? "Administrador"
-          : "Instructor"}
+        {isAdmin ? "Administrador" : "Instructor"}
       </div>
     </aside>
   );
@@ -895,41 +874,29 @@ export function buildRanking(
   rows: RankingRow[],
   user: User
 ): RankingRow[] {
-  const byName = new Map(
-    DEMO_RANKING.map((row) => [
-      row.username,
-      row,
-    ])
-  );
+  const byName = new Map<string, RankingRow>();
 
   rows.forEach((row) => {
-    byName.set(
-      row.username,
-      row
-    );
+    byName.set(row.username, row);
   });
 
+  // Mantener al usuario autenticado visible aunque todavía no haya
+  // completado un reto. No se agregan usuarios ficticios.
   if (!byName.has(user.username)) {
     byName.set(user.username, {
-      position: 99,
+      position: 0,
       username: user.username,
       total_points: 0,
       challenges_completed: 0,
     });
   }
 
-  return Array.from(
-    byName.values()
-  )
+  return Array.from(byName.values())
     .sort(
       (a, b) =>
-        b.total_points -
-          a.total_points ||
-        b.challenges_completed -
-          a.challenges_completed ||
-        a.username.localeCompare(
-          b.username
-        )
+        b.total_points - a.total_points ||
+        b.challenges_completed - a.challenges_completed ||
+        a.username.localeCompare(b.username)
     )
     .slice(0, 10)
     .map((row, index) => ({

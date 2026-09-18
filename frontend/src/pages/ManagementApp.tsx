@@ -4,16 +4,17 @@
 // Las piezas visuales y formularios se mantienen en módulos especializados.
 // ============================================================
 
-import { createElement, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { createElement, useCallback, useEffect, useMemo, useState } from "react";
 
 import { api, Challenge, RankingRow, User } from "../api";
-import { Theme, ThemePreference, ManagementView, ManagedUser, UserFunction, Laboratory, LabVM, DEMO_USERS, DEFAULT_LABORATORIES, difficultyStyle } from "../config";
+import { Theme, ThemePreference, ManagementView, ManagedUser, UserFunction, Laboratory, LabVM, DEFAULT_LABORATORIES, difficultyStyle } from "../config";
 import { ManagementSidebar, Header, StatCard, Ranking, Icon } from "../components/common";
 import { UserForm } from "../components/users";
 import { GuacamoleUserForm, GuacamoleConnectionForm, GuacamolePermissionsForm } from "../components/guacamole";
 import { LaboratoryForm, VMForm, mapBackendLaboratory, mapBackendVM } from "../components/laboratory";
 import { ChallengeForm, inferCategory } from "../components/challenges";
 import { GroupManagement } from "../components/groups";
+import { ConnectionAssignmentPanel } from "../components/connectionAssignments";
 import { GuestApp } from "./GuestApp";
 
 const defaultUserFunction = (role: User["role"]): UserFunction =>
@@ -231,9 +232,51 @@ export function ManagementApp({
     }
   }, [isAdmin]);
 
-  const testGuacamoleConnection = () => {
-    void loadGuacamole();
-  };
+  /**
+   * Obtiene la única conexión READ que el estudiante tiene asignada.
+   * Si por una configuración anterior existen varias, se toma la
+   * primera; el guardado posterior corrige la situación y deja solo una.
+   */
+  const loadStudentConnection = useCallback(
+    async (username: string): Promise<string | null> => {
+      const permissionSet =
+        await api.guacamolePermissions(username);
+
+      const assigned = Object.entries(
+        permissionSet.connection_permissions || {}
+      ).find(([, permissions]) =>
+        permissions.includes("READ")
+      );
+
+      return assigned?.[0] ?? null;
+    },
+    []
+  );
+
+  /**
+   * Reemplaza los permisos directos de conexión del estudiante
+   * para dejar como máximo una conexión con permiso READ.
+   */
+  const saveStudentConnection = useCallback(
+    async (
+      username: string,
+      connectionId: string | null
+    ) => {
+      if (!isAdmin) return;
+
+      await api.setStudentConnection(
+        username,
+        connectionId
+      );
+
+      setMessage(
+        connectionId
+          ? `Conexión asignada a ${username}. Solo dispone de READ sobre la conexión seleccionada.`
+          : `Se retiró la conexión directa de ${username}.`
+      );
+    },
+    [isAdmin]
+  );
 
   const saveGuacamoleUser = async (input: { username: string; password?: string; email?: string | null; full_name?: string | null; disabled?: boolean }, initialUsername?: string) => {
     if (!isAdmin) return;
@@ -347,8 +390,13 @@ export function ManagementApp({
         );
 
         setUsers(normalized);
-      } catch {
-        setUsers(DEMO_USERS);
+      } catch (err) {
+        setUsers([]);
+        setMessage(
+          err instanceof Error
+            ? err.message
+            : "No se pudieron cargar los usuarios reales."
+        );
       }
     },
     [isAdmin, panelRole]
@@ -401,6 +449,11 @@ export function ManagementApp({
     ? "Administrador"
     : "Instructor / Diseñador";
 
+  /**
+   * Persiste el reto, sus flags y las asignaciones a grupos.
+   * Mantener esta función como orquestador evita mezclar llamadas de API
+   * dentro de los formularios visuales.
+   */
   const saveChallenge = async (input: Omit<Challenge,"id"|"completed"|"flag_count"|"flags">, draftFlags: Array<{id?:number;label:string;mode:"static"|"dynamic";value:string;template:string;flag_order:number;is_active:boolean}>, groupIds: number[] = []) => {
     let saved: Challenge;
     if (editing) saved = await api.updateChallenge(editing.code, input);
@@ -461,7 +514,7 @@ export function ManagementApp({
     changes: Partial<
       Pick<
         User,
-        "role" | "is_active"
+        "role" | "is_active" | "full_name" | "organization" | "user_function"
       >
     >
   ) => {
@@ -479,7 +532,7 @@ export function ManagementApp({
       setUsers((current) =>
         current.map((item) =>
           item.id === id
-            ? { ...item, ...changes }
+            ? normalizeManagedUser({ ...item, ...changes })
             : item
         )
       );
@@ -491,17 +544,10 @@ export function ManagementApp({
     }
 
     try {
-      const updated =
-        await api.updateUser(
-          id,
-          changes
-        );
-
+      const updated = await api.updateUser(id, changes);
       setUsers((current) =>
         current.map((item) =>
-          item.id === id
-            ? normalizeManagedUser({ ...item, ...updated })
-            : item
+          item.id === id ? normalizeManagedUser(updated) : item
         )
       );
 
@@ -517,95 +563,74 @@ export function ManagementApp({
     }
   };
 
-  const saveManagedUser = async (
-    input: ManagedUser,
-    password: string
-  ) => {
+  /**
+   * Guarda un usuario real en CTF y sincroniza su cuenta de Guacamole.
+   * El cierre del formulario debe ocurrir solo después del éxito.
+   */
+  const saveManagedUser = async (input: ManagedUser, password: string) => {
     if (!isAdmin) return;
 
     if (userEditing) {
-      await changeUser(
-        userEditing.id,
-        {
+      if (userEditing.demo) {
+        setUsers((current) => current.map((item) => item.id === userEditing.id ? input : item));
+        setMessage("Usuario de demostración actualizado localmente.");
+        return;
+      }
+      try {
+        const updated = await api.updateUser(userEditing.id, {
           role: input.role,
           is_active: input.is_active,
-        }
-      );
-
-      setUsers((current) =>
-        current.map((item) =>
-          item.id === userEditing.id
-            ? normalizeManagedUser(input)
-            : item
-        )
-      );
-
-      setMessage(
-        input.demo
-          ? "Usuario de demostración editado localmente."
-          : "Usuario actualizado correctamente."
-      );
-    } else {
-      try {
-        const created = await api.createUser({
-          username: input.username,
-          email: input.email,
-          password,
-          role: input.role,
           full_name: input.full_name,
-          sync_guacamole: true,
+          organization: input.organization,
+          user_function: input.user_function,
         });
-
-        setUsers((current) => [
-          normalizeManagedUser(created, {
-            full_name: input.full_name,
-            user_function: input.user_function,
-            organization: input.organization,
-          }),
-          ...current.filter(
-            (item) =>
-              item.username.toLowerCase() !== created.username.toLowerCase()
-          ),
-        ]);
-
-        setMessage("Usuario creado correctamente en CTF y sincronizado con Guacamole.");
+        setUsers((current) => current.map((item) => item.id === userEditing.id ? normalizeManagedUser(updated, input) : item));
+        setMessage("Usuario actualizado y sincronizado con Guacamole.");
         void loadGuacamole();
       } catch (err) {
-        setMessage(err instanceof Error ? err.message : "No se pudo crear el usuario");
+        throw err;
       }
+      return;
+    }
+
+    try {
+      const created = await api.createUser({
+        username: input.username,
+        email: input.email,
+        password,
+        role: input.role,
+        full_name: input.full_name,
+        organization: input.organization,
+        user_function: input.user_function,
+        sync_guacamole: true,
+      });
+      setUsers((current) => [
+        normalizeManagedUser(created, input),
+        ...current.filter((item) => item.username.toLowerCase() !== created.username.toLowerCase()),
+      ]);
+      setMessage("Usuario creado en CTF y sincronizado con Guacamole.");
+      void loadGuacamole();
+    } catch (err) {
+      throw err;
     }
   };
 
-  const deleteManagedUser = (
-    target: ManagedUser
-  ) => {
-    if (
-      !isAdmin ||
-      target.id === user.id
-    ) {
+  const deleteManagedUser = async (target: ManagedUser) => {
+    if (!isAdmin || target.id === user.id) return;
+    if (!window.confirm(`¿Eliminar el usuario ${target.username} del CTF y de Guacamole?`)) return;
+    if (target.demo) {
+      setUsers((current) => current.filter((item) => item.id !== target.id));
+      setMessage("Usuario de demostración eliminado de la vista.");
       return;
     }
-
-    if (
-      !window.confirm(
-        `¿Eliminar el usuario ${target.username}?`
-      )
-    ) {
-      return;
+    try {
+      await api.deleteUser(target.id);
+      setUsers((current) => current.filter((item) => item.id !== target.id));
+      setMessage("Usuario eliminado del CTF y de Guacamole.");
+      void loadGuacamole();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo eliminar el usuario");
     }
-
-    setUsers((current) =>
-      current.filter(
-        (item) =>
-          item.id !== target.id
-      )
-    );
-
-    setMessage(
-      target.demo
-        ? "Usuario de demostración eliminado."
-        : "Usuario retirado de la vista. La eliminación persistente requiere el endpoint backend."
-    );
   };
 
   const visibleUsers = useMemo(() => {
@@ -1202,6 +1227,25 @@ export function ManagementApp({
             </section>
           )}
 
+          {view === "ranking" && (isAdmin || panelRole === "instructor") && (
+            <section>
+              <div className="page-heading">
+                <div>
+                  <span className="eyebrow accent">COMPETENCIA</span>
+                  <h1>Ranking general</h1>
+                  <p>Clasificación calculada con los usuarios reales y los puntos obtenidos en los retos completados.</p>
+                </div>
+                <div className="page-actions">
+                  <button className="secondary-action" onClick={() => void load()}>Actualizar</button>
+                </div>
+              </div>
+
+              <div style={{ marginTop: 18 }}>
+                <Ranking rows={ranking} user={user} />
+              </div>
+            </section>
+          )}
+
           {view === "groups" && (isAdmin || panelRole === "instructor") && (
             <GroupManagement isAdmin={isAdmin} onMessage={setMessage} />
           )}
@@ -1240,8 +1284,9 @@ export function ManagementApp({
                     className="secondary-action"
                     onClick={() => void load()}
                   >
-                    Actualizar
+                    Actualizar inventario
                   </button>
+
                   {isAdmin && (
                     <button
                       className="primary-action"
@@ -1274,14 +1319,14 @@ export function ManagementApp({
                 <StatCard
                   label="Víctimas"
                   value={laboratories.reduce((sum, lab) => sum + lab.vms.filter((vm) => vm.networkRole === "Víctimas").length, 0)}
-                  helper="VLAN 30 · 10.10.30.0/24"
+                  helper="Red actual · 192.168.146.0/24"
                   icon="target"
                   accent="green"
                 />
                 <StatCard
                   label="Atacantes"
                   value={laboratories.reduce((sum, lab) => sum + lab.vms.filter((vm) => vm.networkRole === "Atacantes").length, 0)}
-                  helper="VLAN 20 · 10.10.20.0/24"
+                  helper="Red actual · 192.168.146.0/24"
                   icon="arrow"
                   accent="cyan"
                 />
@@ -1465,11 +1510,168 @@ export function ManagementApp({
                 )}
               </div>
 
+              {selectedLab && isAdmin && (
+                <>
+                  {/* ==================================================
+                      CONEXIONES GUACAMOLE
+                      Se administran en el mismo módulo que las VMs.
+                     ================================================== */}
+                  <section
+                    className="glass-panel laboratory-access-panel"
+                    style={{ marginTop: "13px" }}
+                  >
+                    <div className="panel-head">
+                      <div>
+                        <span className="eyebrow accent">
+                          ACCESO REMOTO
+                        </span>
+                        <h3>Conexiones de Apache Guacamole</h3>
+                        <small>
+                          Crea, edita y elimina las conexiones que
+                          después podrán asignarse a los estudiantes.
+                        </small>
+                      </div>
+
+                      <div className="page-actions compact-actions">
+                        <button
+                          className="secondary-action"
+                          onClick={() =>
+                            void loadGuacamole()
+                          }
+                          disabled={guacamoleLoading}
+                        >
+                          {guacamoleLoading
+                            ? "Actualizando…"
+                            : "Actualizar conexiones"}
+                        </button>
+
+                        <button
+                          className="primary-action"
+                          onClick={() => {
+                            setGuacamoleConnectionEditing(null);
+                            setGuacamoleConnectionFormOpen(true);
+                          }}
+                        >
+                          + Nueva conexión
+                        </button>
+                      </div>
+                    </div>
+
+                    {guacamoleConnections.length === 0 ? (
+                      <div className="empty-card compact">
+                        <strong>
+                          No hay conexiones registradas
+                        </strong>
+                        <span>
+                          Crea una conexión SSH, RDP o VNC para
+                          asociarla a una VM.
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="table-panel">
+                        <table>
+                          <thead>
+                            <tr>
+                              <th>Nombre</th>
+                              <th>Protocolo</th>
+                              <th>Host</th>
+                              <th>Puerto</th>
+                              <th>Activas</th>
+                              <th>Acciones</th>
+                            </tr>
+                          </thead>
+
+                          <tbody>
+                            {guacamoleConnections.map(
+                              (connection) => (
+                                <tr
+                                  key={connection.identifier}
+                                >
+                                  <td>
+                                    <strong>
+                                      {connection.name}
+                                    </strong>
+                                  </td>
+
+                                  <td>
+                                    <span className="category-tag">
+                                      {connection.protocol.toUpperCase()}
+                                    </span>
+                                  </td>
+
+                                  <td>
+                                    {connection.hostname || "—"}
+                                  </td>
+
+                                  <td>
+                                    {connection.port || "—"}
+                                  </td>
+
+                                  <td>
+                                    {connection.active_connections}
+                                  </td>
+
+                                  <td>
+                                    <div className="row-actions">
+                                      <button
+                                        className="table-action"
+                                        onClick={() => {
+                                          setGuacamoleConnectionEditing(
+                                            connection
+                                          );
+                                          setGuacamoleConnectionFormOpen(
+                                            true
+                                          );
+                                        }}
+                                      >
+                                        Editar
+                                      </button>
+
+                                      <button
+                                        className="table-action danger"
+                                        disabled={
+                                          connection.active_connections >
+                                          0
+                                        }
+                                        onClick={() =>
+                                          void deleteGuacamoleManagedConnection(
+                                            connection
+                                          )
+                                        }
+                                      >
+                                        Eliminar
+                                      </button>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )
+                            )}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+
+                  {/* ==================================================
+                      ASIGNACIÓN ESTUDIANTE -> CONEXIÓN
+                     ================================================== */}
+                  <div style={{ marginTop: "13px" }}>
+                    <ConnectionAssignmentPanel
+                      students={users}
+                      guacamoleUsers={guacamoleUsers}
+                      connections={guacamoleConnections}
+                      loadAssignment={loadStudentConnection}
+                      onAssign={saveStudentConnection}
+                    />
+                  </div>
+                </>
+              )}
+
               <div className="info-panel glass-panel" style={{ marginTop: "13px" }}>
                 <span className="eyebrow">MODELO DE RED</span>
                 <p>
                   <strong>Atacante:</strong> 192.168.146.134. &nbsp;
-                  <strong>Víctima:</strong> 192.168.164.137.
+                  <strong>Víctima:</strong> 192.168.146.137.
                 </p>
               </div>
             </section>
@@ -1857,17 +2059,6 @@ export function ManagementApp({
             </section>
           )}
 
-          {userFormOpen && isAdmin && (
-            <UserForm
-              initial={userEditing}
-              onClose={() => {
-                setUserFormOpen(false);
-                setUserEditing(null);
-              }}
-              onSave={saveManagedUser}
-            />
-          )}
-
           {creating && (
             <ChallengeForm
               initial={editing}
@@ -1878,6 +2069,17 @@ export function ManagementApp({
                 setEditing(null);
               }}
               onSave={saveChallenge}
+            />
+          )}
+
+          {userFormOpen && isAdmin && (
+            <UserForm
+              initial={userEditing}
+              onClose={() => {
+                setUserFormOpen(false);
+                setUserEditing(null);
+              }}
+              onSave={saveManagedUser}
             />
           )}
 
