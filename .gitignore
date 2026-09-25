@@ -25,3 +25,7 @@ postgres_data/
 redis_data/
 
 docker-compose.override.yml
+
+.env
+backup_pre_fase9.sql
+outputs/
