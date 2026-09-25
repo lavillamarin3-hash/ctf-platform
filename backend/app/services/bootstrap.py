@@ -11,8 +11,10 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 
 from ..core import get_settings, hash_password
+from ..domain.challenges.catalog import DEMO_VM_IPS, SEED_CHALLENGES
 from ..db import create_schema, make_session_factory
 from ..guacamole import make_guacamole_adapter, make_guacamole_admin
+from ..infrastructure.injection.ssh import SSHFlagInjector
 from ..models import (
     AuditEvent, Challenge, ChallengeCompletion, ChallengeFlag, Laboratory,
     Role, User, VMAsset,
@@ -109,29 +111,31 @@ async def seed_data(session_factory) -> None:
         await session.flush()
         for item in SEED_CHALLENGES:
             challenge = await session.scalar(select(Challenge).where(Challenge.code == item["code"]))
-            if challenge is None:
-                flag_values = item.get("flag_values", [])
-                challenge_data = {key: value for key, value in item.items() if key not in {"flag_values"}}
-                challenge = Challenge(**challenge_data)
-                session.add(challenge)
-                await session.flush()
-                for order, flag_value in enumerate(flag_values, start=1):
-                    session.add(ChallengeFlag(challenge_id=challenge.id, label=f"Flag {order}", flag_hash=hash_password(flag_value), flag_order=order, is_active=True))
-            else:
-                # Completa campos nuevos en instalaciones que ya tenían los retos anteriores.
-                changed = False
-                for key in ("category", "scenario"):
-                    value = item.get(key)
-                    if getattr(challenge, key, None) != value and (getattr(challenge, key, None) in (None, "", "MISC")):
-                        setattr(challenge, key, value)
-                        changed = True
-                active_flags = await session.scalars(select(ChallengeFlag).where(ChallengeFlag.challenge_id == challenge.id, ChallengeFlag.is_active.is_(True)))
-                if not list(active_flags) and item.get("flag_values"):
-                    for order, flag_value in enumerate(item["flag_values"], start=1):
-                        session.add(ChallengeFlag(challenge_id=challenge.id, label=f"Flag {order}", flag_hash=hash_password(flag_value), flag_order=order, is_active=True))
-                    changed = True
-                if changed:
-                    session.add(challenge)
+            if challenge is not None:
+                # El catálogo no sobrescribe retos existentes. Esto evita alterar
+                # la base actual por efecto de un reinicio del backend.
+                continue
+
+            challenge_data = {
+                key: value
+                for key, value in item.items()
+                if key != "flag_specs"
+            }
+            challenge = Challenge(**challenge_data)
+            session.add(challenge)
+            await session.flush()
+            for spec in item.get("flag_specs", []):
+                session.add(
+                    ChallengeFlag(
+                        challenge_id=challenge.id,
+                        label=spec["label"],
+                        flag_hash=None if spec["mode"] == "dynamic" else hash_password(spec.get("value", "")),
+                        flag_order=spec["flag_order"],
+                        is_active=spec.get("is_active", True),
+                        mode=spec["mode"],
+                        template=spec.get("template"),
+                    )
+                )
         await session.commit()
 
 
@@ -195,11 +199,13 @@ def challenge_view(challenge: Challenge, completed: bool = False, include_flags:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     app.state.session_factory = make_session_factory()
-    await create_schema(app.state.session_factory)
-    await seed_data(app.state.session_factory)
+    if get_settings().manage_schema_on_startup:
+        await create_schema(app.state.session_factory)
+        await seed_data(app.state.session_factory)
     app.state.redis = redis.from_url(get_settings().redis_url, decode_responses=True)
     app.state.guacamole = make_guacamole_adapter()
     app.state.guacamole_admin = make_guacamole_admin()
+    app.state.flag_injector = SSHFlagInjector()
     app.state.sockets = ConnectionManager()
     yield
     await app.state.redis.aclose()

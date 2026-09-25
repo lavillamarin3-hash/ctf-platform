@@ -2,23 +2,17 @@
 
 from __future__ import annotations
 
-import secrets
-
 from fastapi import HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from ..guacamole import GuacamoleApiError
+from ..domain.flags.service import FlagService
 from ..models import Challenge, ChallengeGroupAssignment, GroupMembership, Laboratory, StudentGroup, User, VMAsset
 
 def render_dynamic_flag(template: str, *, code: str, username: str, run_id: int) -> str:
-    # Cleartext is generated only for the current run. Only its hash is persisted.
-    value = template
-    value = value.replace("{{CODE}}", code)
-    value = value.replace("{{USER}}", username)
-    value = value.replace("{{RUN_ID}}", str(run_id))
-    value = value.replace("{{RAND}}", secrets.token_hex(8))
-    return value
+    """Compatibilidad con llamadas existentes; el dominio genera la parte aleatoria."""
+    return FlagService().render_template(template, code=code, username=username, run_id=run_id)
 
 
 # ============================================================
@@ -30,7 +24,11 @@ def _asset_ref_key(value: str) -> str:
 
 
 async def _sync_player_guacamole_permissions(request: Request, user_id: int) -> None:
-    """Concede a un jugador solo las conexiones Guacamole de los retos de sus grupos."""
+    """Concede al jugador únicamente las conexiones Guacamole de sus retos asignados.
+
+    Cuando vm_assets.guacamole_connection_id está vacío, resuelve la conexión
+    por nombre/IP y protocolo usando los parámetros reales de Guacamole.
+    """
     async with request.app.state.session_factory() as session:
         user = await session.get(User, user_id)
         if user is None or user.role != "player":
@@ -47,12 +45,32 @@ async def _sync_player_guacamole_permissions(request: Request, user_id: int) -> 
         ).unique().all()
 
         vms = (await session.scalars(select(VMAsset))).all()
+
+        try:
+            guac_connections = await request.app.state.guacamole_admin.list_connections()
+        except GuacamoleApiError as exc:
+            raise HTTPException(status_code=502, detail=f"No se pudieron consultar las conexiones de Guacamole: {exc}") from exc
+
         refs_to_connections: dict[str, str] = {}
         for vm in vms:
-            if vm.guacamole_connection_id:
-                refs_to_connections[_asset_ref_key(vm.name)] = vm.guacamole_connection_id
-                if vm.ip_address:
-                    refs_to_connections[_asset_ref_key(vm.ip_address)] = vm.guacamole_connection_id
+            explicit = str(vm.guacamole_connection_id) if vm.guacamole_connection_id else None
+            matched = None
+            if explicit:
+                matched = next((c for c in guac_connections if c.identifier == explicit), None)
+            if matched is None and vm.ip_address:
+                target_ip = _asset_ref_key(vm.ip_address)
+                matched = next(
+                    (c for c in guac_connections
+                     if _asset_ref_key(c.hostname or "") == target_ip
+                     and (c.protocol or "").strip().lower() in {"ssh", "rdp", "vnc"}),
+                    None,
+                )
+            if matched is None:
+                continue
+            connection_id = str(matched.identifier)
+            refs_to_connections[_asset_ref_key(vm.name)] = connection_id
+            if vm.ip_address:
+                refs_to_connections[_asset_ref_key(vm.ip_address)] = connection_id
 
         lab_rows = (await session.scalars(select(Laboratory))).all()
         labs_by_key: dict[str, int] = {}
@@ -61,9 +79,8 @@ async def _sync_player_guacamole_permissions(request: Request, user_id: int) -> 
             if lab.code:
                 labs_by_key[_asset_ref_key(lab.code)] = lab.id
 
-        lab_vms = (await session.scalars(select(VMAsset))).all()
         vm_by_lab: dict[int, list[VMAsset]] = {}
-        for vm in lab_vms:
+        for vm in vms:
             vm_by_lab.setdefault(vm.laboratory_id, []).append(vm)
 
         desired: dict[str, list[str]] = {}
@@ -77,12 +94,15 @@ async def _sync_player_guacamole_permissions(request: Request, user_id: int) -> 
                 lab_id = labs_by_key.get(key)
                 if lab_id:
                     for vm in vm_by_lab.get(lab_id, []):
-                        if vm.guacamole_connection_id:
-                            desired[vm.guacamole_connection_id] = ["READ"]
+                        connection_id = refs_to_connections.get(_asset_ref_key(vm.name))
+                        if connection_id:
+                            desired[connection_id] = ["READ"]
+
+        username = user.username
 
     try:
         await request.app.state.guacamole_admin.patch_user_permissions(
-            user.username,
+            username,
             system_permissions=[],
             connection_permissions=desired,
         )
@@ -92,7 +112,7 @@ async def _sync_player_guacamole_permissions(request: Request, user_id: int) -> 
 
 
 async def _sync_guacamole_group_permissions(request: Request, group_id: int) -> None:
-    """Sincroniza un grupo académico con un user group real de Guacamole. Los permisos READ se heredan a sus miembros."""
+    """Sincroniza un grupo académico con sus conexiones reales de Guacamole."""
     async with request.app.state.session_factory() as session:
         group = await session.get(StudentGroup, group_id)
         if group is None:
@@ -100,41 +120,67 @@ async def _sync_guacamole_group_permissions(request: Request, group_id: int) -> 
         if not group.guacamole_group_identifier:
             group.guacamole_group_identifier = group.code
             await session.commit()
+
         assigned_challenges = (await session.scalars(
             select(Challenge)
             .join(ChallengeGroupAssignment, ChallengeGroupAssignment.challenge_id == Challenge.id)
             .where(ChallengeGroupAssignment.group_id == group_id)
         )).unique().all()
         vms = (await session.scalars(select(VMAsset))).all()
-        refs_to_connections: dict[str, str] = {}
-        for vm in vms:
-            if vm.guacamole_connection_id:
-                refs_to_connections[_asset_ref_key(vm.name)] = vm.guacamole_connection_id
-                if vm.ip_address:
-                    refs_to_connections[_asset_ref_key(vm.ip_address)] = vm.guacamole_connection_id
         labs = (await session.scalars(select(Laboratory))).all()
-        labs_by_key = {_asset_ref_key(l.code or ""): l.id for l in labs if l.code}
+        labs_by_key = {_asset_ref_key(l.code): l.id for l in labs if l.code}
         labs_by_key.update({_asset_ref_key(l.name): l.id for l in labs})
         vm_by_lab: dict[int, list[VMAsset]] = {}
-        for vm in vms: vm_by_lab.setdefault(vm.laboratory_id, []).append(vm)
-        desired: dict[str, list[str]] = {}
-        for challenge in assigned_challenges:
-            for raw_ref in challenge.asset_references or []:
-                key = _asset_ref_key(raw_ref)
-                direct = refs_to_connections.get(key)
-                if direct: desired[direct] = ["READ"]; continue
-                lab_id = labs_by_key.get(key)
-                if lab_id:
-                    for vm in vm_by_lab.get(lab_id, []):
-                        if vm.guacamole_connection_id: desired[vm.guacamole_connection_id] = ["READ"]
-        guac_identifier = group.guacamole_group_identifier
+        for vm in vms:
+            vm_by_lab.setdefault(vm.laboratory_id, []).append(vm)
+
+    try:
+        guac_connections = await request.app.state.guacamole_admin.list_connections()
+    except GuacamoleApiError as exc:
+        raise HTTPException(status_code=502, detail=f"No se pudieron consultar las conexiones de Guacamole: {exc}") from exc
+
+    refs_to_connections: dict[str, str] = {}
+    for vm in vms:
+        matched = None
+        if vm.guacamole_connection_id:
+            matched = next((c for c in guac_connections if c.identifier == str(vm.guacamole_connection_id)), None)
+        if matched is None and vm.ip_address:
+            target_ip = _asset_ref_key(vm.ip_address)
+            matched = next(
+                (c for c in guac_connections
+                 if _asset_ref_key(c.hostname or "") == target_ip
+                 and (c.protocol or "").strip().lower() in {"ssh", "rdp", "vnc"}),
+                None,
+            )
+        if matched:
+            refs_to_connections[_asset_ref_key(vm.name)] = str(matched.identifier)
+            if vm.ip_address:
+                refs_to_connections[_asset_ref_key(vm.ip_address)] = str(matched.identifier)
+
+    desired: dict[str, list[str]] = {}
+    for challenge in assigned_challenges:
+        for raw_ref in challenge.asset_references or []:
+            key = _asset_ref_key(raw_ref)
+            direct = refs_to_connections.get(key)
+            if direct:
+                desired[direct] = ["READ"]
+                continue
+            lab_id = labs_by_key.get(key)
+            if lab_id:
+                for vm in vm_by_lab.get(lab_id, []):
+                    connection_id = refs_to_connections.get(_asset_ref_key(vm.name))
+                    if connection_id:
+                        desired[connection_id] = ["READ"]
+
+    guac_identifier = group.guacamole_group_identifier
     try:
         try:
             await request.app.state.guacamole_admin.get_user_group_permissions(guac_identifier)
         except GuacamoleApiError as exc:
             if exc.status_code == 404:
                 await request.app.state.guacamole_admin.create_user_group(guac_identifier, disabled=False)
-            else: raise
+            else:
+                raise
         await request.app.state.guacamole_admin.patch_user_group_permissions(guac_identifier, connection_permissions=desired)
     except GuacamoleApiError as exc:
         raise HTTPException(status_code=502, detail=f"No se pudieron sincronizar permisos del grupo con Guacamole: {exc.detail or exc}") from exc
@@ -148,10 +194,8 @@ async def _sync_group_members_guacamole_permissions(request: Request, group_id: 
 
 
 async def _find_challenge_vm(session, challenge: Challenge):
-    """Busca una VM lista y asociada al reto mediante asset_references."""
+    """Busca la VM víctima sin exigir que su conexión Guacamole esté escrita en PostgreSQL."""
     refs = {_asset_ref_key(value) for value in (challenge.asset_references or []) if value.strip()}
-    if not refs:
-        return None, None
 
     labs = (
         await session.scalars(
@@ -165,7 +209,38 @@ async def _find_challenge_vm(session, challenge: Challenge):
     for lab in labs:
         lab_keys = {_asset_ref_key(lab.code or ""), _asset_ref_key(lab.name)}
         for vm in lab.vms:
-            vm_keys = {_asset_ref_key(vm.name)} | lab_keys
-            if refs.intersection(vm_keys) and vm.status == "ready" and vm.guacamole_connection_id:
+            vm_keys = {_asset_ref_key(vm.name), _asset_ref_key(vm.ip_address or "")} | lab_keys
+            if refs.intersection(vm_keys) and vm.status == "ready":
                 return lab, vm
+
+    # LAB-01 tiene un objetivo operativo fijo en esta fase. La resolución se hace
+    # en memoria para no modificar asset_references ni vm_assets.
+    if challenge.code == "LAB-01":
+        for lab in labs:
+            for vm in lab.vms:
+                if vm.status == "ready" and _asset_ref_key(vm.ip_address or "") == "192.168.146.137":
+                    return lab, vm
     return None, None
+
+
+async def _resolve_guacamole_connection(request: Request, vm: VMAsset):
+    """Obtiene la conexión SSH de Guacamole por IP cuando vm_assets no guarda el ID."""
+    if vm.guacamole_connection_id:
+        return next(
+            (item for item in await request.app.state.guacamole_admin.list_connections()
+             if item.identifier == vm.guacamole_connection_id),
+            None,
+        )
+
+    try:
+        connections = await request.app.state.guacamole_admin.list_connections()
+    except GuacamoleApiError:
+        return None
+
+    target_ip = _asset_ref_key(vm.ip_address or "")
+    for connection in connections:
+        host = _asset_ref_key(connection.hostname or "")
+        protocol = (connection.protocol or "").strip().lower()
+        if host == target_ip and protocol == "ssh":
+            return connection
+    return None

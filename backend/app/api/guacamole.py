@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import Response
-from ..core import require_roles
+from ..core import get_settings, require_roles
 from ..guacamole import GuacamoleApiError
 from ..schemas import (
     GuacamoleStatus, GuacamoleUserCreate, GuacamoleUserUpdate, GuacamoleUserView,

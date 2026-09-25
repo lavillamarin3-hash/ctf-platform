@@ -6,16 +6,21 @@ from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import Response
 from sqlalchemy import delete, select
 from sqlalchemy.orm import selectinload
-from ..core import require_roles
-from ..models import Laboratory, RemoteAccessAssignment, VMAsset
+from ..core import get_settings, require_roles
+from ..models import Challenge, ChallengeFlag, ChallengeGroupAssignment, GroupMembership, Laboratory, StudentGroup, VMAsset
 from ..schemas import LaboratoryCreate, LaboratoryView, VMCreate, VMView
-from ..services.bootstrap import DEMO_VM_IPS, laboratory_view, vm_view, write_audit
+from ..services.bootstrap import laboratory_view, vm_view, write_audit
+from ..domain.challenges.catalog import DEMO_VM_IPS
+from ..services.challenge_runtime import _asset_ref_key
+from ..services.runtime_flags import is_effectively_dynamic
+from ..guacamole import GuacamoleApiError
 
 
 from fastapi import APIRouter
 
 router = APIRouter()
 
+@router.get("/api/v1/laboratories", response_model=list[LaboratoryView])
 async def list_laboratories(request: Request, _=Depends(require_roles("admin", "instructor"))):
     async with request.app.state.session_factory() as session:
         labs = (await session.scalars(select(Laboratory).options(selectinload(Laboratory.vms)).order_by(Laboratory.id))).unique().all()
@@ -167,87 +172,68 @@ async def delete_vm(vm_id: int, request: Request, actor=Depends(require_roles("a
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.post("/api/v1/admin/lab-ssh/prepare")
-async def prepare_ssh_demo_lab(request: Request, actor=Depends(require_roles("admin"))):
-    """Prepara el laboratorio real SSH de demostración usando la VM/IP actuales y una conexión SSH existente en Guacamole."""
+@router.get("/api/v1/admin/lab-ssh/verify")
+async def verify_ssh_lab(request: Request, _=Depends(require_roles("admin"))):
+    """Diagnóstico de solo lectura para el laboratorio SSH real.
+
+    No crea ni modifica laboratorios, VMs, retos, flags ni asignaciones.
+    """
     target_ip = "192.168.146.137"
-    attacker_ip = "192.168.146.134"
-    lab_code = "LAB-SSH-01"
     vm_name = "LAB-LNXVICT"
     challenge_code = "LAB-01"
-    static_flag = "FLAG{ssh_lab_demo}"
+    settings = get_settings()
 
     try:
         connections = await request.app.state.guacamole_admin.list_connections()
+        guac_error = None
     except GuacamoleApiError as exc:
-        raise HTTPException(status_code=502, detail=f"No se pudo consultar Guacamole: {exc.detail or exc}") from exc
+        connections = []
+        guac_error = exc.detail or str(exc)
 
-    connection = next((c for c in connections if c.protocol == "ssh" and (c.hostname or "").strip() == target_ip), None)
-    if connection is None:
-        raise HTTPException(status_code=409, detail=f"No existe una conexión SSH de Guacamole asociada a {target_ip}. Créala primero en Administración > Guacamole.")
+    ssh_connection = next(
+        (connection for connection in connections if connection.protocol == "ssh" and (connection.hostname or "").strip() == target_ip),
+        None,
+    )
 
     async with request.app.state.session_factory() as session:
-        lab = await session.scalar(select(Laboratory).options(selectinload(Laboratory.vms)).where(Laboratory.code == lab_code))
-        if lab is None:
-            lab = Laboratory(code=lab_code, name="Laboratorio SSH · Demostración", description="Laboratorio real de reconocimiento controlado sobre la VM LAB-LNXVICT.", segment="Red actual · Víctima 192.168.146.137", status="ready")
-            session.add(lab)
-            await session.flush()
-        else:
-            lab.status = "ready"
-
         vm = await session.scalar(select(VMAsset).where(VMAsset.name == vm_name))
-        if vm is None:
-            vm = VMAsset(laboratory_id=lab.id, name=vm_name, os="Linux / VM de laboratorio", ip_address=target_ip, vlan="RED ACTUAL", role="Víctima", network_role="Víctimas", subnet="192.168.146.0/24", profile="vulnerable", status="ready", guacamole_connection_id=connection.identifier)
-            session.add(vm)
-        else:
-            vm.laboratory_id = lab.id
-            vm.ip_address = target_ip
-            vm.network_role = "Víctimas"
-            vm.role = "Víctima"
-            vm.guacamole_connection_id = connection.identifier
-            vm.status = "ready"
-
         challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == challenge_code))
-        challenge_payload = {
-            "name": "Reconocimiento SSH controlado",
-            "description": "Identifica el servicio SSH de la máquina víctima del laboratorio y localiza la evidencia del ejercicio.",
-            "instructions": "Trabaja únicamente dentro del laboratorio autorizado. Desde la Kali atacante identifica el servicio SSH en 192.168.146.137, conéctate con las credenciales proporcionadas por el instructor y localiza /opt/ctf/flag.txt. No realices acciones fuera del entorno.",
-            "difficulty": "Básico",
-            "category": "MISC",
-            "scenario": "LAB-SSH-REAL",
-            "mitre_technique": "T1046 — Network Service Scanning",
-            "asset_references": [vm_name, lab_code, target_ip],
-            "points": 100,
-            "is_published": True,
-        }
-        if challenge is None:
-            challenge = Challenge(**challenge_payload, created_by=actor.id)
-            session.add(challenge)
-            await session.flush()
-        else:
-            for key, value in challenge_payload.items():
-                setattr(challenge, key, value)
-
-        active_static = next((f for f in challenge.flags if f.is_active and f.mode == "static"), None)
-        if active_static is None:
-            session.add(ChallengeFlag(challenge_id=challenge.id, label="Flag SSH", flag_hash=hash_password(static_flag), flag_order=1, is_active=True, mode="static"))
-        else:
-            active_static.flag_hash = hash_password(static_flag)
-            active_static.mode = "static"
-            active_static.template = None
-            active_static.label = "Flag SSH"
-            active_static.flag_order = 1
-        await write_audit(session, actor.id, "lab.demo.prepare", "laboratory", str(lab.id), {"lab_code": lab_code, "vm": vm_name, "ip": target_ip, "attacker_ip": attacker_ip, "guacamole_connection": connection.identifier, "challenge": challenge_code})
-        await session.commit()
+        dynamic_flags = [
+            flag for flag in (challenge.flags if challenge else [])
+            if is_effectively_dynamic(challenge_code, flag)
+        ]
 
     return {
-        "laboratory": {"id": lab.id, "code": lab.code, "name": lab.name},
-        "vm": {"id": vm.id, "name": vm.name, "ip": vm.ip_address, "protocol": connection.protocol, "guacamole_connection_id": connection.identifier, "guacamole_connection_name": connection.name},
-        "challenge": {"code": challenge.code, "name": challenge.name, "points": challenge.points, "flag_mode": "static"},
-        "attacker_ip": attacker_ip,
-        "victim_ip": target_ip,
-        "flag": "FLAG{ssh_lab_demo}",
-        "note": "La flag estática se valida por hash. La VM ya debe contener /opt/ctf/flag.txt con el mismo valor.",
+        "read_only": True,
+        "victim": {"name": vm_name, "ip": target_ip},
+        "guacamole": {
+            "reachable": guac_error is None,
+            "ssh_connection_found": ssh_connection is not None,
+            "connection_id": ssh_connection.identifier if ssh_connection else None,
+            "connection_name": ssh_connection.name if ssh_connection else None,
+        },
+        "database_state": {
+            "vm_found": vm is not None,
+            "vm_has_matching_ip": bool(vm and vm.ip_address == target_ip),
+            "vm_has_guacamole_id": bool(vm and vm.guacamole_connection_id),
+            "challenge_found": challenge is not None,
+            "dynamic_flag_count": len(dynamic_flags),
+        },
+        "injector": {
+            "enabled": settings.flag_injector_enabled,
+            "remote_script": settings.flag_injector_remote_script,
+            "path": settings.flag_injector_flag_path,
+            "ssh_port": settings.flag_injector_ssh_port,
+        },
+        "ready_for_dynamic_lab": all((
+            guac_error is None,
+            ssh_connection is not None,
+            vm is not None,
+            vm and vm.ip_address == target_ip,
+            vm and vm.guacamole_connection_id,
+            challenge is not None,
+            len(dynamic_flags) >= 1,
+            settings.flag_injector_enabled,
+        )),
     }
-
 

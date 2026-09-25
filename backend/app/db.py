@@ -35,6 +35,25 @@ async def create_schema(session_factory: async_sessionmaker[AsyncSession]) -> No
         await connection.execute(text("ALTER TABLE vm_assets ADD COLUMN IF NOT EXISTS subnet VARCHAR(64) DEFAULT '10.10.30.0/24'"))
         await connection.execute(text("ALTER TABLE vm_assets ADD COLUMN IF NOT EXISTS guacamole_connection_id VARCHAR(160)"))
         await connection.execute(text("CREATE INDEX IF NOT EXISTS ix_vm_assets_guacamole_connection_id ON vm_assets (guacamole_connection_id)"))
+        await connection.execute(text("""
+            CREATE TABLE IF NOT EXISTS challenge_instances (
+                id SERIAL PRIMARY KEY,
+                challenge_id INTEGER NOT NULL REFERENCES challenges(id) ON DELETE CASCADE,
+                vm_asset_id INTEGER NOT NULL REFERENCES vm_assets(id) ON DELETE CASCADE,
+                run_id INTEGER UNIQUE REFERENCES challenge_runs(id) ON DELETE SET NULL,
+                user_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+                state VARCHAR(20) NOT NULL DEFAULT 'disponible',
+                ip_address VARCHAR(64),
+                guacamole_connection_id VARCHAR(160),
+                reserved_at TIMESTAMPTZ,
+                expires_at TIMESTAMPTZ,
+                last_error VARCHAR(500),
+                created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+            )
+        """))
+        await connection.execute(text("CREATE INDEX IF NOT EXISTS ix_challenge_instances_challenge_state ON challenge_instances (challenge_id, state)"))
+        await connection.execute(text("CREATE INDEX IF NOT EXISTS ix_challenge_instances_vm_asset_id ON challenge_instances (vm_asset_id)"))
         await connection.execute(text("ALTER TABLE challenge_flags ADD COLUMN IF NOT EXISTS mode VARCHAR(16) DEFAULT 'static'"))
         await connection.execute(text("ALTER TABLE challenge_flags ADD COLUMN IF NOT EXISTS template VARCHAR(512)"))
         await connection.execute(text("CREATE TABLE IF NOT EXISTS challenge_run_flags (id SERIAL PRIMARY KEY, run_id INTEGER NOT NULL REFERENCES challenge_runs(id) ON DELETE CASCADE, flag_id INTEGER NOT NULL REFERENCES challenge_flags(id) ON DELETE CASCADE, flag_hash VARCHAR(512) NOT NULL, fingerprint VARCHAR(64) NOT NULL, created_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP, CONSTRAINT uq_run_flag UNIQUE (run_id, flag_id))"))

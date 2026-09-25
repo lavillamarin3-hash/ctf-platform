@@ -238,7 +238,42 @@ class ManagedGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
         if ops: await self._api_request('PATCH', f'/userGroups/{quote(identifier, safe="")}/permissions', data=ops)
         return await self.get_user_group_permissions(identifier)
     async def list_connections(self):
-        p=await self._api_request('GET','/connections'); return [self._conn(k,v) for k,v in (p or {}).items()] if isinstance(p,dict) else []
+        # Guacamole's collection endpoint may return connection metadata without
+        # the protocol parameters (hostname/port). Fetch each connection detail
+        # so callers can reliably match an SSH connection to a VM by IP/port.
+        p = await self._api_request('GET', '/connections')
+        if not isinstance(p, dict):
+            return []
+
+        async def load_connection(identifier: str, summary: dict):
+            merged = dict(summary) if isinstance(summary, dict) else {}
+            try:
+                detail = await self._api_request('GET', f"/connections/{quote(identifier, safe='')}")
+                if isinstance(detail, dict):
+                    merged.update(detail)
+            except GuacamoleApiError:
+                # Keep the summary available if the detail request fails.
+                pass
+
+            # Guacamole exposes the connection parameters through a dedicated
+            # endpoint. In some installations the connection-detail resource
+            # intentionally omits the parameters object, so hostname/port must
+            # be loaded from /connections/{id}/parameters.
+            try:
+                parameters = await self._api_request(
+                    'GET', f"/connections/{quote(identifier, safe='')}/parameters"
+                )
+                if isinstance(parameters, dict):
+                    merged['parameters'] = parameters
+            except GuacamoleApiError:
+                # Preserve whatever metadata was available above.
+                pass
+
+            return self._conn(identifier, merged)
+
+        return await asyncio.gather(
+            *(load_connection(str(identifier), summary) for identifier, summary in p.items())
+        )
     async def create_connection(self,*,name,protocol,hostname,port,username=None,password=None,domain=None,parent_identifier='ROOT'):
         params={"hostname":hostname,"port":str(port)}; 
         if username is not None: params['username']=username

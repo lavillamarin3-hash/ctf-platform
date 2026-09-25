@@ -3,18 +3,20 @@
 from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, status
+from fastapi.responses import Response
 from sqlalchemy import delete, func, select
 from sqlalchemy.orm import selectinload
-from ..core import require_roles
-from ..models import Challenge, ChallengeCompletion, ChallengeFlag, ChallengeGroupAssignment, GroupMembership, StudentGroup, User
+from ..core import get_current_user, hash_password, require_roles
+from ..models import Challenge, ChallengeCompletion, ChallengeFlag, ChallengeGroupAssignment, ChallengeRunFlag, GroupMembership, StudentGroup, User
 from ..schemas import ChallengeCreate, ChallengeView, FlagCreate, FlagUpdate
-from ..services.bootstrap import challenge_view
+from ..services.bootstrap import challenge_view, write_audit
 
 
 from fastapi import APIRouter
 
 router = APIRouter()
 
+@router.get("/api/v1/challenges", response_model=list[ChallengeView])
 async def list_challenges(request: Request, difficulty: str | None = None, category: str | None = None, mitre: str | None = None, user=Depends(get_current_user)):
     async with request.app.state.session_factory() as session:
         statement = select(Challenge).options(selectinload(Challenge.flags))
@@ -59,6 +61,7 @@ async def list_categories(request: Request, user=Depends(get_current_user)):
         return [{"name": name, "challenge_count": int(count)} for name, count in rows]
 
 
+@router.post("/api/v1/challenges", response_model=ChallengeView, status_code=status.HTTP_201_CREATED)
 async def create_challenge(payload: ChallengeCreate, request: Request, user=Depends(require_roles("admin", "instructor"))):
     async with request.app.state.session_factory() as session:
         if await session.scalar(select(Challenge).where(Challenge.code == payload.code)):

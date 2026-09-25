@@ -33,6 +33,25 @@ class Settings(BaseSettings):
     guacamole_service_account: str | None = None
     guacamole_service_password: str | None = None
     public_origin: str = "http://localhost:8081"
+    # PostgreSQL existente: no se crea ni altera el esquema al iniciar salvo opt-in explícito.
+    manage_schema_on_startup: bool = False
+    # --------------------------------------------------------
+    # Inyector de banderas - Fase A
+    # El backend no intenta conectarse a ninguna VM hasta que
+    # FLAG_INJECTOR_ENABLED=true y las credenciales estén configuradas.
+    # --------------------------------------------------------
+    flag_injector_enabled: bool = False
+    flag_injector_ssh_user: str = "ctf-injector"
+    flag_injector_ssh_password: str | None = None
+    flag_injector_ssh_private_key: str | None = None
+    flag_injector_known_hosts: str | None = None
+    flag_injector_ssh_port: int = 22
+    flag_injector_connect_timeout: int = 10
+    flag_injector_command_timeout: int = 15
+    flag_injector_strict_host_key: bool = True
+    flag_injector_remote_script: str = "/usr/local/sbin/ctf-inject-flag.sh"
+    flag_injector_flag_path: str = "/opt/ctf/flag.txt"
+    flag_injector_lock_ttl_seconds: int = 5400
 
 
 @lru_cache

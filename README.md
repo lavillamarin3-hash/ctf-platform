@@ -166,3 +166,10 @@ deben limitarse a los escenarios y activos autorizados por el instructor.
 - [Backend](./backend/)
 - [Frontend](./frontend/)
 - Documentación interactiva de la API: `/docs` con la aplicación ejecutándose
+
+
+## Fase A — banderas dinámicas
+
+La base de implementación se documenta en `docs/FASE_A_BANDERAS_DINAMICAS.md`.
+El inyector SSH está deshabilitado por defecto y requiere configuración por
+variables de entorno.

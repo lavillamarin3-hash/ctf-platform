@@ -21,6 +21,7 @@
 @import "./styles/13-groups-forms.css";
 @import "./styles/14-groups-panels.css";
 @import "./styles/15-groups-theme-responsive.css";
+@import "./styles/16-ctf-ux-fixes.css";
 
 /* Tailwind se procesa después de los módulos base. */
 @tailwind base;

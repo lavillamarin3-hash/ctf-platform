@@ -14,7 +14,7 @@ import type { PlayerController } from "../../controllers/usePlayerController";
  * Solamente consume la información preparada por el controlador.
  */
 export function PlayerLaboratory({ controller }: { controller: PlayerController }) {
-  const { runs, setView } = controller;
+  const { runs, setView, closeRun } = controller;
 
   return (
     <section className="player-laboratory">
@@ -68,7 +68,7 @@ export function PlayerLaboratory({ controller }: { controller: PlayerController 
                 <article className="connection-card" key={run.id}>
                   <div className="connection-state">
                     <span className="status-dot" />
-                    {run.status}
+                    {run.status === "active" ? "ACTIVA" : run.status.toUpperCase()}
                   </div>
 
                   <h3>{vmName}</h3>
@@ -80,27 +80,28 @@ export function PlayerLaboratory({ controller }: { controller: PlayerController 
                     {targetIp} · Hasta {expiration}
                   </small>
 
-                  {run.launch_url ? (
-                    <a
-                      href={run.launch_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="primary-action full"
-                      style={{ marginTop: 12 }}
-                    >
-                      <Icon name="play" />
-                      Abrir conexión
-                    </a>
-                  ) : (
-                    <button
-                      type="button"
-                      className="secondary-action full"
-                      disabled
-                      style={{ marginTop: 12 }}
-                    >
-                      Conexión no disponible
-                    </button>
-                  )}
+                  <div className="connection-card-actions">
+                    {run.launch_url ? (
+                      <a
+                        href={run.launch_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="primary-action full"
+                      >
+                        <Icon name="play" />
+                        Abrir conexión
+                      </a>
+                    ) : (
+                      <button type="button" className="secondary-action full" disabled>
+                        Conexión no disponible
+                      </button>
+                    )}
+                    {run.status === "active" && (
+                      <button type="button" className="table-action danger full" onClick={() => void closeRun(run.id)}>
+                        Cerrar sesión y limpiar VM
+                      </button>
+                    )}
+                  </div>
                 </article>
               );
             })}

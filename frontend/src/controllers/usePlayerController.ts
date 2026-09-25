@@ -24,24 +24,52 @@ export function usePlayerController() {
 
   /** Carga el estado completo necesario para el panel del jugador. */
   const load = useCallback(async () => {
-    try {
-      const [all, rank, activeRuns, currentProgress, playerLabs] = await Promise.all([
-        api.challenges(),
-        api.ranking(),
-        api.runs(),
-        api.progress(),
-        api.playerLaboratories(),
-      ]);
+    // Carga independiente: un fallo en una fuente auxiliar no debe ocultar
+    // los retos o las conexiones que sí están disponibles.
+    const results = await Promise.allSettled([
+      api.challenges(),
+      api.ranking(),
+      api.runs(),
+      api.progress(),
+      api.playerLaboratories(),
+    ]);
 
-      setChallenges(all);
-      setRanking(rank.rows);
-      setRuns(activeRuns);
-      setProgress(currentProgress);
-      setLaboratories(playerLabs);
+    const [challengesResult, rankingResult, runsResult, progressResult, labsResult] = results;
+    const errors: string[] = [];
 
-      setSelectedCode((current) => current || all[0]?.code || null);
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo cargar la plataforma");
+    if (challengesResult.status === "fulfilled") {
+      setChallenges(challengesResult.value);
+      setSelectedCode((current) => current || challengesResult.value[0]?.code || null);
+    } else {
+      errors.push("retos");
+    }
+
+    if (rankingResult.status === "fulfilled") {
+      setRanking(rankingResult.value.rows);
+    } else {
+      errors.push("ranking");
+    }
+
+    if (runsResult.status === "fulfilled") {
+      setRuns(runsResult.value);
+    } else {
+      errors.push("conexiones");
+    }
+
+    if (progressResult.status === "fulfilled") {
+      setProgress(progressResult.value);
+    } else {
+      errors.push("progreso");
+    }
+
+    if (labsResult.status === "fulfilled") {
+      setLaboratories(labsResult.value);
+    } else {
+      errors.push("laboratorios");
+    }
+
+    if (errors.length) {
+      setMessage(`No se pudieron cargar: ${errors.join(", ")}.`);
     }
   }, []);
 
@@ -116,6 +144,17 @@ export function usePlayerController() {
     }
   };
 
+  /** Cierra la ejecución y permite al backend limpiar la VM víctima. */
+  const closeRun = async (id: number) => {
+    try {
+      await api.closeRun(id);
+      await load();
+      setMessage("Sesión cerrada. La evidencia dinámica de la VM fue limpiada.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo cerrar la sesión");
+    }
+  };
+
   /** Envía una flag al backend y actualiza el progreso mostrado. */
   const submit = async (code: string, value: string) => {
     const result = await api.submit(code, value);
@@ -146,6 +185,7 @@ export function usePlayerController() {
     categories,
     load,
     start,
+    closeRun,
     submit,
   };
 }

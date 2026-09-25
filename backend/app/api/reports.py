@@ -5,20 +5,19 @@ from __future__ import annotations
 import csv
 from io import StringIO
 
-from fastapi import Depends, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, status
 from fastapi.responses import Response
 from sqlalchemy import func, select
 
-from ..core import get_current_user, require_roles
-from ..models import ChallengeCompletion, ChallengeRun, Submission, User
+from ..core import decode_token, get_current_user, require_roles
+from ..models import Challenge, ChallengeCompletion, ChallengeGroupAssignment, ChallengeRun, GroupMembership, StudentGroup, Submission, User
 from ..schemas import RankingResponse, RankingRow
 from ..services.bootstrap import ranking_rows
 
 
-from fastapi import APIRouter
-
 router = APIRouter()
 
+@router.get("/api/v1/reports/progress")
 async def progress_report(request: Request, group_id: int | None = None, actor=Depends(require_roles("admin", "instructor"))):
     async with request.app.state.session_factory() as session:
         if group_id is not None:
@@ -84,12 +83,12 @@ async def ranking_socket(websocket: WebSocket):
     except Exception:
         await websocket.close(code=1008)
         return
-    await app.state.sockets.connect(websocket)
-    await websocket.send_json({"type": "ranking.updated", "rows": await ranking_rows(app.state.session_factory)})
+    await websocket.app.state.sockets.connect(websocket)
+    await websocket.send_json({"type": "ranking.updated", "rows": await ranking_rows(websocket.app.state.session_factory)})
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        app.state.sockets.disconnect(websocket)
+        websocket.app.state.sockets.disconnect(websocket)
 
 

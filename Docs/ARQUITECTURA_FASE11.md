@@ -64,3 +64,14 @@ Mantener los archivos de código por debajo de 1000 líneas. Cuando un módulo c
 ## Compatibilidad
 
 `frontend/src/api.ts` permanece como fachada para no obligar a modificar todos los componentes de una sola vez. Los nuevos endpoints deben implementarse dentro de `services/api/` y exponerse desde la fachada.
+
+
+## Fase A — banderas dinámicas
+
+La primera etapa del sistema dinámico se incorpora sin desmontar la plataforma
+existente. Se añade un pool `challenge_instances`, un `FlagService` puro, un
+puerto `FlagInjectorGateway`, un adaptador SSH y un registro Strategy genérico.
+
+La siguiente regla se mantiene: ninguna flag se entrega por API al jugador y
+la inyección debe confirmarse antes de habilitar acceso remoto en las fases
+posteriores.

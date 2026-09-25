@@ -1,0 +1,193 @@
+/* ============================================================
+   FASE CTF · UX / TEMA
+   Ajustes encapsulados para el formulario de retos, selección de
+   grupos, estado de ejecución y modo claro. No sustituye módulos previos.
+   ============================================================ */
+
+:root {
+  --panel: #081321;
+  --border: #1a2d43;
+  --muted: #718198;
+}
+
+.challenge-modal {
+  width: min(980px, 100%);
+  padding: 26px;
+}
+
+.challenge-modal > .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  margin-bottom: 14px;
+}
+
+.challenge-modal > .form-full {
+  display: grid;
+  gap: 5px;
+  margin-top: 12px;
+}
+
+.challenge-modal label {
+  min-width: 0;
+}
+
+.challenge-modal textarea {
+  resize: vertical;
+  min-height: 104px;
+}
+
+.challenge-modal .flag-builder,
+.challenge-modal .assignment-panel {
+  overflow: hidden;
+}
+
+.challenge-modal .flag-builder-row {
+  padding: 16px;
+}
+
+.challenge-modal .flag-builder-row .form-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.challenge-modal .selection-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 2px;
+}
+
+.challenge-modal .selection-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 9px;
+  padding: 11px 12px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: rgba(8, 17, 29, .5);
+}
+
+.challenge-modal .selection-row > span {
+  min-width: 0;
+}
+
+.challenge-modal .selection-row strong,
+.challenge-modal .selection-row small {
+  display: block;
+}
+
+.challenge-modal .selection-row small {
+  margin-top: 3px;
+  overflow-wrap: anywhere;
+}
+
+.challenge-modal .switch-row {
+  margin-top: 13px;
+}
+
+.connection-card-actions {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.connection-card-actions .table-action.full {
+  width: 100%;
+}
+
+/* =========================
+   Tema claro: overrides tardíos
+   ========================= */
+html[data-theme="light"] {
+  --panel: #f4f6f8;
+  --border: #cdd6df;
+  --muted: #687789;
+}
+
+html[data-theme="light"] .modal-backdrop {
+  background: rgba(49, 63, 80, .34);
+}
+
+html[data-theme="light"] .challenge-modal {
+  background: #f7f9fb;
+  border-color: #c8d2dd;
+  box-shadow: 0 28px 70px rgba(44, 64, 88, .18);
+}
+
+html[data-theme="light"] .challenge-modal .modal-head small,
+html[data-theme="light"] .challenge-modal .field-help,
+html[data-theme="light"] .challenge-modal .form-help {
+  color: #697a8e;
+}
+
+html[data-theme="light"] .challenge-modal .flag-builder,
+html[data-theme="light"] .challenge-modal .assignment-panel {
+  background: #eef2f5;
+  border-color: #ccd6e0;
+}
+
+html[data-theme="light"] .challenge-modal .flag-builder-row {
+  background: #f7f9fb;
+  border-color: #cdd7e1;
+}
+
+html[data-theme="light"] .challenge-modal .flag-builder-head strong {
+  color: #273649;
+}
+
+html[data-theme="light"] .challenge-modal .selection-row {
+  background: #f7f9fb;
+  border-color: #cdd7e1;
+  color: #29394b;
+}
+
+html[data-theme="light"] .challenge-modal .selection-row small {
+  color: #708095;
+}
+
+html[data-theme="light"] .challenge-modal .form-grid input,
+html[data-theme="light"] .challenge-modal .form-grid select,
+html[data-theme="light"] .challenge-modal .form-full textarea {
+  color: #233246;
+  background: #fbfcfd;
+  border-color: #c5d0dc;
+}
+
+html[data-theme="light"] .challenge-modal .form-grid input:focus,
+html[data-theme="light"] .challenge-modal .form-grid select:focus,
+html[data-theme="light"] .challenge-modal .form-full textarea:focus {
+  border-color: #7b78ea;
+  box-shadow: 0 0 0 3px rgba(103, 91, 224, .10);
+}
+
+html[data-theme="light"] .challenge-modal .table-action {
+  background: #eef2f5;
+  color: #53657a;
+  border-color: #cbd5df;
+}
+
+html[data-theme="light"] .challenge-modal .table-action.danger {
+  color: #a94a4a;
+  border-color: #e1bcbc;
+}
+
+html[data-theme="light"] .connection-card-actions .table-action.danger {
+  background: #fbefef;
+}
+
+@media (max-width: 820px) {
+  .challenge-modal > .form-grid,
+  .challenge-modal .flag-builder-row .form-grid,
+  .challenge-modal .selection-list {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .challenge-modal {
+    padding: 18px;
+  }
+}

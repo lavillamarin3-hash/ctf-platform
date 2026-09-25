@@ -243,11 +243,11 @@ export function ChallengeDetail({
             type="button"
             className="primary-action"
             onClick={() => onStart(challenge.code)}
-            disabled={busy || challenge.completed}
+            disabled={busy}
           >
             <Icon name="play" />
             {challenge.completed
-              ? "Reto completado"
+              ? "Reabrir entorno de práctica"
               : "Abrir máquina asignada"}
           </button>
         )}
@@ -470,15 +470,12 @@ export function ChallengeDetail({
                     challenge.code
                   )
                 }
-                disabled={
-                  busy ||
-                  challenge.completed
-                }
+                disabled={busy}
               >
                 <Icon name="play" />
 
                 {challenge.completed
-                  ? "Reto completado"
+                  ? "Reabrir entorno de práctica"
                   : "Iniciar laboratorio"}
               </button>
             )}
@@ -533,7 +530,7 @@ export function ChallengeDetail({
               }
               disabled={
                 busy ||
-                challenge.completed
+                !activeRun
               }
             />
 
@@ -541,29 +538,30 @@ export function ChallengeDetail({
               className="primary-action"
               disabled={
                 busy ||
-                challenge.completed
+                !activeRun
               }
             >
               <Icon name="flag" />
 
-              {challenge.completed
+              {challenge.completed && !activeRun
                 ? "Reto completado"
                 : "Enviar flag"}
             </button>
           </div>
 
-          {challenge.completed ? (
+          {challenge.completed && !activeRun ? (
             <div className="flag-success">
               <Icon name="check" />
 
-              Reto completado ·{" "}
-              {challenge.points} puntos
-              obtenidos
+              Reto completado · {challenge.points} puntos obtenidos.
+              Puedes reabrir el entorno para prácticas adicionales; no se
+              otorgarán puntos nuevamente.
             </div>
           ) : (
             <div className="flag-helper">
-              Los intentos se registran para
-              mantener la trazabilidad del CTF.
+              {challenge.completed
+                ? "Entorno de práctica activo. Las respuestas correctas posteriores no generan puntos adicionales."
+                : "Los intentos se registran para mantener la trazabilidad del CTF."}
             </div>
           )}
 
@@ -572,9 +570,7 @@ export function ChallengeDetail({
               <span>ESTADO</span>
 
               <strong>
-                {challenge.completed
-                  ? "Completado"
-                  : "Pendiente"}
+                {activeRun ? "Sesión activa" : challenge.completed ? "Completado" : "Pendiente"}
               </strong>
             </div>
 
@@ -805,7 +801,7 @@ export function ChallengeForm({
 
         <section className="glass-panel flag-builder">
           <div className="panel-head">
-            <div><span className="eyebrow accent">FLAGS</span><h3>Validación del reto</h3><small>Esta fase puede utilizar una flag estática. Las dinámicas quedan preparadas para una siguiente fase de provisión.</small></div>
+            <div><span className="eyebrow accent">FLAGS</span><h3>Validación del reto</h3><small>Las flags dinámicas se generan por ejecución, se inyectan en la VM víctima y solo se valida su hash asociado a esa ejecución.</small></div>
             <button type="button" className="secondary-action" onClick={addFlag}>+ Añadir flag</button>
           </div>
           {flags.map((flag, index) => (
@@ -815,7 +811,7 @@ export function ChallengeForm({
                 <label>Etiqueta<input value={flag.label} onChange={(event) => updateFlag(index, { label: event.target.value })} /></label>
                 <label>Tipo<select value={flag.mode} onChange={(event) => updateFlag(index, { mode: event.target.value as Draft["mode"] })}><option value="static">Estática</option><option value="dynamic">Dinámica por ejecución</option></select></label>
                 {flag.mode === "static" ? (
-                  <label className="form-span-2">Valor<input value={flag.value} onChange={(event) => updateFlag(index, { value: event.target.value })} placeholder="FLAG{ssh_lab_demo}" /></label>
+                  <label className="form-span-2">Valor<input value={flag.value} onChange={(event) => updateFlag(index, { value: event.target.value })} placeholder="FLAG{valor_estatico}" /></label>
                 ) : (
                   <label className="form-span-2">Plantilla<input value={flag.template} onChange={(event) => updateFlag(index, { template: event.target.value })} /><small className="field-help">Variables: {'{{CODE}}'}, {'{{USER}}'}, {'{{RUN_ID}}'}, {'{{RAND}}'}</small></label>
                 )}
@@ -824,7 +820,7 @@ export function ChallengeForm({
               <label className="switch-row"><input type="checkbox" checked={flag.is_active} onChange={(event) => updateFlag(index, { is_active: event.target.checked })} /><span>Flag activa</span></label>
             </div>
           ))}
-          {!flags.length && <div className="empty-card"><strong>No hay flags configuradas</strong><span>Añade la flag estática para probar LAB-01.</span></div>}
+          {!flags.length && <div className="empty-card"><strong>No hay flags configuradas</strong><span>Añade una flag para poder iniciar el reto.</span></div>}
         </section>
 
         <section className="glass-panel assignment-panel">

@@ -1,123 +1,371 @@
-"""Ciclo de ejecución, cierre y validación de retos."""
+"""Ciclo de ejecución, inyección/limpieza de flags y validación de retos."""
 
 from __future__ import annotations
 
-import asyncio
 from datetime import timedelta
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
-from ..core import get_current_user, now_utc, require_roles, submission_fingerprint
-from ..models import Challenge, ChallengeCompletion, ChallengeRun, ChallengeRunFlag, Submission, User
-from ..schemas import RunView, SubmissionRequest, SubmissionResponse
-from ..services.bootstrap import ranking_rows, write_audit
-from ..services.challenge_runtime import (
-    _asset_ref_key, _find_challenge_vm, _sync_player_guacamole_permissions,
-    render_dynamic_flag,
+from ..core import get_current_user, get_settings, hash_password, now_utc, require_roles, submission_fingerprint, verify_password
+from ..models import (
+    Challenge, ChallengeCompletion, ChallengeGroupAssignment, ChallengeInstance, ChallengeRun, ChallengeRunFlag,
+    GroupMembership, RemoteAccessAssignment, StudentGroup, Submission, User, VMAsset,
 )
 
+from ..schemas import RunView, SubmissionRequest, SubmissionResponse
+from ..services.bootstrap import check_rate_limit, ranking_rows, write_audit
+from ..services.challenge_runtime import _find_challenge_vm, _asset_ref_key, _resolve_guacamole_connection
+from ..services.dynamic_flags import DynamicFlagRuntime
+from ..services.lab_lock import LabReservationError, acquire, release
+from ..services.runtime_flags import is_effectively_dynamic
+from ..domain.instances.states import InstanceState
 
-from fastapi import APIRouter
 
 router = APIRouter()
 
+
+def _view_from_run(run: ChallengeRun, challenge: Challenge, assignment: RemoteAccessAssignment | None, vm=None, protocol: str | None = None, *, player: bool = True) -> RunView:
+    return RunView(
+        id=run.id,
+        challenge_code=challenge.code,
+        status=run.status,
+        started_at=run.started_at,
+        expires_at=run.expires_at,
+        launch_url=assignment.launch_url if assignment and player else None,
+        connection_state=assignment.status if assignment else None,
+        workspace_strategy=run.workspace_strategy,
+        target_vm_name=vm.name if vm else None,
+        target_vm_ip=vm.ip_address if vm else None,
+        target_protocol=protocol,
+        laboratory_code=None,
+    )
+
+
+async def _assigned(session, challenge_id: int, user_id: int) -> bool:
+    found = await session.scalar(
+        select(ChallengeGroupAssignment.id)
+        .join(GroupMembership, GroupMembership.group_id == ChallengeGroupAssignment.group_id)
+        .join(StudentGroup, StudentGroup.id == GroupMembership.group_id)
+        .where(
+            ChallengeGroupAssignment.challenge_id == challenge_id,
+            GroupMembership.user_id == user_id,
+            StudentGroup.is_active.is_(True),
+        )
+    )
+    return found is not None
+
+
+async def _connection_protocol(request: Request, identifier: str | None) -> str | None:
+    if not identifier:
+        return None
+    try:
+        connections = await request.app.state.guacamole_admin.list_connections()
+    except Exception:
+        return None
+    item = next((row for row in connections if row.identifier == identifier), None)
+    return item.protocol if item else None
+
+
+async def _sync_player_guacamole_permissions(request: Request, user_id: int, connection_identifier: str) -> bool:
+    """Garantiza que el usuario del laboratorio pueda usar la conexión asignada.
+
+    Conserva permisos existentes, agrega READ sobre la conexión objetivo y
+    devuelve si READ ya existía antes de la sincronización.
+    No modifica PostgreSQL: la sincronización se realiza directamente en Guacamole.
+    """
+    async with request.app.state.session_factory() as session:
+        user = await session.get(User, user_id)
+    if user is None:
+        raise RuntimeError(f"Usuario CTF {user_id} no encontrado")
+
+    permissions = await request.app.state.guacamole_admin.get_user_permissions(user.username)
+    connection_permissions = {
+        str(key): list(value or [])
+        for key, value in (permissions.get("connectionPermissions") or {}).items()
+    }
+    current = set(connection_permissions.get(str(connection_identifier), []))
+    preexisting = "READ" in current
+    current.add("READ")
+    connection_permissions[str(connection_identifier)] = sorted(current)
+
+    await request.app.state.guacamole_admin.patch_user_permissions(
+        user.username,
+        system_permissions=list(permissions.get("systemPermissions") or []),
+        connection_permissions=connection_permissions,
+    )
+    return preexisting
+
+
+@router.post("/api/v1/challenges/{code}/start", response_model=RunView)
 async def start_challenge(code: str, request: Request, user=Depends(require_roles("player"))):
     await check_rate_limit(request.app.state.redis, f"rate:start:{user.id}:{code}", maximum=6)
     async with request.app.state.session_factory() as session:
-        challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == code, Challenge.is_published.is_(True)))
+        challenge = await session.scalar(
+            select(Challenge)
+            .options(selectinload(Challenge.flags))
+            .where(Challenge.code == code, Challenge.is_published.is_(True))
+        )
         if challenge is None:
             raise HTTPException(status_code=404, detail="Reto no disponible")
-
-        assigned = await session.scalar(
-            select(ChallengeGroupAssignment.id).join(
-                GroupMembership, GroupMembership.group_id == ChallengeGroupAssignment.group_id
-            ).join(
-                StudentGroup, StudentGroup.id == GroupMembership.group_id
-            ).where(
-                ChallengeGroupAssignment.challenge_id == challenge.id,
-                GroupMembership.user_id == user.id,
-                StudentGroup.is_active.is_(True),
-            )
-        )
-        if assigned is None:
+        if not await _assigned(session, challenge.id, user.id):
             raise HTTPException(status_code=403, detail="Este reto no está asignado a tu grupo")
 
-        expires_at = now_utc() + timedelta(minutes=90)
-        run = ChallengeRun(user_id=user.id, challenge_id=challenge.id, status="active", expires_at=expires_at, workspace_strategy="shared_lab_vm")
+        now = now_utc()
+        active_run = await session.scalar(
+            select(ChallengeRun)
+            .options(selectinload(ChallengeRun.assignment))
+            .where(
+                ChallengeRun.user_id == user.id,
+                ChallengeRun.challenge_id == challenge.id,
+                ChallengeRun.status == "active",
+            )
+            .order_by(ChallengeRun.id.desc())
+        )
+        if active_run and active_run.expires_at >= now:
+            target_lab, target_vm = await _find_challenge_vm(session, challenge)
+            protocol = await _connection_protocol(request, target_vm.guacamole_connection_id if target_vm else None)
+            return _view_from_run(active_run, challenge, active_run.assignment, target_vm, protocol)
+        if active_run and active_run.expires_at < now:
+            expired_lab, expired_vm = await _find_challenge_vm(session, challenge)
+            expired_injector = DynamicFlagRuntime(request.app.state.flag_injector)
+            expired_dynamic = [flag for flag in challenge.flags if is_effectively_dynamic(challenge.code, flag)]
+            expired_instance = await session.scalar(
+                select(ChallengeInstance).where(ChallengeInstance.run_id == active_run.id)
+            )
+            try:
+                if active_run.assignment:
+                    await request.app.state.guacamole.revoke(active_run.assignment.external_reference)
+                if expired_dynamic and expired_vm:
+                    await expired_injector.cleanup(session, active_run.id, challenge, expired_vm)
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail=f"No se pudo limpiar la ejecución expirada: {exc}") from exc
+
+            # Devuelve la instancia al pool para que pueda reutilizarse en otra ejecución.
+            if expired_instance:
+                expired_instance.state = InstanceState.AVAILABLE.value
+                expired_instance.run_id = None
+                expired_instance.user_id = None
+                expired_instance.reserved_at = None
+                expired_instance.expires_at = None
+                expired_instance.last_error = None
+
+            active_run.status = "expired"
+            if active_run.assignment:
+                active_run.assignment.status = "expired"
+            await session.commit()
+            if expired_vm and expired_vm.ip_address:
+                await release(request.app.state.redis, expired_vm.ip_address, str(active_run.id))
+
+        dynamic_flags = [flag for flag in challenge.flags if is_effectively_dynamic(challenge.code, flag)]
+        target_lab, target_vm = await _find_challenge_vm(session, challenge)
+        if dynamic_flags and (target_vm is None or not target_vm.ip_address):
+            raise HTTPException(status_code=409, detail="El reto dinámico requiere una VM víctima Linux con IP y conexión Guacamole")
+
+        settings = get_settings()
+        target_vm_ip = target_vm.ip_address if target_vm else None
+        target_vm_os = target_vm.os if target_vm else None
+        target_vm_name = target_vm.name if target_vm else None
+        # Preflight Guacamole before taking the Redis reservation. This avoids
+        # creating a lock that cannot be released when Guacamole is misconfigured.
+        guac_connection = await _resolve_guacamole_connection(request, target_vm) if target_vm else None
+        if dynamic_flags and target_vm and guac_connection is None:
+            raise LabReservationError(
+                f"No existe una conexión SSH de Guacamole para {target_vm_ip}. "
+                "Configura la conexión en Guacamole antes de activar el laboratorio dinámico."
+            )
+
+        # Garantiza que el estudiante tenga READ sobre la conexión concreta del laboratorio.
+        # Esto evita que Guacamole abra otra conexión previamente asignada al usuario.
+        guacamole_access_preexisting = False
+        if dynamic_flags and target_vm and guac_connection:
+            guacamole_access_preexisting = await _sync_player_guacamole_permissions(
+                request, user.id, guac_connection.identifier
+            )
+
+        expires_at = now + timedelta(seconds=settings.flag_injector_lock_ttl_seconds)
+        run = ChallengeRun(
+            user_id=user.id,
+            challenge_id=challenge.id,
+            status="active",
+            expires_at=expires_at,
+            workspace_strategy="shared_lab_vm",
+        )
         session.add(run)
         await session.flush()
 
-        target_lab, target_vm = await _find_challenge_vm(session, challenge)
-        target_url: str
-        target_protocol = None
-        laboratory_code = target_lab.code if target_lab else None
+        lock_token: str | None = None
+        injector = DynamicFlagRuntime(request.app.state.flag_injector)
+        try:
+            if dynamic_flags:
+                lock_token = await acquire(
+                    request.app.state.redis,
+                    target_vm.ip_address,
+                    run.id,
+                    ttl_seconds=settings.flag_injector_lock_ttl_seconds,
+                )
 
-        if target_vm and target_vm.guacamole_connection_id:
-            try:
-                # Reutilizamos una conexión real ya administrada por Guacamole; no creamos una conexión por cada ejecución.
-                target_url = await request.app.state.guacamole.direct_connection_url(target_vm.guacamole_connection_id)
-                connections = await request.app.state.guacamole_admin.list_connections()
-                connection = next((item for item in connections if item.identifier == target_vm.guacamole_connection_id), None)
-                target_protocol = connection.protocol if connection else None
-                external_reference = f"vm:{target_vm.id}:connection:{target_vm.guacamole_connection_id}:run:{run.id}"
-            except RuntimeError as exc:
-                run.status = "provisioning_failed"
-                await session.commit()
-                raise HTTPException(status_code=503, detail=str(exc)) from exc
-        else:
-            try:
-                # Compatibilidad para retos sin VM asociada.
-                remote = await request.app.state.guacamole.provision(user.username, challenge.code, run.id)
-                target_url = remote.launch_url
-                external_reference = remote.external_reference
-            except RuntimeError as exc:
-                run.status = "provisioning_failed"
-                await session.commit()
-                raise HTTPException(status_code=503, detail=str(exc)) from exc
+            target_url: str
+            target_protocol: str | None = None
+            laboratory_code = target_lab.code if target_lab else None
+            if target_vm and guac_connection:
+                try:
+                    target_url = await request.app.state.guacamole.direct_connection_url(guac_connection.identifier)
+                    target_protocol = guac_connection.protocol
+                    external_reference = f"vm:{target_vm.id}:connection:{guac_connection.identifier}:run:{run.id}"
+                except RuntimeError as exc:
+                    raise HTTPException(status_code=503, detail=str(exc)) from exc
+            else:
+                try:
+                    remote = await request.app.state.guacamole.provision(user.username, challenge.code, run.id)
+                    target_url = remote.launch_url
+                    external_reference = remote.external_reference
+                except RuntimeError as exc:
+                    raise HTTPException(status_code=503, detail=str(exc)) from exc
 
-        assignment = RemoteAccessAssignment(
-            run_id=run.id,
-            external_reference=external_reference,
-            launch_url=target_url,
-            expires_at=expires_at,
-        )
-        session.add(assignment)
+            assignment = RemoteAccessAssignment(
+                run_id=run.id,
+                external_reference=external_reference,
+                launch_url=target_url,
+                expires_at=expires_at,
+            )
+            session.add(assignment)
 
-        for flag in challenge.flags:
-            if flag.is_active and flag.mode == "dynamic" and flag.template:
-                clear_value = render_dynamic_flag(flag.template, code=challenge.code, username=user.username, run_id=run.id)
-                session.add(ChallengeRunFlag(run_id=run.id, flag_id=flag.id, flag_hash=hash_password(clear_value), fingerprint=submission_fingerprint(clear_value)))
+            if dynamic_flags and target_vm:
+                # ChallengeInstance representa una fila de pool por VM.
+                # La restricción uq_challenge_instance_vm_asset impide crear otra
+                # fila para la misma VM, por lo que primero reutilizamos la existente.
+                instance = await session.scalar(
+                    select(ChallengeInstance)
+                    .where(ChallengeInstance.vm_asset_id == target_vm.id)
+                    .with_for_update()
+                )
 
-        await write_audit(session, user.id, "challenge_run.start", "challenge_run", str(run.id), {
-            "challenge": code,
-            "remote_reference": external_reference,
-            "target_vm": target_vm.name if target_vm else None,
-            "target_laboratory": target_lab.code if target_lab else None,
-        })
-        await session.commit()
+                if instance is None:
+                    instance = ChallengeInstance(
+                        challenge_id=challenge.id,
+                        vm_asset_id=target_vm.id,
+                        run_id=run.id,
+                        user_id=user.id,
+                        state=InstanceState.IN_USE.value,
+                        ip_address=target_vm.ip_address,
+                        guacamole_connection_id=str(guac_connection.identifier) if guac_connection else None,
+                        guacamole_access_granted=bool(guac_connection),
+                        guacamole_access_preexisting=guacamole_access_preexisting,
+                        reserved_at=now,
+                        expires_at=expires_at,
+                        last_error=None,
+                    )
+                    session.add(instance)
+                else:
+                    # La instancia existente debe estar libre después de una
+                    # ejecución anterior o de una limpieza por expiración.
+                    if (
+                        instance.state != InstanceState.AVAILABLE.value
+                        or instance.run_id is not None
+                        or instance.user_id is not None
+                    ):
+                        raise LabReservationError(
+                            f"La instancia de la VM {target_vm.name} ({target_vm.ip_address}) "
+                            "está registrada como ocupada y no puede reutilizarse."
+                        )
 
-        return RunView(
-            id=run.id,
-            challenge_code=challenge.code,
-            status=run.status,
-            started_at=run.started_at,
-            expires_at=expires_at,
-            launch_url=target_url,
-            connection_state="ready",
-            workspace_strategy=run.workspace_strategy,
-            target_vm_name=target_vm.name if target_vm else None,
-            target_vm_ip=target_vm.ip_address if target_vm else None,
-            target_protocol=target_protocol,
-            laboratory_code=laboratory_code,
-        )
+                    instance.challenge_id = challenge.id
+                    instance.run_id = run.id
+                    instance.user_id = user.id
+                    instance.state = InstanceState.IN_USE.value
+                    instance.ip_address = target_vm.ip_address
+                    instance.guacamole_connection_id = (
+                        str(guac_connection.identifier) if guac_connection else None
+                    )
+                    instance.guacamole_access_granted = bool(guac_connection)
+                    instance.guacamole_access_preexisting = guacamole_access_preexisting
+                    instance.reserved_at = now
+                    instance.expires_at = expires_at
+                    instance.last_error = None
+
+                await session.flush()
+
+            if dynamic_flags:
+                # Elimina restos del mismo archivo antes de escribir la nueva evidencia.
+                for flag in dynamic_flags:
+                    try:
+                        await request.app.state.flag_injector.clear(target_vm_ip or "", injector.path_for(flag), target_vm_os)
+                    except Exception:
+                        # La escritura posterior sustituirá un archivo existente de forma atómica.
+                        pass
+                await injector.prepare(session, challenge, run, user.username, target_vm)
+
+            await write_audit(session, user.id, "challenge_run.start", "challenge_run", str(run.id), {
+                "challenge": code,
+                "remote_reference": external_reference,
+                "target_vm": target_vm.name if target_vm else None,
+                "target_laboratory": laboratory_code,
+                "workspace_strategy": run.workspace_strategy,
+                "dynamic_flag_count": len(dynamic_flags),
+            })
+            await session.commit()
+
+            return RunView(
+                id=run.id,
+                challenge_code=challenge.code,
+                status=run.status,
+                started_at=run.started_at,
+                expires_at=expires_at,
+                launch_url=target_url,
+                connection_state="ready",
+                workspace_strategy=run.workspace_strategy,
+                target_vm_name=target_vm.name if target_vm else None,
+                target_vm_ip=target_vm.ip_address if target_vm else None,
+                target_protocol=target_protocol,
+                laboratory_code=laboratory_code,
+            )
+        except HTTPException:
+            await session.rollback()
+            if dynamic_flags and target_vm:
+                try:
+                    for flag in dynamic_flags:
+                        await request.app.state.flag_injector.clear(target_vm_ip or "", injector.path_for(flag), target_vm_os)
+                except Exception:
+                    pass
+            if lock_token:
+                await release(request.app.state.redis, target_vm_ip or "", lock_token)
+            raise
+        except (ValueError, LabReservationError, RuntimeError) as exc:
+            await session.rollback()
+            if dynamic_flags and target_vm:
+                try:
+                    for flag in dynamic_flags:
+                        await request.app.state.flag_injector.clear(target_vm_ip or "", injector.path_for(flag), target_vm_os)
+                except Exception:
+                    pass
+            if lock_token:
+                await release(request.app.state.redis, target_vm_ip or "", lock_token)
+            raise HTTPException(status_code=409 if isinstance(exc, (ValueError, LabReservationError)) else 503, detail=str(exc)) from exc
+        except Exception as exc:
+            await session.rollback()
+            if dynamic_flags and target_vm:
+                try:
+                    for flag in dynamic_flags:
+                        await request.app.state.flag_injector.clear(target_vm_ip or "", injector.path_for(flag), target_vm_os)
+                except Exception:
+                    pass
+            if lock_token:
+                await release(request.app.state.redis, target_vm_ip or "", lock_token)
+            raise HTTPException(status_code=500, detail="No se pudo preparar el entorno del reto") from exc
 
 
 @router.get("/api/v1/runs", response_model=list[RunView])
 async def list_runs(request: Request, user=Depends(get_current_user)):
     async with request.app.state.session_factory() as session:
-        statement = select(ChallengeRun, Challenge.code, RemoteAccessAssignment).join(Challenge, Challenge.id == ChallengeRun.challenge_id).outerjoin(RemoteAccessAssignment, RemoteAccessAssignment.run_id == ChallengeRun.id)
+        statement = (
+            select(ChallengeRun, Challenge, RemoteAccessAssignment, ChallengeInstance, VMAsset)
+            .join(Challenge, Challenge.id == ChallengeRun.challenge_id)
+            .outerjoin(RemoteAccessAssignment, RemoteAccessAssignment.run_id == ChallengeRun.id)
+            .outerjoin(ChallengeInstance, ChallengeInstance.run_id == ChallengeRun.id)
+            .outerjoin(VMAsset, VMAsset.id == ChallengeInstance.vm_asset_id)
+        )
         if user.role == "player":
             statement = statement.where(ChallengeRun.user_id == user.id)
         elif user.role not in ("admin", "instructor"):
@@ -126,29 +374,91 @@ async def list_runs(request: Request, user=Depends(get_current_user)):
         rows = (await session.execute(statement)).all()
         current = now_utc()
         response: list[RunView] = []
-        for run, code, assignment in rows:
+        for run, challenge, assignment, instance, vm in rows:
             state = "expired" if run.status == "active" and run.expires_at < current else run.status
-            response.append(RunView(id=run.id, challenge_code=code, status=state, started_at=run.started_at, expires_at=run.expires_at, launch_url=assignment.launch_url if assignment and user.role == "player" else None, connection_state=assignment.status if assignment else None, workspace_strategy=run.workspace_strategy))
+
+            # Las ejecuciones históricas creadas antes de ChallengeInstance
+            # también deben poder mostrarse en la interfaz. Resolvemos la VM
+            # de forma no mutante cuando el registro de instancia todavía no existe.
+            display_vm = vm
+            display_protocol = None
+            if display_vm is None and challenge and state == "active":
+                _, display_vm = await _find_challenge_vm(session, challenge)
+
+            if instance and instance.guacamole_connection_id:
+                display_protocol = await _connection_protocol(request, instance.guacamole_connection_id)
+            elif display_vm:
+                resolved_connection = await _resolve_guacamole_connection(request, display_vm)
+                display_protocol = resolved_connection.protocol if resolved_connection else None
+
+            response.append(
+                RunView(
+                    id=run.id,
+                    challenge_code=challenge.code,
+                    status=state,
+                    started_at=run.started_at,
+                    expires_at=run.expires_at,
+                    launch_url=assignment.launch_url if assignment and user.role == "player" else None,
+                    connection_state=assignment.status if assignment else None,
+                    workspace_strategy=run.workspace_strategy,
+                    target_vm_name=display_vm.name if display_vm else None,
+                    target_vm_ip=display_vm.ip_address if display_vm else None,
+                    target_protocol=display_protocol,
+                    laboratory_code=None,
+                )
+            )
         return response
 
 
 @router.post("/api/v1/runs/{run_id}/close", response_model=RunView)
 async def close_run(run_id: int, request: Request, user=Depends(require_roles("player"))):
     async with request.app.state.session_factory() as session:
-        run = await session.scalar(select(ChallengeRun).options(selectinload(ChallengeRun.assignment)).where(ChallengeRun.id == run_id, ChallengeRun.user_id == user.id))
+        run = await session.scalar(
+            select(ChallengeRun)
+            .options(selectinload(ChallengeRun.assignment))
+            .where(ChallengeRun.id == run_id, ChallengeRun.user_id == user.id)
+        )
         if run is None:
             raise HTTPException(status_code=404, detail="Ejecución no encontrada")
-        if run.status == "active" and run.assignment:
+        challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.id == run.challenge_id))
+        target_lab, target_vm = await _find_challenge_vm(session, challenge) if challenge else (None, None)
+        instance = await session.scalar(select(ChallengeInstance).where(ChallengeInstance.run_id == run.id))
+        injector = DynamicFlagRuntime(request.app.state.flag_injector)
+
+        if run.status in ("closed", "expired"):
+            return RunView(id=run.id, challenge_code=challenge.code if challenge else "", status=run.status, started_at=run.started_at, expires_at=run.expires_at, launch_url=None, connection_state=run.assignment.status if run.assignment else None, workspace_strategy=run.workspace_strategy)
+
+        if run.assignment:
             try:
                 await request.app.state.guacamole.revoke(run.assignment.external_reference)
             except RuntimeError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+        try:
+            await injector.cleanup(session, run.id, challenge, target_vm)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail=f"No se pudo limpiar la flag de la VM: {exc}") from exc
+
+        if run.assignment:
             run.assignment.status = "revoked"
-            run.status = "closed"
-            run.closed_at = now_utc()
-            await write_audit(session, user.id, "challenge_run.close", "challenge_run", str(run.id))
-            await session.commit()
-        return RunView(id=run.id, challenge_code="", status=run.status, started_at=run.started_at, expires_at=run.expires_at, launch_url=None, connection_state=run.assignment.status if run.assignment else None, workspace_strategy=run.workspace_strategy)
+        if instance:
+            instance.state = InstanceState.AVAILABLE.value
+            instance.run_id = None
+            instance.user_id = None
+            instance.reserved_at = None
+            instance.expires_at = None
+            instance.last_error = None
+
+        run.status = "closed"
+        run.closed_at = now_utc()
+        await write_audit(session, user.id, "challenge_run.close", "challenge_run", str(run.id), {
+            "challenge": challenge.code if challenge else None,
+            "dynamic_cleanup": True,
+        })
+        await session.commit()
+        if target_vm and target_vm.ip_address:
+            await release(request.app.state.redis, target_vm.ip_address, str(run.id))
+        return RunView(id=run.id, challenge_code=challenge.code if challenge else "", status=run.status, started_at=run.started_at, expires_at=run.expires_at, launch_url=None, connection_state=run.assignment.status if run.assignment else None, workspace_strategy=run.workspace_strategy, target_vm_name=target_vm.name if target_vm else None, target_vm_ip=target_vm.ip_address if target_vm else None, laboratory_code=target_lab.code if target_lab else None)
 
 
 @router.post("/api/v1/challenges/{code}/submissions", response_model=SubmissionResponse)
@@ -158,18 +468,7 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
         challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == code, Challenge.is_published.is_(True)))
         if challenge is None:
             raise HTTPException(status_code=404, detail="Reto no disponible")
-        assigned = await session.scalar(
-            select(ChallengeGroupAssignment.id).join(
-                GroupMembership, GroupMembership.group_id == ChallengeGroupAssignment.group_id
-            ).join(
-                StudentGroup, StudentGroup.id == GroupMembership.group_id
-            ).where(
-                ChallengeGroupAssignment.challenge_id == challenge.id,
-                GroupMembership.user_id == user.id,
-                StudentGroup.is_active.is_(True),
-            )
-        )
-        if assigned is None:
+        if not await _assigned(session, challenge.id, user.id):
             raise HTTPException(status_code=403, detail="Este reto no está asignado a tu grupo")
         flags = [item for item in challenge.flags if item.is_active]
         if not flags:
@@ -177,11 +476,10 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
         run = await session.scalar(select(ChallengeRun).where(ChallengeRun.user_id == user.id, ChallengeRun.challenge_id == challenge.id, ChallengeRun.status == "active").order_by(ChallengeRun.id.desc()))
         if run is None or run.expires_at < now_utc():
             raise HTTPException(status_code=409, detail="Debes iniciar el reto antes de enviar la flag")
+
         matched = None
         for flag in flags:
-            if flag.mode == "dynamic":
-                if run is None:
-                    continue
+            if is_effectively_dynamic(challenge.code, flag):
                 run_flag = await session.scalar(select(ChallengeRunFlag).where(ChallengeRunFlag.run_id == run.id, ChallengeRunFlag.flag_id == flag.id))
                 if run_flag and verify_password(payload.value, run_flag.flag_hash):
                     matched = flag
@@ -189,7 +487,14 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
             elif flag.flag_hash and verify_password(payload.value, flag.flag_hash):
                 matched = flag
                 break
-        submission = Submission(user_id=user.id, challenge_id=challenge.id, flag_id=matched.id if matched else None, submitted_value_hmac=submission_fingerprint(payload.value), is_correct=matched is not None)
+
+        submission = Submission(
+            user_id=user.id,
+            challenge_id=challenge.id,
+            flag_id=matched.id if matched else None,
+            submitted_value_hmac=submission_fingerprint(payload.value),
+            is_correct=matched is not None,
+        )
         session.add(submission)
         awarded_points, complete = 0, False
         if matched:
@@ -203,6 +508,7 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
                     awarded_points, complete = challenge.points, True
                     await write_audit(session, user.id, "challenge.complete", "challenge", str(challenge.id), {"code": code, "points": challenge.points})
         await session.commit()
+
     if complete:
         rows = await ranking_rows(request.app.state.session_factory)
         payload_event = {"type": "ranking.updated", "rows": rows}
@@ -211,9 +517,7 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
             await request.app.state.redis.publish("ctf:ranking", __import__("json").dumps(payload_event))
         except Exception:
             pass
-        return SubmissionResponse(correct=True, challenge_completed=True, awarded_points=awarded_points, message="Reto completado. El ranking se actualizó.")
+        return SubmissionResponse(correct=True, challenge_completed=True, awarded_points=awarded_points, message="Flag correcta. Reto completado; cierra la sesión del laboratorio para limpiar la VM.")
     if matched:
         return SubmissionResponse(correct=True, challenge_completed=False, awarded_points=0, message="Flag correcta. Continúa con las flags restantes.")
     return SubmissionResponse(correct=False, challenge_completed=False, awarded_points=0, message="Flag incorrecta. Revisa el escenario e inténtalo de nuevo.")
-
-

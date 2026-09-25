@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -92,6 +92,41 @@ class Submission(Base):
     is_correct: Mapped[bool] = mapped_column(Boolean, default=False)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), index=True)
     user: Mapped[User] = relationship(back_populates="submissions")
+
+
+class ChallengeInstance(Base):
+    """Instancia reutilizable del pool asignable a un reto y a un jugador.
+
+    La tabla adapta el modelo del documento 20 a los IDs enteros ya utilizados
+    por la plataforma actual. No crea una segunda tabla de retos ni de usuarios.
+    """
+
+    __tablename__ = "challenge_instances"
+    __table_args__ = (
+        UniqueConstraint("run_id", name="uq_challenge_instance_run"),
+        Index("ix_challenge_instances_challenge_state", "challenge_id", "state"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    challenge_id: Mapped[int] = mapped_column(ForeignKey("challenges.id", ondelete="CASCADE"), index=True)
+    vm_asset_id: Mapped[int] = mapped_column(ForeignKey("vm_assets.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("challenge_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    state: Mapped[str] = mapped_column(String(20), default="disponible", index=True)
+    ip_address: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    guacamole_connection_id: Mapped[str | None] = mapped_column(String(160), nullable=True)
+    guacamole_access_granted: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    guacamole_access_preexisting: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    reserved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_error: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    challenge: Mapped[Challenge] = relationship()
+    vm_asset: Mapped["VMAsset"] = relationship()
+    run: Mapped["ChallengeRun | None"] = relationship()
+    user: Mapped["User | None"] = relationship()
 
 
 class ChallengeCompletion(Base):

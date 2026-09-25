@@ -18,6 +18,7 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
+@router.get("/api/v1/groups", response_model=list[GroupView])
 async def list_groups(request: Request, actor=Depends(require_roles("admin", "instructor"))):
     async with request.app.state.session_factory() as session:
         groups = (await session.scalars(
