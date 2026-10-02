@@ -5,7 +5,9 @@
 // ============================================================
 
 import { Icon } from "../../components/common";
+import { LaboratoryRunWorkspace } from "../../components/player/LaboratoryRunWorkspace";
 import type { PlayerController } from "../../controllers/usePlayerController";
+import { needsLaboratoryCleanup } from "../../lib/laboratoryRunState";
 
 /**
  * Presenta las sesiones remotas activas del jugador.
@@ -14,22 +16,23 @@ import type { PlayerController } from "../../controllers/usePlayerController";
  * Solamente consume la información preparada por el controlador.
  */
 export function PlayerLaboratory({ controller }: { controller: PlayerController }) {
-  const { runs, setView, closeRun } = controller;
+  const { runs, setView, closeRun, submit } = controller;
+  const activeRuns = runs.filter(needsLaboratoryCleanup);
 
   return (
     <section className="player-laboratory">
       <div className="page-heading">
         <div>
           <span className="eyebrow accent">LABORATORIO</span>
-          <h1>Mis conexiones</h1>
+          <h1>Mi laboratorio</h1>
           <p>
-            Aquí aparecen únicamente tus sesiones activas. Para acceder a un
-            entorno inicia primero el reto correspondiente.
+            Aquí aparecen únicamente tus instancias asignadas, activas o pendientes de limpieza.
+            Inicia un reto para preparar tu sesión de acceso remoto.
           </p>
         </div>
       </div>
 
-      {runs.length === 0 ? (
+      {activeRuns.length === 0 ? (
         <div className="empty-card student-no-connections">
           <Icon name="lab" />
           <strong>No tienes conexiones activas</strong>
@@ -49,62 +52,20 @@ export function PlayerLaboratory({ controller }: { controller: PlayerController 
           <div className="section-title">
             <div>
               <span className="eyebrow">ACCESO REMOTO</span>
-              <h2>Mis conexiones activas</h2>
+              <h2>Mis laboratorios y limpieza</h2>
             </div>
-            <span className="user-count">{runs.length}</span>
+            <span className="user-count">{activeRuns.length}</span>
           </div>
 
-          <div className="connections-grid">
-            {runs.map((run) => {
-              const vmName = run.target_vm_name || run.challenge_code;
-              const protocol = run.target_protocol
-                ? ` · ${run.target_protocol.toUpperCase()}`
-                : "";
-              const targetIp =
-                run.target_vm_ip || "IP administrada por el laboratorio";
-              const expiration = new Date(run.expires_at).toLocaleString("es-ES");
-
-              return (
-                <article className="connection-card" key={run.id}>
-                  <div className="connection-state">
-                    <span className="status-dot" />
-                    {run.status === "active" ? "ACTIVA" : run.status.toUpperCase()}
-                  </div>
-
-                  <h3>{vmName}</h3>
-                  <p>
-                    {run.challenge_code}
-                    {protocol}
-                  </p>
-                  <small>
-                    {targetIp} · Hasta {expiration}
-                  </small>
-
-                  <div className="connection-card-actions">
-                    {run.launch_url ? (
-                      <a
-                        href={run.launch_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="primary-action full"
-                      >
-                        <Icon name="play" />
-                        Abrir conexión
-                      </a>
-                    ) : (
-                      <button type="button" className="secondary-action full" disabled>
-                        Conexión no disponible
-                      </button>
-                    )}
-                    {run.status === "active" && (
-                      <button type="button" className="table-action danger full" onClick={() => void closeRun(run.id)}>
-                        Cerrar sesión y limpiar VM
-                      </button>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
+          <div className="laboratory-workspace-list">
+            {activeRuns.map((run) => (
+              <LaboratoryRunWorkspace
+                key={run.id}
+                run={run}
+                onClose={closeRun}
+                onSubmit={submit}
+              />
+            ))}
           </div>
         </section>
       )}

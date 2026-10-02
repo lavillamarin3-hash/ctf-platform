@@ -80,9 +80,10 @@ class GuacamoleAdminPort:
 
 class StubGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
     def __init__(self) -> None:
-        self.users: dict[str, GuacamoleUser] = {"guacadmin": GuacamoleUser("guacadmin", {})}
+        self.service_account = get_settings().guacamole_service_account or "stub-service"
+        self.users: dict[str, GuacamoleUser] = {self.service_account: GuacamoleUser(self.service_account, {})}
         self.connections: dict[str, GuacamoleConnection] = {}
-        self.permissions: dict[str, dict] = {"guacadmin": {"systemPermissions": ["ADMINISTER"], "connectionPermissions": {}}}
+        self.permissions: dict[str, dict] = {self.service_account: {"systemPermissions": ["ADMINISTER"], "connectionPermissions": {}}}
         self._next_connection = 1
 
     async def provision(self, username: str, challenge_code: str, run_id: int) -> RemoteConnection:
@@ -135,7 +136,7 @@ class StubGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
         if disabled is not None: a["disabled"]="true" if disabled else None
         user=GuacamoleUser(username,a); self.users[username]=user; return user
     async def delete_user(self, username: str) -> None:
-        if username == "guacadmin": raise GuacamoleApiError("No puedes eliminar guacadmin",409)
+        if username == self.service_account: raise GuacamoleApiError("No puedes eliminar la cuenta de servicio",409)
         self.users.pop(username,None); self.permissions.pop(username,None)
     async def list_connections(self) -> list[GuacamoleConnection]: return list(self.connections.values())
     async def create_connection(self, *, name, protocol, hostname, port, username=None, password=None, domain=None, parent_identifier="ROOT"):
@@ -177,6 +178,28 @@ class ManagedGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
         body=urlencode({"username":self.service_account,"password":self.service_password}).encode(); req=Request(f"{self.base_url}/api/tokens",data=body,method='POST',headers={"Content-Type":"application/x-www-form-urlencoded"}); _,raw=await self._blocking_request(req); payload=json.loads(raw.decode()); token=payload.get('authToken'); ds=payload.get('dataSource')
         if not token or not ds: raise GuacamoleApiError('Guacamole no devolvió authToken/dataSource')
         return token,ds
+
+    async def authenticate_player(self, username: str, password: str) -> dict:
+        """Obtiene una sesión personal; jamás utiliza la cuenta técnica en el túnel."""
+        if username == self.service_account:
+            raise GuacamoleApiError("La cuenta de servicio no puede abrir terminales de estudiante", 403)
+        body = urlencode({"username": username, "password": password}).encode()
+        request = Request(
+            f"{self.base_url}/api/tokens", data=body, method="POST",
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+        _, raw = await self._blocking_request(request)
+        payload = json.loads(raw.decode())
+        if not payload.get("authToken") or not payload.get("dataSource"):
+            raise GuacamoleApiError("No se pudo autenticar la conexión personal", 401)
+        return {"token": payload["authToken"], "data_source": payload["dataSource"], "username": username}
+
+    async def client_library(self) -> bytes:
+        """Cliente oficial servido por esta instalación: misma versión que el túnel."""
+        _, source = await self._blocking_request(Request(f"{self.base_url}/guacamole-common-js/all.min.js"))
+        if len(source) > 3_000_000 or b"Guacamole" not in source or b"WebSocketTunnel" not in source:
+            raise GuacamoleApiError("Guacamole no entregó una biblioteca de cliente válida")
+        return source
     async def _api_request(self, method: str, path: str, *, data: dict | list | None = None):
         token,ds=await self._post_token(); sep='&' if '?' in path else '?'; url=f"{self.base_url}/api/session/data/{quote(ds,safe='')}{path}{sep}token={quote(token,safe='')}"; body=None; headers={"Accept":"application/json"}
         if data is not None: body=json.dumps(data).encode(); headers['Content-Type']='application/json'
@@ -283,7 +306,13 @@ class ManagedGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
     async def update_connection(self,identifier,*,name,protocol,hostname,port,username=None,password=None,domain=None,parent_identifier='ROOT'):
         p=await self._api_request('GET',f'/connections/{quote(identifier,safe="")}');
         if not isinstance(p,dict): raise GuacamoleApiError('Conexión no encontrada',404)
-        params=dict(p.get('parameters') or {}); params.update({"hostname":hostname,"port":str(port)})
+        # El detalle puede omitir parámetros. Cargarlos del endpoint oficial
+        # evita borrar credenciales existentes al editar metadatos públicos.
+        current_parameters = await self._api_request('GET', f'/connections/{quote(identifier,safe="")}/parameters')
+        if not isinstance(current_parameters, dict):
+            raise GuacamoleApiError('No se pudieron conservar los parámetros de la conexión', 502)
+        params=dict(p.get('parameters') or {}); params.update(current_parameters)
+        params.update({"hostname":hostname,"port":str(port)})
         if username is not None: params['username']=username
         if password is not None: params['password']=password
         if domain is not None: params['domain']=domain
@@ -312,7 +341,7 @@ class ManagedGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
     async def direct_connection_url(self, identifier: str) -> str:
         _, data_source = await self._post_token()
         opaque = base64.b64encode(f"{identifier}\x00c\x00{data_source}".encode()).decode()
-        return f"{self.base_url}/#/client/{opaque}"
+        return f"{get_settings().guacamole_base_url.rstrip('/')}/#/client/{opaque}"
 
 
 def make_guacamole_adapter(): return StubGuacamoleAdapter() if get_settings().guacamole_mode.lower()=='stub' else ManagedGuacamoleAdapter()

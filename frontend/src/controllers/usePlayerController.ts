@@ -5,11 +5,12 @@
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { api, BackendLaboratory, Challenge, RankingRow, Run, session } from "../api";
+import { api, BackendLaboratory, Challenge, RankingRow, Run } from "../api";
 import { PlayerView } from "../config";
 import { inferCategory } from "../components/challenges";
+import { observeAssignedChallenges, publishNotification } from "../lib/notifications";
 
-export function usePlayerController() {
+export function usePlayerController(userId: number) {
   const [view, setView] = useState<PlayerView>("dashboard");
   const [menuOpen, setMenuOpen] = useState(false);
   const [challenges, setChallenges] = useState<Challenge[]>([]);
@@ -19,6 +20,7 @@ export function usePlayerController() {
   const [selectedCode, setSelectedCode] = useState<string | null>(null);
   const [filter, setFilter] = useState("Todas");
   const [categoryFilter, setCategoryFilter] = useState("Todas");
+  const [search, setSearch] = useState("");
   const [progress, setProgress] = useState({ total_points: 0, challenges_completed: 0 });
   const [message, setMessage] = useState<string | null>(null);
 
@@ -40,6 +42,7 @@ export function usePlayerController() {
     if (challengesResult.status === "fulfilled") {
       setChallenges(challengesResult.value);
       setSelectedCode((current) => current || challengesResult.value[0]?.code || null);
+      observeAssignedChallenges(userId, challengesResult.value.map((challenge) => challenge.id));
     } else {
       errors.push("retos");
     }
@@ -71,7 +74,7 @@ export function usePlayerController() {
     if (errors.length) {
       setMessage(`No se pudieron cargar: ${errors.join(", ")}.`);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     void load();
@@ -79,39 +82,34 @@ export function usePlayerController() {
 
   /** Suscribe el jugador a actualizaciones del ranking en tiempo real. */
   useEffect(() => {
-    const token = session.get();
-    if (!token) return;
-
-    const protocol = location.protocol === "https:" ? "wss" : "ws";
-    const ws = new WebSocket(
-      `${protocol}://${location.host}/api/v1/ws/ranking?token=${encodeURIComponent(token)}`,
-    );
-
-    ws.onmessage = (event) => {
-      try {
-        const payload = JSON.parse(event.data);
-        if (payload.type === "ranking.updated") {
-          setRanking(payload.rows);
-        }
-      } catch {
-        // Los eventos inválidos no deben romper la sesión del jugador.
-      }
-    };
-
-    return () => ws.close();
+    let disposed = false;
+    let socket: WebSocket | null = null;
+    // Ticket HttpOnly de un uso: el JWT no viaja en URLs ni logs del proxy.
+    void api.rankingSession().then((ticket) => {
+      if (disposed || ticket.websocket_path !== "/api/v1/ws/ranking") return;
+      const protocol = location.protocol === "https:" ? "wss" : "ws";
+      socket = new WebSocket(`${protocol}://${location.host}${ticket.websocket_path}`);
+      socket.onmessage = (event) => {
+        try {
+          const payload = JSON.parse(event.data);
+          if (payload.type === "ranking.updated") setRanking(payload.rows);
+        } catch { /* Un evento inválido no interrumpe la sesión. */ }
+      };
+    }).catch(() => { /* El ranking HTTP sigue disponible. */ });
+    return () => { disposed = true; socket?.close(); };
   }, []);
 
-  const selected = challenges.find((item) => item.code === selectedCode) || null;
+  const visibleChallenges = useMemo(() => {
+    const normalize = (value: string) => value.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase();
+    const query = normalize(search.trim());
+    return challenges.filter((item) =>
+      (filter === "Todas" || item.difficulty === filter) &&
+      (categoryFilter === "Todas" || inferCategory(item) === categoryFilter) &&
+      (!query || normalize([item.code, item.name, item.description, item.category, item.mitre_technique].join(" ")).includes(query)),
+    );
+  }, [challenges, filter, categoryFilter, search]);
 
-  const visibleChallenges = useMemo(
-    () =>
-      challenges.filter(
-        (item) =>
-          (filter === "Todas" || item.difficulty === filter) &&
-          (categoryFilter === "Todas" || item.category === categoryFilter),
-      ),
-    [challenges, filter, categoryFilter],
-  );
+  const selected = visibleChallenges.find((item) => item.code === selectedCode) || visibleChallenges[0] || null;
 
   /** Agrupa los retos para la pantalla de categorías. */
   const categories = useMemo(() => {
@@ -129,18 +127,25 @@ export function usePlayerController() {
     return map;
   }, [challenges]);
 
-  /** Inicia un reto y abre la conexión Guacamole entregada por el backend. */
+  /**
+   * Inicia un reto y lleva al estudiante a su espacio de laboratorio.
+   *
+   * La URL de Guacamole se conserva como contingencia, pero no se abre de
+   * forma automática: un enlace opaco no equivale a una sesión embebida ni
+   * debe sacar al estudiante de la experiencia principal.
+   */
   const start = async (code: string) => {
     try {
       const run = await api.start(code);
       setRuns((old) => [run, ...old.filter((item) => item.challenge_code !== code)]);
-      setMessage("El entorno está listo. Guacamole se abrirá en una nueva pestaña.");
-
-      if (run.launch_url) {
-        window.open(run.launch_url, "_blank", "noopener,noreferrer");
-      }
+      setSelectedCode(code);
+      setView("challenges");
+      setMessage("Instancia asignada. La terminal está integrada en el reto.");
+      publishNotification(userId, "lab.ready");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "No se pudo iniciar el reto");
+      publishNotification(userId, "lab.error");
+      throw err;
     }
   };
 
@@ -148,18 +153,29 @@ export function usePlayerController() {
   const closeRun = async (id: number) => {
     try {
       await api.closeRun(id);
+      setRuns((current) => current.filter((run) => run.id !== id));
+      sessionStorage.removeItem(`ctf-laboratory-notes:${id}`);
       await load();
       setMessage("Sesión cerrada. La evidencia dinámica de la VM fue limpiada.");
+      publishNotification(userId, "lab.closed");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "No se pudo cerrar la sesión");
+      publishNotification(userId, "lab.close_error");
+      throw err;
     }
   };
 
   /** Envía una flag al backend y actualiza el progreso mostrado. */
   const submit = async (code: string, value: string) => {
-    const result = await api.submit(code, value);
-    await load();
-    return result;
+    try {
+      const result = await api.submit(code, value);
+      publishNotification(userId, result.correct ? "flag.correct" : "flag.incorrect");
+      await load();
+      return result;
+    } catch (error) {
+      publishNotification(userId, "flag.error");
+      throw error;
+    }
   };
 
   return {
@@ -177,6 +193,8 @@ export function usePlayerController() {
     setFilter,
     categoryFilter,
     setCategoryFilter,
+    search,
+    setSearch,
     progress,
     message,
     setMessage,

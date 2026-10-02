@@ -13,9 +13,9 @@ import {
   UserFunction,
   Laboratory,
   LabVM,
-  DEFAULT_LABORATORIES,
 } from "../config";
 import { mapBackendLaboratory, mapBackendVM } from "../components/laboratory";
+import { FlagDraft, hasFlagDraftChanges } from "../lib/challengeFlagChanges";
 
 const defaultUserFunction = (role: User["role"]): UserFunction =>
   role === "admin"
@@ -101,31 +101,12 @@ export function useManagementController({
 
   /* ---------------- LABORATORIOS ---------------- */
 
-  const [laboratories, setLaboratories] =
-    useState<Laboratory[]>(() => {
-      const saved =
-        localStorage.getItem(
-          "ctf-laboratories"
-        );
+  // El inventario administrativo debe provenir del servidor. Un respaldo
+  // local puede aparentar VMs operativas que no existen en PostgreSQL.
+  const [laboratories, setLaboratories] = useState<Laboratory[]>([]);
+  const [laboratoryError, setLaboratoryError] = useState<string | null>(null);
 
-      if (!saved) {
-        return DEFAULT_LABORATORIES;
-      }
-
-      try {
-        return JSON.parse(
-          saved
-        ) as Laboratory[];
-      } catch {
-        return DEFAULT_LABORATORIES;
-      }
-    });
-
-  const [selectedLabId, setSelectedLabId] =
-    useState<string | null>(
-      DEFAULT_LABORATORIES[0]?.id ??
-        null
-    );
+  const [selectedLabId, setSelectedLabId] = useState<string | null>(null);
 
   const [labFormOpen, setLabFormOpen] =
     useState(false);
@@ -178,15 +159,6 @@ export function useManagementController({
   const [guacamolePermissionsOpen, setGuacamolePermissionsOpen] = useState(false);
 
 
-
-  useEffect(() => {
-    localStorage.setItem(
-      "ctf-laboratories",
-      JSON.stringify(
-        laboratories
-      )
-    );
-  }, [laboratories]);
 
   const selectedLab =
     laboratories.find(
@@ -284,6 +256,11 @@ export function useManagementController({
 
   const deleteGuacamoleManagedUser = async (target: import("../api").GuacamoleUser) => {
     if (!isAdmin) return;
+    if (users.some((item) => item.username.toLowerCase() === target.username.toLowerCase())) {
+      setView("users");
+      setMessage("Esta cuenta también existe en CTF. Gestiona su acceso desde Usuarios y roles; el historial de retos se conserva.");
+      return;
+    }
     if (!window.confirm(`¿Eliminar ${target.username} de Guacamole?`)) return;
     try { await api.deleteGuacamoleUser(target.username); await loadGuacamole(); setMessage("Usuario eliminado de Guacamole."); } catch (err) { setMessage(err instanceof Error ? err.message : "No se pudo eliminar el usuario remoto."); }
   };
@@ -344,26 +321,31 @@ export function useManagementController({
           }
         }
 
-        try {
-          const backendLabs = await api.laboratories();
-          if (backendLabs.length) {
-            const mappedLabs = backendLabs.map(mapBackendLaboratory);
-            setLaboratories(mappedLabs);
-            setSelectedLabId((current) =>
-              mappedLabs.some((item) => item.id === current)
-                ? current
-                : mappedLabs[0]?.id ?? null
-            );
-          }
-        } catch {
-          // Mantener inventario local de respaldo.
-        }
       } catch (err) {
         setMessage(
           err instanceof Error
             ? err.message
             : "No se pudo cargar el panel"
         );
+      }
+
+      // El inventario se consulta incluso si falló la carga de retos/ranking;
+      // nunca debe quedar una copia local o una respuesta anterior aparentando
+      // ser el estado actual de PostgreSQL.
+      try {
+        const backendLabs = await api.laboratories();
+        const mappedLabs = backendLabs.map(mapBackendLaboratory);
+        setLaboratories(mappedLabs);
+        setLaboratoryError(null);
+        setSelectedLabId((current) =>
+          mappedLabs.some((item) => item.id === current)
+            ? current
+            : mappedLabs[0]?.id ?? null
+        );
+      } catch {
+        setLaboratories([]);
+        setSelectedLabId(null);
+        setLaboratoryError("No se pudo consultar el inventario real. No se muestran datos locales ni se permiten cambios hasta reconectar con la API.");
       }
 
       try {
@@ -442,7 +424,7 @@ export function useManagementController({
    * Mantener esta función como orquestador evita mezclar llamadas de API
    * dentro de los formularios visuales.
    */
-  const saveChallenge = async (input: Omit<Challenge,"id"|"completed"|"flag_count"|"flags">, draftFlags: Array<{id?:number;label:string;mode:"static"|"dynamic";value:string;template:string;flag_order:number;is_active:boolean}>, groupIds: number[] = []) => {
+  const saveChallenge = async (input: Omit<Challenge,"id"|"completed"|"flag_count"|"flags">, draftFlags: FlagDraft[], groupIds: number[] = []) => {
     let saved: Challenge;
     if (editing) saved = await api.updateChallenge(editing.code, input);
     else saved = await api.createChallenge(input);
@@ -452,7 +434,12 @@ export function useManagementController({
     }
     for (const flag of draftFlags) {
       const payload = { label: flag.label.trim(), value: flag.mode === "static" ? (flag.value.trim() || undefined) : undefined, flag_order: flag.flag_order, is_active: flag.is_active, mode: flag.mode, template: flag.mode === "dynamic" ? flag.template.trim() : undefined };
-      if (flag.id) await api.updateFlag(saved.code, flag.id, payload);
+      if (flag.id) {
+        const original = existing.find((item) => item.id === flag.id);
+        if (hasFlagDraftChanges(original, flag, editing?.code ?? saved.code)) {
+          await api.updateFlag(saved.code, flag.id, payload);
+        }
+      }
       else await api.createFlag(saved.code, payload);
     }
     const desired = new Set(groupIds);
@@ -665,6 +652,10 @@ export function useManagementController({
 
   const saveLaboratory = async (laboratory: Laboratory) => {
     if (!isAdmin) return;
+    if (laboratoryError) {
+      setMessage(laboratoryError);
+      return;
+    }
     const payload = {
       code: laboratory.code,
       name: laboratory.name,
@@ -683,18 +674,19 @@ export function useManagementController({
       setLabFormOpen(false);
       setMessage(isPersisted ? "Laboratorio actualizado correctamente." : "Laboratorio creado y guardado en la base de datos.");
     } catch (err) {
-      // El fallback local permite continuar con una instalación anterior sin los endpoints nuevos.
-      setLaboratories((current) => current.some((lab) => lab.id === laboratory.id) ? current.map((lab) => lab.id === laboratory.id ? laboratory : lab) : [...current, laboratory]);
-      setSelectedLabId(laboratory.id);
-      setMessage(err instanceof Error ? `${err.message} · Se conservó el cambio local.` : "No se pudo persistir el laboratorio.");
+      setMessage(err instanceof Error ? err.message : "No se pudo persistir el laboratorio.");
     }
   };
 
   const removeLaboratory = async (laboratory: Laboratory) => {
     if (!isAdmin) return;
+    if (laboratoryError || !/^\d+$/.test(laboratory.id)) {
+      setMessage("Solo se pueden modificar laboratorios confirmados por el servidor.");
+      return;
+    }
     if (!window.confirm(`¿Eliminar ${laboratory.name}? Esta acción elimina también sus VMs registradas en la plataforma.`)) return;
     try {
-      if (/^\d+$/.test(laboratory.id)) await api.deleteLaboratory(Number(laboratory.id));
+      await api.deleteLaboratory(Number(laboratory.id));
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "No se pudo eliminar el laboratorio.");
       return;
@@ -706,6 +698,10 @@ export function useManagementController({
 
   const saveVM = async (laboratoryId: string, vm: LabVM) => {
     if (!isAdmin) return;
+    if (laboratoryError || !/^\d+$/.test(laboratoryId)) {
+      setMessage("Selecciona un laboratorio confirmado por el servidor antes de guardar una VM.");
+      return;
+    }
     const targetLab = laboratories.find((lab) => lab.id === laboratoryId);
     if (!targetLab) return;
     const payload = {
@@ -718,30 +714,29 @@ export function useManagementController({
       subnet: vm.subnet || (vm.vlan === "VLAN 20" ? "10.10.20.0/24" : "10.10.30.0/24"),
       network_role: vm.networkRole || (vm.vlan === "VLAN 20" ? "Atacantes" : "Víctimas"),
       profile: vm.profile.toLowerCase(),
-      status: "ready",
+      status: vm.status || "planned",
       guacamole_connection_id: vm.guacamoleConnectionId || null,
     } as const;
     try {
-      if (/^\d+$/.test(laboratoryId)) {
-        const isPersisted = /^\d+$/.test(vm.id);
-        const saved = isPersisted ? await api.updateVM(Number(vm.id), payload) : await api.createVM(payload);
-        const mapped = mapBackendVM(saved);
-        setLaboratories((current) => current.map((lab) => lab.id === laboratoryId ? { ...lab, vms: lab.vms.some((item) => item.id === vm.id) ? lab.vms.map((item) => item.id === vm.id ? mapped : item) : [...lab.vms, mapped] } : lab));
-      } else {
-        setLaboratories((current) => current.map((lab) => lab.id === laboratoryId ? { ...lab, vms: lab.vms.some((item) => item.id === vm.id) ? lab.vms.map((item) => item.id === vm.id ? vm : item) : [...lab.vms, vm] } : lab));
-      }
+      const isPersisted = /^\d+$/.test(vm.id);
+      const saved = isPersisted ? await api.updateVM(Number(vm.id), payload) : await api.createVM(payload);
+      const mapped = mapBackendVM(saved);
+      setLaboratories((current) => current.map((lab) => lab.id === laboratoryId ? { ...lab, vms: lab.vms.some((item) => item.id === vm.id) ? lab.vms.map((item) => item.id === vm.id ? mapped : item) : [...lab.vms, mapped] } : lab));
       setMessage("Máquina virtual guardada correctamente.");
     } catch (err) {
-      setLaboratories((current) => current.map((lab) => lab.id === laboratoryId ? { ...lab, vms: lab.vms.some((item) => item.id === vm.id) ? lab.vms.map((item) => item.id === vm.id ? vm : item) : [...lab.vms, vm] } : lab));
-      setMessage(err instanceof Error ? `${err.message} · Se conservó el cambio local.` : "No se pudo persistir la VM.");
+      setMessage(err instanceof Error ? err.message : "No se pudo persistir la VM.");
     }
   };
 
   const removeVM = async (laboratoryId: string, vm: LabVM) => {
     if (!isAdmin) return;
+    if (laboratoryError || !/^\d+$/.test(vm.id) || !/^\d+$/.test(laboratoryId)) {
+      setMessage("Solo se pueden modificar VMs confirmadas por el servidor.");
+      return;
+    }
     if (!window.confirm(`¿Eliminar la VM ${vm.name}?`)) return;
     try {
-      if (/^\d+$/.test(vm.id)) await api.deleteVM(Number(vm.id));
+      await api.deleteVM(Number(vm.id));
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "No se pudo eliminar la VM.");
       return;
@@ -760,7 +755,7 @@ export function useManagementController({
     userFormOpen, setUserFormOpen, userEditing, setUserEditing,
     ranking, groups, progressRows, setProgressRows, message, setMessage,
     editing, setEditing, creating, setCreating,
-    laboratories, setLaboratories, selectedLabId, setSelectedLabId,
+    laboratories, setLaboratories, laboratoryError, selectedLabId, setSelectedLabId,
     selectedLab, labFormOpen, setLabFormOpen, labEditing, setLabEditing,
     vmFormOpen, setVmFormOpen, vmEditing, setVmEditing,
     guacamoleConnections, guacamoleMode,

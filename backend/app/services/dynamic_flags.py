@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import re
 
 from sqlalchemy import select
 
@@ -30,11 +31,17 @@ class DynamicFlagRuntime:
         self.flags = flag_service or FlagService()
         self.settings = get_settings()
 
-    def path_for(self, flag: ChallengeFlag) -> str:
+    def path_for(self, flag: ChallengeFlag, challenge_code: str) -> str:
         template = self.settings.flag_injector_flag_path
+        if "{{CODE}}" in template:
+            if not re.fullmatch(r"[A-Z0-9-]{3,64}", challenge_code):
+                raise ValueError("El código del reto no es válido para una ruta de flag")
+            template = template.replace("{{CODE}}", challenge_code)
         path = template.replace("{{ORDER}}", str(flag.flag_order))
-        if not path.startswith("/opt/ctf/"):
-            raise ValueError("FLAG_INJECTOR_FLAG_PATH debe permanecer dentro de /opt/ctf")
+        if (not path.startswith("/opt/ctf/") or path.endswith("/")
+                or any(part in ("", ".", "..") for part in path.split("/")[3:])
+                or "{{" in path or "}}" in path or any(ord(char) < 32 for char in path)):
+            raise ValueError("FLAG_INJECTOR_FLAG_PATH debe apuntar a un archivo dentro de /opt/ctf")
         return path
 
     async def prepare(
@@ -57,7 +64,7 @@ class DynamicFlagRuntime:
 
         prepared: list[PreparedDynamicFlag] = []
         for flag in sorted(dynamic_flags, key=lambda item: item.flag_order):
-            path = self.path_for(flag)
+            path = self.path_for(flag, challenge.code)
             _mode, template = effective_mode_template(challenge.code, flag)
             if not template:
                 raise ValueError(f"La flag dinámica {flag.label or flag.id} no tiene plantilla efectiva")
@@ -99,4 +106,4 @@ class DynamicFlagRuntime:
         # Limpia por las rutas efectivas, no solo por las filas ChallengeRunFlag.
         # Es necesario para recuperarse de una inyección parcial seguida de rollback.
         for flag in sorted(dynamic_ids.values(), key=lambda item: item.flag_order):
-            await self.injector.clear(target_vm.ip_address, self.path_for(flag), target_vm.os)
+            await self.injector.clear(target_vm.ip_address, self.path_for(flag, challenge.code), target_vm.os)

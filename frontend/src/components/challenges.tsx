@@ -8,6 +8,11 @@ import { createElement, FormEvent, useCallback, useEffect, useMemo, useState } f
 import { api, Challenge, Run } from "../api";
 import { difficultyStyle, categoryMeta } from "../config";
 import { Icon, ErrorMessage } from "./common";
+import { LaboratoryRunWorkspace } from "./player/LaboratoryRunWorkspace";
+import { needsLaboratoryCleanup } from "../lib/laboratoryRunState";
+import { ChallengeLearningResources } from "./ChallengeLearningResources";
+import { ChallengeResource, MAX_CHALLENGE_RESOURCES, parseChallengeResources, serializeChallengeResources } from "../lib/challengeResources";
+import { initialFlagTemplate } from "../lib/challengeFlagChanges";
 
 export function challengeInternalLevel(
   difficulty: Challenge["difficulty"]
@@ -92,262 +97,101 @@ export function ChallengeDetail({
   runs,
   onStart,
   onSubmit,
-  username,
+  onClose,
 }: {
   challenge: Challenge | null;
   runs: Run[];
-  onStart: (
-    code: string
-  ) => Promise<void>;
-  onSubmit: (
-    code: string,
-    flag: string
-  ) => Promise<{
+  onStart: (code: string) => Promise<void>;
+  onSubmit: (code: string, flag: string) => Promise<{
     correct: boolean;
     challenge_completed: boolean;
     awarded_points: number;
     message: string;
   }>;
-  username?: string;
+  onClose: (runId: number) => Promise<void>;
 }) {
-  const [flag, setFlag] =
-    useState("");
+  const [starting, setStarting] = useState(false);
+  const [startError, setStartError] = useState<string | null>(null);
+  const learning = useMemo(() => parseChallengeResources(challenge?.instructions ?? ""), [challenge?.instructions]);
 
-  const [busy, setBusy] =
-    useState(false);
-
-  const [notice, setNotice] =
-    useState<{
-      message: string;
-      kind: "error" | "success";
-    } | null>(null);
-
-  const [submissionResult, setSubmissionResult] = useState<{
-    correct: boolean;
-    completed: boolean;
-    awarded: number;
-  } | null>(null);
+  useEffect(() => {
+    setStarting(false);
+    setStartError(null);
+  }, [challenge?.code]);
 
   if (!challenge) {
     return (
       <div className="detail-empty">
-        Selecciona un reto para acceder al
-        laboratorio, seguir las instrucciones
-        y enviar la flag.
+        Selecciona uno de tus retos para leer las instrucciones y abrir su laboratorio.
       </div>
     );
   }
 
-  const activeRun =
-    runs.find(
-      (run) =>
-        run.challenge_code ===
-          challenge.code &&
-        run.status === "active"
-    );
-
-  const submit = async (
-    event: FormEvent
-  ) => {
-    event.preventDefault();
-
-    if (!flag.trim()) return;
-
-    setBusy(true);
-    setNotice(null);
-
+  const activeRun = runs.find((run) => run.challenge_code === challenge.code && needsLaboratoryCleanup(run));
+  const startLaboratory = async () => {
+    setStarting(true);
+    setStartError(null);
     try {
-      const result =
-        await onSubmit(
-          challenge.code,
-          flag
-        );
-
-      setFlag("");
-      setSubmissionResult({ correct: result.correct, completed: result.challenge_completed, awarded: result.awarded_points });
-
-      setNotice({
-        message: result.message,
-        kind: result.correct
-          ? "success"
-          : "error",
-      });
-    } catch (err) {
-      setNotice({
-        message:
-          err instanceof Error
-            ? err.message
-            : "No se pudo enviar la flag",
-        kind: "error",
-      });
+      await onStart(challenge.code);
+    } catch (error) {
+      setStartError(error instanceof Error ? error.message : "No se pudo iniciar el laboratorio.");
     } finally {
-      setBusy(false);
+      setStarting(false);
     }
   };
 
   return (
-    <section className="detail-panel">
+    <section className="detail-panel challenge-detail" aria-label={`Detalle del reto ${challenge.name}`}>
       <div className="detail-header">
-        <div>
-          <span className="challenge-code">
-            {challenge.code}
-          </span>
-
-          <h2>
-            {challenge.name}
-          </h2>
-        </div>
-
-        <span
-          className={`difficulty ${
-            difficultyStyle[
-              challenge.difficulty
-            ]
-          }`}
-        >
-          {challenge.difficulty}
-        </span>
+        <div><span className="challenge-code">{challenge.code}</span><h2>{challenge.name}</h2></div>
+        <span className={`difficulty ${difficultyStyle[challenge.difficulty]}`}>{challenge.difficulty}</span>
+      </div>
+      <p className="detail-description">{challenge.description}</p>
+      <div className="challenge-summary">
+        <span className="challenge-category">{challenge.category}</span>
+        <span>{challenge.mitre_technique}</span>
+        <strong className="accent-text">{challenge.points} pts</strong>
+        {challenge.completed && <span className="completed-chip"><Icon name="check" />Completado</span>}
       </div>
 
-      <p className="detail-description">
-        {challenge.description}
-      </p>
-
-      <div className="workspace-card challenge-run-card">
-        <div>
-          <span className="eyebrow accent">LABORATORIO ASIGNADO</span>
-          <h3>{activeRun?.target_vm_name || "Entorno de práctica"}</h3>
-          <p>
-            {activeRun?.laboratory_code || "Laboratorio CTF"}
-            {activeRun?.target_vm_ip ? ` · ${activeRun.target_vm_ip}` : ""}
-            {activeRun?.target_protocol
-              ? ` · ${activeRun.target_protocol.toUpperCase()}`
-              : " · SSH"}
-          </p>
-          <small>
-            Cuenta CTF / Guacamole: <strong>{username || "usuario actual"}</strong>
-          </small>
-        </div>
-
-        {activeRun?.launch_url ? (
-          <a
-            href={activeRun.launch_url}
-            target="_blank"
-            rel="noreferrer"
-            className="primary-action"
-          >
-            <Icon name="play" /> Abrir máquina asignada
-          </a>
-        ) : (
-          <button
-            type="button"
-            className="primary-action"
-            onClick={() => onStart(challenge.code)}
-            disabled={busy}
-          >
-            <Icon name="play" />
-            {challenge.completed
-              ? "Reabrir entorno de práctica"
-              : "Abrir máquina asignada"}
-          </button>
-        )}
-      </div>
-
-      <details className="challenge-accordion">
-        <summary>
-          <span>
-            Información y configuración del reto
-          </span>
-
-          <small>
-            Mostrar detalles
-          </small>
-        </summary>
-
-        <div className="detail-meta">
-          <div>
-            <span>
-              CATEGORÍA
-            </span>
-
-            <strong>
-              {challenge.category}
-            </strong>
-          </div>
-
-          <div>
-            <span>
-              DIFICULTAD
-            </span>
-
-            <strong>
-              {challenge.difficulty}
-            </strong>
-          </div>
-
-          <div>
-            <span>
-              PUNTAJE
-            </span>
-
-            <strong className="accent-text">
-              {challenge.points} pts
-            </strong>
-          </div>
-
-          <div>
-            <span>
-              ESCENARIO
-            </span>
-
-            <strong>
-              {challenge.scenario ||
-                "CTF general"}
-            </strong>
-          </div>
-
-          <div>
-            <span>MITRE</span>
-
-            <strong>
-              {challenge.mitre_technique}
-            </strong>
-          </div>
-
-          <div>
-            <span>
-              ACTIVOS
-            </span>
-
-            <strong>
-              {challenge.asset_references.join(
-                " · "
-              ) ||
-                "Por definir"}
-            </strong>
-          </div>
+      <details className="challenge-accordion" open>
+        <summary><span>Objetivo e instrucciones</span><small>Guía del reto</small></summary>
+        <div className="instruction-box">
+          <p className="challenge-instructions">{learning.instructions || "Sigue las indicaciones del instructor para este laboratorio."}</p>
         </div>
       </details>
 
+      <ChallengeLearningResources resources={learning.resources} topic={challenge.category} />
+
+      {activeRun ? (
+        <LaboratoryRunWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} />
+      ) : (
+        <section className="laboratory-start-panel" aria-label="Inicio de laboratorio" aria-busy={starting}>
+          <div className="laboratory-start-heading">
+            <div><span className="eyebrow accent">LABORATORIO</span><h3>Prepara tu espacio de práctica</h3></div>
+            <span className="muted-chip">{starting ? "Preparando" : "Sin sesión activa"}</span>
+          </div>
+          <ol className="laboratory-flow" aria-label="Pasos del laboratorio">
+            <li><span>1</span>Inicia tu instancia</li>
+            <li><span>2</span>Investiga en la terminal</li>
+            <li><span>3</span>Pega y valida la flag</li>
+          </ol>
+          <p>La terminal, el bloc de notas y el envío de flag aparecerán aquí cuando tu entorno esté listo.</p>
+          {challenge.completed && <p className="practice-note">Puedes practicar de nuevo. Los puntos de este reto se otorgan una sola vez.</p>}
+          <ErrorMessage message={startError} />
+          <button type="button" className="primary-action" onClick={() => void startLaboratory()} disabled={starting}>
+            <Icon name="play" />{starting ? "Preparando laboratorio…" : challenge.completed ? "Reabrir entorno de práctica" : "Iniciar laboratorio"}
+          </button>
+        </section>
+      )}
+
       <details className="challenge-accordion">
-        <summary>
-          <span>
-            Objetivo e instrucciones
-          </span>
-
-          <small>
-            Mostrar detalles
-          </small>
-        </summary>
-
-        <div className="instruction-box">
-          <span>
-            OBJETIVO DEL RETO
-          </span>
-
-          <p>
-            {challenge.instructions}
-          </p>
+        <summary><span>Información del escenario</span><small>Ver detalles</small></summary>
+        <div className="detail-meta">
+          <div><span>CATEGORÍA</span><strong>{challenge.category}</strong></div>
+          <div><span>DIFICULTAD</span><strong>{challenge.difficulty}</strong></div>
+          <div><span>ESCENARIO</span><strong>{challenge.scenario || "CTF general"}</strong></div>
+          <div><span>ACTIVOS ASIGNADOS</span><strong>{challenge.asset_references.join(" · ") || "Definidos al iniciar"}</strong></div>
         </div>
       </details>
 
@@ -358,231 +202,13 @@ export function ChallengeDetail({
         </div>
         {challenge.code === "LAB-01" ? (
           <div className="hint-list">
-            <details><summary>Pista 1 · reconocimiento</summary><p>Comienza identificando qué servicios escucha la víctima <strong>192.168.146.137</strong>. Desde la Kali atacante puedes usar <code>nmap -sV 192.168.146.137</code>.</p></details>
-            <details><summary>Pista 2 · acceso</summary><p>Cuando confirmes SSH, utiliza las credenciales entregadas por el instructor y entra por el puerto identificado. No necesitas cambiar la configuración del servidor.</p></details>
-            <details><summary>Pista 3 · localización</summary><p>Una vez dentro, piensa en archivos destinados a ejercicios CTF. La ruta preparada para este laboratorio es <code>/opt/ctf/flag.txt</code>.</p></details>
+            <details><summary>Pista 1 · reconocimiento</summary><p>Identifica los servicios del objetivo asignado. Usa únicamente los activos indicados en las instrucciones de este reto.</p></details>
+            <details><summary>Pista 2 · acceso</summary><p>Utiliza la terminal del laboratorio y las indicaciones del instructor para investigar el sistema.</p></details>
+            <details><summary>Pista 3 · localización</summary><p>Busca los archivos destinados al ejercicio CTF. La ruta preparada para este laboratorio es <code>/opt/ctf/flag.txt</code>.</p></details>
           </div>
         ) : (
-          <div className="hint-list"><details><summary>Sugerencia</summary><p>Lee el objetivo y divide el reto en pequeñas comprobaciones antes de intentar una respuesta final.</p></details></div>
+          <div className="hint-list"><details><summary>Sugerencia</summary><p>Lee el objetivo y divide el reto en pequeñas comprobaciones antes de enviar tu respuesta.</p></details></div>
         )}
-      </div>
-
-      {submissionResult && (
-        <div className={`result-card ${submissionResult.correct ? "success" : "error"}`}>
-          <div className="result-icon">{submissionResult.correct ? "✓" : "!"}</div>
-          <div><span className="eyebrow">RESULTADO DE LA RESPUESTA</span><h3>{submissionResult.correct ? (submissionResult.completed ? "Reto completado" : "Flag correcta") : "Respuesta incorrecta"}</h3><p>{submissionResult.correct ? (submissionResult.completed ? `Has obtenido +${submissionResult.awarded} puntos.` : "Continúa con los objetivos restantes del ejercicio.") : "La respuesta no coincide con la flag esperada. Revisa las pistas y vuelve a intentarlo."}</p></div>
-          {submissionResult.completed && <strong className="result-score">+{submissionResult.awarded} pts</strong>}
-        </div>
-      )}
-
-      <ErrorMessage
-        message={
-          notice?.message ?? null
-        }
-        kind={
-          notice?.kind ??
-          "error"
-        }
-      />
-
-      <div className="workspace-grid">
-        <div className="workspace-card">
-          <div className="workspace-top">
-            <div>
-              <span className="eyebrow">
-                LABORATORIO
-              </span>
-
-              <h3>
-                Entorno del reto
-              </h3>
-            </div>
-
-            <span
-              className={
-                activeRun
-                  ? "ready-chip"
-                  : "muted-chip"
-              }
-            >
-              {activeRun
-                ? "Entorno listo"
-                : "Sin sesión"}
-            </span>
-          </div>
-
-          <div className="terminal-preview terminal-large">
-            <div className="terminal-bar">
-              <span>●</span>
-              <span>●</span>
-              <span>●</span>
-
-              <b>
-                guacamole /{" "}
-                {challenge.code.toLowerCase()}
-              </b>
-            </div>
-
-            <div className="terminal-body">
-              <div>
-                <span className="prompt">
-                  kali@redteam:~$
-                </span>{" "}
-                sudo nmap -sV objetivo
-              </div>
-
-              <div className="terminal-dim">
-                [+] Escenario autorizado:{" "}
-                {challenge.code}
-              </div>
-
-              <div className="terminal-dim">
-                [+] Activos:{" "}
-                {challenge.asset_references.join(
-                  ", "
-                )}
-              </div>
-
-              <div className="terminal-cursor">
-                █
-              </div>
-            </div>
-          </div>
-
-          <div className="workspace-actions">
-            {activeRun ? (
-              <a
-                className="primary-action"
-                href={
-                  activeRun.launch_url
-                }
-                target="_blank"
-                rel="noreferrer"
-              >
-                <Icon name="play" />
-                Abrir Guacamole
-              </a>
-            ) : (
-              <button
-                className="primary-action"
-                onClick={() =>
-                  onStart(
-                    challenge.code
-                  )
-                }
-                disabled={busy}
-              >
-                <Icon name="play" />
-
-                {challenge.completed
-                  ? "Reabrir entorno de práctica"
-                  : "Iniciar laboratorio"}
-              </button>
-            )}
-
-            <span>
-              <Icon name="clock" />
-
-              {activeRun
-                ? `Activo hasta ${new Date(
-                    activeRun.expires_at
-                  ).toLocaleTimeString(
-                    [],
-                    {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    }
-                  )}`
-                : "El entorno se prepara al iniciar"}
-            </span>
-          </div>
-        </div>
-
-        <form
-          className="flag-panel flag-panel-large"
-          onSubmit={submit}
-        >
-          <div>
-            <span className="eyebrow">
-              ENVÍO DE FLAG
-            </span>
-
-            <h3>
-              ¿Encontraste la flag?
-            </h3>
-
-            <p>
-              Introduce la bandera obtenida
-              durante la resolución del reto.
-              La validación se realiza de forma
-              segura en el backend.
-            </p>
-          </div>
-
-          <div className="flag-submit-row">
-            <input
-              placeholder="FLAG{...}"
-              value={flag}
-              onChange={(e) =>
-                setFlag(
-                  e.target.value
-                )
-              }
-              disabled={
-                busy ||
-                !activeRun
-              }
-            />
-
-            <button
-              className="primary-action"
-              disabled={
-                busy ||
-                !activeRun
-              }
-            >
-              <Icon name="flag" />
-
-              {challenge.completed && !activeRun
-                ? "Reto completado"
-                : "Enviar flag"}
-            </button>
-          </div>
-
-          {challenge.completed && !activeRun ? (
-            <div className="flag-success">
-              <Icon name="check" />
-
-              Reto completado · {challenge.points} puntos obtenidos.
-              Puedes reabrir el entorno para prácticas adicionales; no se
-              otorgarán puntos nuevamente.
-            </div>
-          ) : (
-            <div className="flag-helper">
-              {challenge.completed
-                ? "Entorno de práctica activo. Las respuestas correctas posteriores no generan puntos adicionales."
-                : "Los intentos se registran para mantener la trazabilidad del CTF."}
-            </div>
-          )}
-
-          <div className="attempt-panel">
-            <div>
-              <span>ESTADO</span>
-
-              <strong>
-                {activeRun ? "Sesión activa" : challenge.completed ? "Completado" : "Pendiente"}
-              </strong>
-            </div>
-
-            <div>
-              <span>VALOR</span>
-
-              <strong>
-                {challenge.points} pts
-              </strong>
-            </div>
-          </div>
-        </form>
       </div>
     </section>
   );
@@ -648,7 +274,9 @@ export function ChallengeForm({
   const [primaryAsset, setPrimaryAsset] = useState(firstAsset);
   const [points, setPoints] = useState(String(initial?.points ?? 100));
   const [description, setDescription] = useState(initial?.description ?? "");
-  const [instructions, setInstructions] = useState(initial?.instructions ?? "");
+  const initialLearning = useMemo(() => parseChallengeResources(initial?.instructions ?? ""), [initial?.instructions]);
+  const [instructions, setInstructions] = useState(initialLearning.instructions);
+  const [resources, setResources] = useState<ChallengeResource[]>(initialLearning.resources);
   const [published, setPublished] = useState(initial?.is_published ?? true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -669,7 +297,7 @@ export function ChallengeForm({
       label: flag.label,
       mode: flag.mode ?? "static",
       value: "",
-      template: flag.template ?? `FLAG{${initial?.code ?? "CODE"}}-{{RUN_ID}}-{{RAND}}`,
+      template: initialFlagTemplate(flag, initial?.code ?? "CODE"),
       flag_order: flag.flag_order,
       is_active: flag.is_active,
     })) ?? []
@@ -747,7 +375,7 @@ export function ChallengeForm({
           asset_references: uniqueReferences,
           points: Number(points),
           description: description.trim(),
-          instructions: instructions.trim(),
+          instructions: serializeChallengeResources(instructions, resources),
           is_published: published,
         },
         flags,
@@ -799,6 +427,25 @@ export function ChallengeForm({
         <label className="form-full">Descripción<textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} required /></label>
         <label className="form-full">Instrucciones del reto<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={4} /></label>
 
+        <section className="learning-resource-editor">
+          <div className="panel-head">
+            <div><span className="eyebrow accent">MATERIAL POR TEMA</span><h3>Videos y presentaciones</h3><p>Asocia material de apoyo a este reto. Usa enlaces HTTPS o rutas de archivos alojados en la plataforma.</p></div>
+            <button type="button" className="secondary-action" disabled={resources.length >= MAX_CHALLENGE_RESOURCES} onClick={() => setResources((current) => [...current, { kind: "video", title: "", url: "" }])}>+ Añadir recurso</button>
+          </div>
+          {resources.map((resource, index) => (
+            <div className="learning-resource-editor-row" key={index}>
+              <div className="resource-editor-head"><strong>Recurso {index + 1}</strong><button type="button" className="table-action danger" onClick={() => setResources((current) => current.filter((_, itemIndex) => itemIndex !== index))}>Quitar recurso</button></div>
+              <div className="form-grid">
+                <label>Tipo de recurso<select value={resource.kind} onChange={(event) => setResources((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, kind: event.target.value as ChallengeResource["kind"] } : item))}><option value="video">Video</option><option value="presentation">Presentación</option></select></label>
+                <label>Título<input value={resource.title} maxLength={180} required onChange={(event) => setResources((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, title: event.target.value } : item))} placeholder="Introducción al tema" /></label>
+                <label className="form-span-2">URL del recurso<input value={resource.url} required maxLength={2048} onChange={(event) => setResources((current) => current.map((item, itemIndex) => itemIndex === index ? { ...item, url: event.target.value } : item))} placeholder="https://… o /media/material.pdf" /></label>
+              </div>
+            </div>
+          ))}
+          {!resources.length && <p className="resource-editor-empty">Añade un video explicativo o una presentación para acompañar las instrucciones.</p>}
+          <small className="field-help">Los videos de YouTube y los archivos MP4/WebM/OGG se reproducen dentro del reto. Las presentaciones se abren en su visor de origen. Máximo {MAX_CHALLENGE_RESOURCES} recursos.</small>
+        </section>
+
         <section className="glass-panel flag-builder">
           <div className="panel-head">
             <div><span className="eyebrow accent">FLAGS</span><h3>Validación del reto</h3><small>Las flags dinámicas se generan por ejecución, se inyectan en la VM víctima y solo se valida su hash asociado a esa ejecución.</small></div>
@@ -811,7 +458,10 @@ export function ChallengeForm({
                 <label>Etiqueta<input value={flag.label} onChange={(event) => updateFlag(index, { label: event.target.value })} /></label>
                 <label>Tipo<select value={flag.mode} onChange={(event) => updateFlag(index, { mode: event.target.value as Draft["mode"] })}><option value="static">Estática</option><option value="dynamic">Dinámica por ejecución</option></select></label>
                 {flag.mode === "static" ? (
-                  <label className="form-span-2">Valor<input value={flag.value} onChange={(event) => updateFlag(index, { value: event.target.value })} placeholder="FLAG{valor_estatico}" /></label>
+                  <div className="form-span-2 static-flag-guidance">
+                    <label>Valor<input type="password" autoComplete="new-password" value={flag.value} onChange={(event) => updateFlag(index, { value: event.target.value })} placeholder={flag.id ? "Deja vacío para conservar el valor existente" : "FLAG{valor_estatico}"} /></label>
+                    <small className="field-help">El backend no devuelve el valor existente; al guardar se registra únicamente el hash. Coloca el mismo valor manualmente en la VM o artefacto. No se inyecta ni se borra al cerrar una corrida. Usa una ruta exclusiva, distinta de la flag dinámica de LAB-01.</small>
+                  </div>
                 ) : (
                   <label className="form-span-2">Plantilla<input value={flag.template} onChange={(event) => updateFlag(index, { template: event.target.value })} /><small className="field-help">Variables: {'{{CODE}}'}, {'{{USER}}'}, {'{{RUN_ID}}'}, {'{{RAND}}'}</small></label>
                 )}

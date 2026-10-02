@@ -4,15 +4,17 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import Response
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import selectinload
 from ..core import get_settings, require_roles
-from ..models import Challenge, ChallengeFlag, ChallengeGroupAssignment, GroupMembership, Laboratory, StudentGroup, VMAsset
+from ..models import Challenge, ChallengeFlag, ChallengeGroupAssignment, ChallengeInstance, GroupMembership, Laboratory, StudentGroup, VMAsset
 from ..schemas import LaboratoryCreate, LaboratoryView, VMCreate, VMView
 from ..services.bootstrap import laboratory_view, vm_view, write_audit
-from ..domain.challenges.catalog import DEMO_VM_IPS
-from ..services.challenge_runtime import _asset_ref_key
+from ..domain.challenges.catalog import DEMO_VM_IPS, OPERATIONAL_VM_TARGETS
+from ..services.challenge_runtime import _asset_ref_key, _find_challenge_vm
 from ..services.runtime_flags import is_effectively_dynamic
+from ..services.lab_lock import reservation_key
+from ..domain.instances.states import InstanceState
 from ..guacamole import GuacamoleApiError
 
 
@@ -45,7 +47,7 @@ async def list_player_laboratories(request: Request, user=Depends(require_roles(
             return []
         labs = (await session.scalars(
             select(Laboratory).options(selectinload(Laboratory.vms)).where(
-                Laboratory.status.in_(("ready", "planned")),
+                Laboratory.status == "ready",
             ).order_by(Laboratory.id)
         )).unique().all()
         response: list[LaboratoryView] = []
@@ -55,6 +57,8 @@ async def list_player_laboratories(request: Request, user=Depends(require_roles(
             matching_lab = bool(normalized_refs.intersection(lab_keys))
             vm_views: list[VMView] = []
             for vm in lab.vms:
+                if vm.status != "ready" or OPERATIONAL_VM_TARGETS.get(vm.name.upper()) != vm.ip_address:
+                    continue
                 if not matching_lab and _asset_ref_key(vm.name) not in normalized_refs:
                     continue
                 guac_url = None
@@ -197,11 +201,45 @@ async def verify_ssh_lab(request: Request, _=Depends(require_roles("admin"))):
 
     async with request.app.state.session_factory() as session:
         vm = await session.scalar(select(VMAsset).where(VMAsset.name == vm_name))
+        same_ip_records = await session.scalar(select(func.count(VMAsset.id)).where(VMAsset.ip_address == target_ip))
         challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == challenge_code))
+        instance = await session.scalar(select(ChallengeInstance).where(ChallengeInstance.vm_asset_id == vm.id)) if vm else None
+        selected_lab, selected_vm = await _find_challenge_vm(session, challenge) if challenge else (None, None)
         dynamic_flags = [
             flag for flag in (challenge.flags if challenge else [])
             if is_effectively_dynamic(challenge_code, flag)
         ]
+
+    reservation_present = None
+    reservation_ttl_seconds = None
+    try:
+        reservation_present = bool(await request.app.state.redis.get(reservation_key(target_ip)))
+        if reservation_present:
+            reservation_ttl_seconds = max(0, int(await request.app.state.redis.ttl(reservation_key(target_ip))))
+    except Exception:
+        pass
+
+    ssh_reachable_from_api = None
+    injector_authenticated = None
+    preflight = getattr(request.app.state.flag_injector, "preflight", None)
+    if vm and preflight is not None:
+        try:
+            await preflight(target_ip)
+            ssh_reachable_from_api = True
+        except Exception:
+            ssh_reachable_from_api = False
+    probe_authentication = getattr(request.app.state.flag_injector, "probe_authentication", None)
+    if ssh_reachable_from_api is True and probe_authentication is not None:
+        try:
+            await probe_authentication(target_ip)
+            injector_authenticated = True
+        except Exception:
+            injector_authenticated = False
+    pool_available = instance is None or (
+        instance.state == InstanceState.AVAILABLE.value
+        and instance.run_id is None and instance.user_id is None
+    )
+    target_selection_matches = bool(vm and selected_lab and selected_vm and selected_vm.id == vm.id)
 
     return {
         "read_only": True,
@@ -215,9 +253,18 @@ async def verify_ssh_lab(request: Request, _=Depends(require_roles("admin"))):
         "database_state": {
             "vm_found": vm is not None,
             "vm_has_matching_ip": bool(vm and vm.ip_address == target_ip),
+            "target_selection_matches": target_selection_matches,
+            "same_ip_records": int(same_ip_records or 0),
             "vm_has_guacamole_id": bool(vm and vm.guacamole_connection_id),
             "challenge_found": challenge is not None,
             "dynamic_flag_count": len(dynamic_flags),
+            "pool_available": pool_available,
+        },
+        "runtime": {
+            "ssh_reachable_from_api": ssh_reachable_from_api,
+            "injector_authenticated": injector_authenticated,
+            "redis_reservation_present": reservation_present,
+            "redis_reservation_ttl_seconds": reservation_ttl_seconds,
         },
         "injector": {
             "enabled": settings.flag_injector_enabled,
@@ -230,10 +277,14 @@ async def verify_ssh_lab(request: Request, _=Depends(require_roles("admin"))):
             ssh_connection is not None,
             vm is not None,
             vm and vm.ip_address == target_ip,
-            vm and vm.guacamole_connection_id,
+            target_selection_matches,
             challenge is not None,
             len(dynamic_flags) >= 1,
             settings.flag_injector_enabled,
+            pool_available,
+            reservation_present is False,
+            ssh_reachable_from_api is True,
+            injector_authenticated is True,
         )),
     }
 

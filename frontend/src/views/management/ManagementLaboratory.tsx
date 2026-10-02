@@ -3,15 +3,26 @@
 // Responsabilidad: presentación de una sección del panel.
 // ============================================================
 
-import { createElement } from "react";
+import { createElement, useEffect, useState } from "react";
 import { Icon, StatCard } from "../../components/common";
 import { ConnectionAssignmentPanel } from "../../components/connectionAssignments";
+import { api } from "../../api";
 import type { ManagementController } from "../../controllers/useManagementController";
+import { operationalLaboratories } from "../../lib/operationalLabs";
+
+const OPERATIONAL_VM_TARGETS = new Map<string, string>([
+  ["LAB-KALI", "192.168.146.134"],
+  ["LAB-LNXVICT", "192.168.146.137"],
+]);
 
 export function ManagementLaboratory({ controller }: { controller: ManagementController }) {
+  const [showAllInventory, setShowAllInventory] = useState(false);
+  const [labDiagnostic, setLabDiagnostic] = useState<Awaited<ReturnType<typeof api.verifySSHLab>> | null>(null);
+  const [diagnosticError, setDiagnosticError] = useState("");
+  const [diagnosing, setDiagnosing] = useState(false);
   // Estado y datos que esta vista presenta.
   const {
-    user, isAdmin, laboratories, selectedLab, selectedLabId, users,
+    user, isAdmin, laboratories, laboratoryError, selectedLabId, users,
     guacamoleConnections, guacamoleUsers, guacamoleLoading, published,
     draft,
   } = controller;
@@ -23,6 +34,16 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
     setVmFormOpen, removeLaboratory, removeVM, loadStudentConnection,
     saveStudentConnection,
   } = controller;
+  const displayedLabs = showAllInventory
+    ? laboratories
+    : operationalLaboratories(laboratories, OPERATIONAL_VM_TARGETS);
+  const displayedSelectedLab = displayedLabs.find((lab) => lab.id === selectedLabId) ?? displayedLabs[0] ?? null;
+  useEffect(() => {
+    if (!showAllInventory) {
+      const visibleIds = operationalLaboratories(laboratories, OPERATIONAL_VM_TARGETS).map((lab) => lab.id);
+      if (!visibleIds.includes(selectedLabId ?? "")) setSelectedLabId(visibleIds[0] ?? null);
+    }
+  }, [showAllInventory, laboratories, selectedLabId, setSelectedLabId]);
   return (
 <section>
     <div className="page-heading">
@@ -35,6 +56,17 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
       </div>
 
       <div className="page-actions">
+        {isAdmin && <button type="button" className="secondary-action" disabled={diagnosing} onClick={() => {
+          setDiagnosing(true);
+          setDiagnosticError("");
+          void api.verifySSHLab().then(setLabDiagnostic).catch((error: unknown) => {
+            setLabDiagnostic(null);
+            setDiagnosticError(error instanceof Error ? error.message : "No se pudo verificar LAB-01.");
+          }).finally(() => setDiagnosing(false));
+        }}>{diagnosing ? "Comprobando…" : "Diagnosticar LAB-01"}</button>}
+        <button type="button" className="secondary-action" onClick={() => setShowAllInventory((value) => !value)}>
+          {showAllInventory ? "Solo operativos" : "Ver inventario completo"}
+        </button>
         <button
           className="secondary-action"
           onClick={() => void load()}
@@ -42,9 +74,10 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
           Actualizar inventario
         </button>
 
-        {isAdmin && (
+        {isAdmin && showAllInventory && (
           <button
             className="primary-action"
+            disabled={Boolean(laboratoryError)}
             onClick={() => {
               setLabEditing(null);
               setLabFormOpen(true);
@@ -56,31 +89,43 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
       </div>
     </div>
 
+    {laboratoryError && <div className="notice notice-error" role="alert">{laboratoryError}</div>}
+    {diagnosticError && <div className="notice notice-error" role="alert">{diagnosticError}</div>}
+    {labDiagnostic && <section className="glass-panel admin-panel" aria-label="Diagnóstico de LAB-01" role="status">
+      <div className="panel-head"><div><span className="eyebrow accent">SOLO LECTURA</span><h3>Diagnóstico de reapertura de LAB-01</h3></div><span className={labDiagnostic.ready_for_dynamic_lab ? "status-published" : "status-draft"}>{labDiagnostic.ready_for_dynamic_lab ? "Prerrequisitos OK" : "Requiere revisión"}</span></div>
+      <p>VM registrada: {labDiagnostic.database_state.vm_found && labDiagnostic.database_state.vm_has_matching_ip ? "Sí" : "No"} · Destino del reto: {labDiagnostic.database_state.target_selection_matches ? "LAB-LNXVICT confirmado" : "No coincide"} · Pool libre: {labDiagnostic.database_state.pool_available ? "Sí" : "No"} · Guacamole SSH: {labDiagnostic.guacamole.reachable && labDiagnostic.guacamole.ssh_connection_found ? "Sí" : "No"}</p>
+      <p>SSH desde API: {labDiagnostic.runtime.ssh_reachable_from_api === null ? "Sin comprobar" : labDiagnostic.runtime.ssh_reachable_from_api ? "Conectable" : "No conectable"} · Reserva Redis: {labDiagnostic.runtime.redis_reservation_present === null ? "Sin comprobar" : labDiagnostic.runtime.redis_reservation_present ? `Activa (${labDiagnostic.runtime.redis_reservation_ttl_seconds ?? "?"} s restantes)` : "Libre"} · Flags dinámicas: {labDiagnostic.database_state.dynamic_flag_count}</p>
+      <p>Autenticación SSH del inyector: {labDiagnostic.runtime.injector_authenticated === null ? "Sin comprobar" : labDiagnostic.runtime.injector_authenticated ? "Correcta" : "Fallida"}. Si falla, revisa la cuenta/clave configurada en la API sin copiarlas aquí.</p>
+      {labDiagnostic.database_state.same_ip_records > 1 && <p role="alert">Inventario: {labDiagnostic.database_state.same_ip_records} fichas usan la IP de la víctima. Revisa sus nombres, SO y rol antes de editar; LAB-01 solo seleccionará «LAB-LNXVICT».</p>}
+      <small>Esta comprobación no cambia Redis, PostgreSQL ni la VM; abre una sesión SSH y ejecuta «true». No prueba el script remoto ni sus permisos sudo: el inicio y cierre reales siguen siendo la verificación final.</small>
+    </section>}
+    {!laboratoryError && !showAllInventory && <p className="field-help">Se muestran solo LAB-KALI (192.168.146.134) y LAB-LNXVICT (192.168.146.137) si están marcadas como listas. Los demás registros siguen guardados; consulta «Ver inventario completo» para administrarlos.</p>}
+
     <div className="stats-grid">
       <StatCard
         label="Laboratorios"
-        value={laboratories.length}
-        helper="Entornos registrados"
+        value={displayedLabs.length}
+        helper={showAllInventory ? "Entornos registrados" : "Entornos con VM operativa"}
         icon="lab"
         accent="blue"
       />
       <StatCard
         label="Máquinas virtuales"
-        value={laboratories.reduce((sum, lab) => sum + lab.vms.length, 0)}
-        helper="VMs registradas"
+        value={displayedLabs.reduce((sum, lab) => sum + lab.vms.length, 0)}
+        helper={showAllInventory ? "VMs registradas" : "VMs con IP confirmada"}
         icon="settings"
         accent="purple"
       />
       <StatCard
         label="Víctimas"
-        value={laboratories.reduce((sum, lab) => sum + lab.vms.filter((vm) => vm.networkRole === "Víctimas").length, 0)}
+        value={displayedLabs.reduce((sum, lab) => sum + lab.vms.filter((vm) => vm.networkRole === "Víctimas").length, 0)}
         helper="Red actual · 192.168.146.0/24"
         icon="target"
         accent="green"
       />
       <StatCard
         label="Atacantes"
-        value={laboratories.reduce((sum, lab) => sum + lab.vms.filter((vm) => vm.networkRole === "Atacantes").length, 0)}
+        value={displayedLabs.reduce((sum, lab) => sum + lab.vms.filter((vm) => vm.networkRole === "Atacantes").length, 0)}
         helper="Red actual · 192.168.146.0/24"
         icon="arrow"
         accent="cyan"
@@ -94,11 +139,11 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
             <span className="eyebrow">INVENTARIO</span>
             <h3>Laboratorios disponibles</h3>
           </div>
-          <span className="user-count">{laboratories.length} entorno{laboratories.length === 1 ? "" : "s"}</span>
+          <span className="user-count">{displayedLabs.length} entorno{displayedLabs.length === 1 ? "" : "s"}</span>
         </div>
 
         <div className="admin-actions">
-          {laboratories.map((lab) => (
+          {displayedLabs.map((lab) => (
             <button
               key={lab.id}
               type="button"
@@ -116,41 +161,41 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
           ))}
         </div>
 
-        {laboratories.length === 0 && (
+        {displayedLabs.length === 0 && (
           <div className="empty-card">
-            <strong>No hay laboratorios registrados</strong>
-            <span>Crea el primer entorno para comenzar a asociar máquinas virtuales.</span>
+            <strong>{showAllInventory ? "No hay laboratorios registrados" : "No hay VMs operativas registradas"}</strong>
+            <span>{showAllInventory ? "Crea el primer entorno para comenzar a asociar máquinas virtuales." : "Verifica el inventario real y las IP confirmadas; no se han borrado registros."}</span>
           </div>
         )}
       </section>
 
-      {selectedLab ? (
+      {displayedSelectedLab ? (
         <section className="glass-panel admin-panel">
           <div className="panel-head">
             <div>
-              <span className="eyebrow accent">{selectedLab.code}</span>
-              <h3>{selectedLab.name}</h3>
-              <small>{selectedLab.description}</small>
+              <span className="eyebrow accent">{displayedSelectedLab.code}</span>
+              <h3>{displayedSelectedLab.name}</h3>
+              <small>{displayedSelectedLab.description}</small>
             </div>
             <div className="row-actions">
-              <span className={selectedLab.status === "Disponible" ? "status-published" : selectedLab.status === "Mantenimiento" ? "status-draft" : "category-tag"}>
-                {selectedLab.status}
+              <span className={displayedSelectedLab.status === "Disponible" ? "status-published" : displayedSelectedLab.status === "Mantenimiento" ? "status-draft" : "category-tag"}>
+                {displayedSelectedLab.status}
               </span>
               {isAdmin && (
                 <button
                   className="table-action"
                   onClick={() => {
-                    setLabEditing(selectedLab);
+                    setLabEditing(displayedSelectedLab);
                     setLabFormOpen(true);
                   }}
                 >
                   Editar
                 </button>
               )}
-              {isAdmin && (
+              {isAdmin && showAllInventory && (
                 <button
                   className="table-action danger"
-                  onClick={() => void removeLaboratory(selectedLab)}
+                  onClick={() => void removeLaboratory(displayedSelectedLab)}
                 >
                   Eliminar
                 </button>
@@ -160,7 +205,7 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
 
           <div className="info-panel">
             <span className="eyebrow">ENTORNO</span>
-            <p><strong>{selectedLab.environment}</strong></p>
+            <p><strong>{displayedSelectedLab.environment}</strong></p>
             <small>Las IPs se controlan desde el backend para evitar duplicados en el inventario.</small>
           </div>
 
@@ -169,7 +214,7 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
               <span className="eyebrow">MÁQUINAS VIRTUALES</span>
               <h3>Activos del laboratorio</h3>
             </div>
-            {isAdmin && (
+            {isAdmin && showAllInventory && (
               <button
                 className="secondary-action"
                 onClick={() => {
@@ -196,7 +241,7 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
                 </tr>
               </thead>
               <tbody>
-                {selectedLab.vms.map((vm) => (
+            {displayedSelectedLab.vms.map((vm) => (
                   <tr key={vm.id}>
                     <td><strong>{vm.name}</strong></td>
                     <td>{vm.operatingSystem}</td>
@@ -230,12 +275,12 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
                             >
                               Editar
                             </button>
-                            <button
+                            {showAllInventory && <button
                               className="table-action danger"
-                              onClick={() => void removeVM(selectedLab.id, vm)}
+                              onClick={() => void removeVM(displayedSelectedLab.id, vm)}
                             >
                               Eliminar
-                            </button>
+                            </button>}
                           </>
                         ) : (
                           <span className="self-label">Solo lectura</span>
@@ -247,7 +292,7 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
               </tbody>
             </table>
 
-            {selectedLab.vms.length === 0 && (
+            {displayedSelectedLab.vms.length === 0 && (
               <div className="empty-card">
                 <strong>Este laboratorio todavía no tiene VMs</strong>
                 <span>Agrega una máquina y define su sistema operativo, red e IP.</span>
@@ -265,7 +310,7 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
       )}
     </div>
 
-    {selectedLab && isAdmin && (
+    {displayedSelectedLab && isAdmin && (
       <>
         {/* ==================================================
             CONEXIONES GUACAMOLE

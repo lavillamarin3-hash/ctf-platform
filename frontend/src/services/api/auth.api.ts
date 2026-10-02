@@ -13,6 +13,8 @@ export const authApi = {
 
   me: () => request<User>("/auth/me"),
 
+  logout: () => request<{ ok: boolean }>("/auth/logout", { method: "POST" }),
+
   updateProfile: (input: { username: string; email?: string | null }) =>
     request<User>("/auth/profile", {
       method: "PATCH",

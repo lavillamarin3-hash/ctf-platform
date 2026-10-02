@@ -1,0 +1,16 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const Module = require('node:module');
+const ts = require('typescript');
+const sourcePath = path.resolve(__dirname, '../src/lib/laboratoryRunState.ts');
+const fixture = new Module(sourcePath, module);
+fixture._compile(ts.transpileModule(fs.readFileSync(sourcePath, 'utf8'), { compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS } }).outputText, sourcePath);
+const { needsLaboratoryCleanup } = fixture.exports;
+assert.equal(needsLaboratoryCleanup({ status: 'active' }), true);
+assert.equal(needsLaboratoryCleanup({ status: 'expired', connection_state: 'active' }), true);
+assert.equal(needsLaboratoryCleanup({ status: 'expired', connection_state: 'ready' }), true);
+assert.equal(needsLaboratoryCleanup({ status: 'expired', connection_state: 'expired' }), false);
+assert.equal(needsLaboratoryCleanup({ status: 'closed', connection_state: 'revoked' }), false);
+assert.equal(needsLaboratoryCleanup({ status: 'expired', connection_state: null }), false);
+console.log('6 comprobaciones de laboratorio/cleanup: PASS');

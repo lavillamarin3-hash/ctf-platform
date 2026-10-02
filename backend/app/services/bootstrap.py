@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 from contextlib import asynccontextmanager
+import asyncio
+import logging
+from types import SimpleNamespace
 from typing import Any
 
 import redis.asyncio as redis
@@ -20,6 +23,8 @@ from ..models import (
     Role, User, VMAsset,
 )
 from ..schemas import ChallengeView, LaboratoryView, VMView
+from .terminal_sessions import TerminalSessions
+from .runtime_flags import effective_mode_template
 
 def vm_view(item: VMAsset, *, guacamole_url: str | None = None, guacamole_protocol: str | None = None) -> VMView:
     return VMView(
@@ -84,17 +89,11 @@ async def seed_data(session_factory) -> None:
             return
 
         inventory = [
-            {"code": "LAB-ATACANTES", "name": "Laboratorio de Atacantes", "segment": "VLAN 20 · 10.10.20.0/24", "vms": [
-                ("LAB-KALI", "Kali Linux 2026.2", "10.10.20.10", "Atacantes", "VLAN 20", "10.10.20.0/24", "standard"),
-                ("LAB-KALI-PURPLE", "Kali Linux Purple 2026.2", "10.10.20.11", "Atacantes", "VLAN 20", "10.10.20.0/24", "standard"),
-                ("LAB-KALI-BLUE", "Linux Mint", "10.10.20.12", "Atacantes", "VLAN 20", "10.10.20.0/24", "standard"),
+            {"code": "LAB-ATACANTES", "name": "Laboratorio de Atacantes", "segment": "Red actual · 192.168.146.0/24", "vms": [
+                ("LAB-KALI", "Kali Linux 2026.2", "192.168.146.134", "Atacantes", "RED ACTUAL", "192.168.146.0/24", "standard"),
             ]},
-            {"code": "LAB-VICTIMAS", "name": "Laboratorio de Víctimas", "segment": "VLAN 30 · 10.10.30.0/24", "vms": [
-                ("LAB-WINVICT-A", "Windows 10 (ES)", "10.10.30.10", "Víctimas", "VLAN 30", "10.10.30.0/24", "vulnerable"),
-                ("LAB-WINVICT-B", "Windows 10 (ES)", "10.10.30.11", "Víctimas", "VLAN 30", "10.10.30.0/24", "vulnerable"),
+            {"code": "LAB-VICTIMAS", "name": "Laboratorio de Víctimas", "segment": "Red actual · 192.168.146.0/24", "vms": [
                 ("LAB-LNXVICT", "Ubuntu Server 26.04", "192.168.146.137", "Víctimas", "RED ACTUAL", "192.168.146.0/24", "vulnerable"),
-                ("LAB-SRVWEB", "Ubuntu Server 26.04", "10.10.30.20", "Víctimas", "VLAN 30", "10.10.30.0/24", "vulnerable"),
-                ("LAB-SRVFSAD", "Ubuntu Server 26.04", "10.10.30.21", "Víctimas", "VLAN 30", "10.10.30.0/24", "vulnerable"),
             ]},
         ]
         for lab_data in inventory:
@@ -176,7 +175,11 @@ async def check_rate_limit(redis_client, key: str, maximum: int = 8, window_seco
 def challenge_view(challenge: Challenge, completed: bool = False, include_flags: bool = False) -> ChallengeView:
     flags = None
     if include_flags:
-        flags = [{"id": item.id, "label": item.label, "flag_order": item.flag_order, "is_active": item.is_active, "mode": item.mode, "template": item.template} for item in challenge.flags]
+        flags = []
+        for item in challenge.flags:
+            mode, template = effective_mode_template(challenge.code, item)
+            flags.append({"id": item.id, "label": item.label, "flag_order": item.flag_order,
+                          "is_active": item.is_active, "mode": mode, "template": template})
     return ChallengeView(
         id=challenge.id,
         code=challenge.code,
@@ -207,5 +210,24 @@ async def lifespan(app: FastAPI):
     app.state.guacamole_admin = make_guacamole_admin()
     app.state.flag_injector = SSHFlagInjector()
     app.state.sockets = ConnectionManager()
-    yield
-    await app.state.redis.aclose()
+    app.state.terminal_sessions = TerminalSessions(app.state.redis)
+
+    async def expire_worker():
+        # Importación diferida: los routers dependen de los servicios de bootstrap.
+        from ..api.runs import expire_stale_runs
+        while True:
+            try:
+                await expire_stale_runs(SimpleNamespace(app=app))
+            except Exception:
+                # No incluir excepciones/URLs que pudieran contener credenciales.
+                logging.getLogger(__name__).warning("No se pudo completar la limpieza de corridas expiradas; se reintentará")
+            await asyncio.sleep(30)
+
+    worker = asyncio.create_task(expire_worker())
+    try:
+        yield
+    finally:
+        worker.cancel()
+        await asyncio.gather(worker, return_exceptions=True)
+        await app.state.terminal_sessions.shutdown()
+        await app.state.redis.aclose()

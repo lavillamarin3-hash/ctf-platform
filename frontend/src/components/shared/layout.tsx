@@ -3,11 +3,12 @@
 // Responsabilidad: cabecera, sidebars y navegación por rol.
 // ============================================================
 
-import { createElement, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { createElement, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, User, Challenge, RankingRow } from "../../api";
 import { Theme, ThemePreference, PlayerView, ManagementView, ManagedUser, USER_FUNCTIONS, DEMO_USERS, difficultyStyle, categoryMeta, DEFAULT_LABORATORIES, demoLabCount, VM_OS_OPTIONS, NETWORK_IPS, Laboratory, LabVM } from "../../config";
 
 import { Icon, Logo, ThemeToggle, AccessibilityControls, CtfAlert, PreferencesModal, AccountSettingsModal } from "./ui";
+import { markAllNotificationsRead, markNotificationRead, notificationCopy, readNotifications, subscribeNotifications } from "../../lib/notifications";
 
 export function Header({
   user,
@@ -34,12 +35,31 @@ export function Header({
   const [preferencesOpen, setPreferencesOpen] = useState(false);
   const [accountOpen, setAccountOpen] = useState(false);
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => localStorage.getItem(`ctf-notifications-${user.id}`) !== "false");
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [notifications, setNotifications] = useState(() => readNotifications(user.id));
   const [notice, setNotice] = useState<{title:string;message:string;type:"success"|"warning"|"error"|"info"}|null>(null);
+  const noticeTimer = useRef<number | null>(null);
+  const unreadCount = notifications.filter((item) => !item.read).length;
 
-  const notify = (title: string, message: string, type: "success"|"warning"|"error"|"info" = "info") => {
+  const notify = useCallback((title: string, message: string, type: "success"|"warning"|"error"|"info" = "info") => {
+    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
     setNotice({ title, message, type });
-    window.setTimeout(() => setNotice(null), 3600);
-  };
+    noticeTimer.current = window.setTimeout(() => setNotice(null), 4500);
+  }, []);
+
+  useEffect(() => {
+    setNotifications(readNotifications(user.id));
+    return subscribeNotifications(user.id, (kind) => {
+      setNotifications(readNotifications(user.id));
+      if (kind && notificationsEnabled) {
+        const copy = notificationCopy[kind];
+        notify(copy.title, copy.message, copy.tone);
+      }
+    });
+  }, [user.id, notificationsEnabled, notify]);
+  useEffect(() => () => {
+    if (noticeTimer.current !== null) window.clearTimeout(noticeTimer.current);
+  }, []);
 
   const toggleNotifications = (enabled: boolean) => {
     setNotificationsEnabled(enabled);
@@ -57,7 +77,14 @@ export function Header({
           <div className="topbar-title"><span>PLATAFORMA CTF</span><strong>Laboratorio de Ciberseguridad</strong></div>
         </div>
         <div className="topbar-actions">
-          {notificationsEnabled && <button className="icon-btn notification" aria-label="Notificaciones" onClick={() => notify("Notificaciones", "No hay alertas nuevas pendientes.", "info")}><Icon name="bell" /><span>3</span></button>}
+          <div className="notification-wrap">
+            <button type="button" className="icon-btn notification" aria-label={unreadCount ? `Notificaciones: ${unreadCount} sin leer` : "Notificaciones"} aria-expanded={notificationOpen} aria-controls="ctf-notification-panel" onClick={() => setNotificationOpen((open) => !open)}><Icon name="bell" />{unreadCount > 0 && <span aria-hidden="true">{unreadCount}</span>}</button>
+            {notificationOpen && <section className="notification-panel" id="ctf-notification-panel" aria-label="Avisos recientes" onKeyDown={(event) => { if (event.key === "Escape") setNotificationOpen(false); }}>
+              <div className="notification-panel-head"><div><strong>Notificaciones</strong><small>{unreadCount ? `${unreadCount} sin leer` : "Todo al día"}</small></div><button type="button" className="notification-dismiss" aria-label="Cerrar notificaciones" onClick={() => setNotificationOpen(false)}>×</button></div>
+              {notifications.length ? <><div className="notification-panel-list">{notifications.map((item) => { const copy = notificationCopy[item.kind]; return <button key={item.id} type="button" className={`notification-item ${item.read ? "read" : "unread"}`} onClick={() => markNotificationRead(user.id, item.id)}><span className={`notification-item-dot ${copy.tone}`} aria-hidden="true" /><span className="notification-item-copy"><strong>{copy.title}</strong><span>{copy.message}</span><time dateTime={item.createdAt}>{new Date(item.createdAt).toLocaleString("es-EC", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}</time></span></button>; })}</div><button type="button" className="notification-mark-all" disabled={!unreadCount} onClick={() => markAllNotificationsRead(user.id)}>Marcar todas como leídas</button></>
+                : <p className="notification-empty">Aún no hay avisos. Aquí verás los resultados de tus acciones en la plataforma.</p>}
+            </section>}
+          </div>
           <div className="profile-menu-wrap">
             <button className="profile-chip" onClick={() => setProfileOpen((v) => !v)} aria-expanded={profileOpen} title="Abrir menú de usuario">
               <div className="avatar">{avatar ? <img src={avatar} alt="" /> : user.username.slice(0, 2).toUpperCase()}</div>
@@ -68,7 +95,7 @@ export function Header({
                 <div className="profile-dropdown-head"><div className="avatar large">{avatar ? <img src={avatar} alt="" /> : user.username.slice(0,2).toUpperCase()}</div><div><strong>{user.username}</strong><small>{roleLabel}</small></div></div>
                 <button type="button" onClick={() => { setPreferencesOpen(true); setProfileOpen(false); }}><Icon name="settings" /><span>Preferencias</span></button>
                 <button type="button" onClick={() => { setAccountOpen(true); setProfileOpen(false); }}><Icon name="user" /><span>Configuración de cuenta</span></button>
-                <button type="button" onClick={() => { toggleNotifications(!notificationsEnabled); setProfileOpen(false); }}><Icon name="bell" /><span>{notificationsEnabled ? "Ocultar notificaciones" : "Mostrar notificaciones"}</span></button>
+                <button type="button" onClick={() => { toggleNotifications(!notificationsEnabled); setProfileOpen(false); }}><Icon name="bell" /><span>{notificationsEnabled ? "Silenciar avisos emergentes" : "Activar avisos emergentes"}</span></button>
                 <div className="profile-dropdown-divider" />
                 <button type="button" className="danger-menu" onClick={onLogout}><Icon name="logout" /><span>Cerrar sesión</span></button>
               </div>

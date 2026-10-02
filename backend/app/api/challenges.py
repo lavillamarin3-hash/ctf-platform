@@ -4,17 +4,27 @@ from __future__ import annotations
 
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import Response
-from sqlalchemy import delete, func, select
+from sqlalchemy import func, select
 from sqlalchemy.orm import selectinload
 from ..core import get_current_user, hash_password, require_roles
-from ..models import Challenge, ChallengeCompletion, ChallengeFlag, ChallengeGroupAssignment, ChallengeRunFlag, GroupMembership, StudentGroup, User
+from ..models import Challenge, ChallengeCompletion, ChallengeFlag, ChallengeGroupAssignment, ChallengeRun, GroupMembership, StudentGroup, User
 from ..schemas import ChallengeCreate, ChallengeView, FlagCreate, FlagUpdate
 from ..services.bootstrap import challenge_view, write_audit
+from ..services.runtime_flags import EXPLICIT_STATIC_VALIDATOR, is_effectively_dynamic
 
 
 from fastapi import APIRouter
 
 router = APIRouter()
+
+
+async def require_idle_challenge(session, challenge_id: int) -> None:
+    """No altera evidencia/configuración mientras haya corridas por limpiar."""
+    running = await session.scalar(select(ChallengeRun.id).where(
+        ChallengeRun.challenge_id == challenge_id, ChallengeRun.status == "active",
+    ).limit(1))
+    if running is not None:
+        raise HTTPException(409, "Cierra y limpia las corridas activas antes de cambiar los activos o las flags del reto.")
 
 @router.get("/api/v1/challenges", response_model=list[ChallengeView])
 async def list_challenges(request: Request, difficulty: str | None = None, category: str | None = None, mitre: str | None = None, user=Depends(get_current_user)):
@@ -57,6 +67,13 @@ async def list_challenges(request: Request, difficulty: str | None = None, categ
 async def list_categories(request: Request, user=Depends(get_current_user)):
     async with request.app.state.session_factory() as session:
         statement = select(Challenge.category, func.count(Challenge.id)).where(Challenge.is_published.is_(True)).group_by(Challenge.category).order_by(Challenge.category)
+        if user.role not in ("admin", "instructor"):
+            statement = statement.where(select(ChallengeGroupAssignment.id).join(
+                GroupMembership, GroupMembership.group_id == ChallengeGroupAssignment.group_id,
+            ).join(StudentGroup, StudentGroup.id == GroupMembership.group_id).where(
+                ChallengeGroupAssignment.challenge_id == Challenge.id,
+                GroupMembership.user_id == user.id, StudentGroup.is_active.is_(True),
+            ).exists())
         rows = (await session.execute(statement)).all()
         return [{"name": name, "challenge_count": int(count)} for name, count in rows]
 
@@ -78,9 +95,11 @@ async def create_challenge(payload: ChallengeCreate, request: Request, user=Depe
 @router.put("/api/v1/challenges/{code}", response_model=ChallengeView)
 async def update_challenge(code: str, payload: ChallengeCreate, request: Request, user=Depends(require_roles("admin", "instructor"))):
     async with request.app.state.session_factory() as session:
-        challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == code))
+        challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == code).with_for_update())
         if challenge is None:
             raise HTTPException(status_code=404, detail="Reto no encontrado")
+        if payload.code != challenge.code or payload.asset_references != challenge.asset_references:
+            await require_idle_challenge(session, challenge.id)
         for field, value in payload.model_dump().items():
             setattr(challenge, field, value)
         await write_audit(session, user.id, "challenge.update", "challenge", str(challenge.id), {"code": code})
@@ -108,13 +127,15 @@ async def create_flag(code: str, payload: FlagCreate, request: Request, user=Dep
     if payload.mode == "dynamic" and not payload.template:
         raise HTTPException(status_code=422, detail="Una flag dinámica requiere una plantilla")
     async with request.app.state.session_factory() as session:
-        challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == code))
+        challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == code).with_for_update())
         if challenge is None:
             raise HTTPException(status_code=404, detail="Reto no encontrado")
+        await require_idle_challenge(session, challenge.id)
         flag = ChallengeFlag(
             challenge_id=challenge.id,
             label=payload.label,
             flag_hash=hash_password(payload.value) if payload.mode == "static" and payload.value else None,
+            validator=EXPLICIT_STATIC_VALIDATOR if payload.mode == "static" else "exact_hash",
             flag_order=payload.flag_order,
             is_active=True,
             mode=payload.mode,
@@ -134,12 +155,21 @@ async def update_flag(code: str, flag_id: int, payload: FlagUpdate, request: Req
     if payload.mode == "dynamic" and not payload.template:
         raise HTTPException(status_code=422, detail="Una flag dinámica requiere una plantilla")
     async with request.app.state.session_factory() as session:
-        challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == code))
+        challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == code).with_for_update())
         if challenge is None:
             raise HTTPException(status_code=404, detail="Reto no encontrado")
         flag = next((item for item in challenge.flags if item.id == flag_id), None)
         if flag is None:
             raise HTTPException(status_code=404, detail="Flag no encontrada")
+        if payload.mode == "static" and payload.value is None and is_effectively_dynamic(code, flag):
+            raise HTTPException(status_code=422, detail="Para cambiar una flag dinámica a estática debes ingresar su valor")
+        changes_runtime = any((
+            flag.flag_order != payload.flag_order, flag.is_active != payload.is_active,
+            flag.mode != payload.mode, flag.template != (payload.template if payload.mode == "dynamic" else None),
+            payload.mode == "static" and payload.value is not None,
+        ))
+        if changes_runtime:
+            await require_idle_challenge(session, challenge.id)
         flag.label = payload.label
         flag.flag_order = payload.flag_order
         flag.is_active = payload.is_active
@@ -147,10 +177,10 @@ async def update_flag(code: str, flag_id: int, payload: FlagUpdate, request: Req
         flag.template = payload.template if payload.mode == "dynamic" else None
         if payload.mode == "static" and payload.value is not None:
             flag.flag_hash = hash_password(payload.value)
+            flag.validator = EXPLICIT_STATIC_VALIDATOR
         elif payload.mode == "dynamic":
             flag.flag_hash = None
-            # Old per-run values must not survive a mode switch.
-            await session.execute(delete(ChallengeRunFlag).where(ChallengeRunFlag.flag_id == flag.id))
+            # Los hashes históricos pertenecen a su run; editar no los destruye.
         await write_audit(session, user.id, "flag.update", "flag", str(flag.id), {"challenge": code, "order": payload.flag_order, "mode": payload.mode, "active": payload.is_active})
         await session.commit()
         await session.refresh(challenge, attribute_names=["flags"])
@@ -160,9 +190,10 @@ async def update_flag(code: str, flag_id: int, payload: FlagUpdate, request: Req
 @router.delete("/api/v1/challenges/{code}/flags/{flag_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_flag(code: str, flag_id: int, request: Request, user=Depends(require_roles("admin", "instructor"))):
     async with request.app.state.session_factory() as session:
-        challenge = await session.scalar(select(Challenge).where(Challenge.code == code))
+        challenge = await session.scalar(select(Challenge).where(Challenge.code == code).with_for_update())
         if challenge is None:
             raise HTTPException(status_code=404, detail="Reto no encontrado")
+        await require_idle_challenge(session, challenge.id)
         flag = await session.get(ChallengeFlag, flag_id)
         if flag is None or flag.challenge_id != challenge.id:
             raise HTTPException(status_code=404, detail="Flag no encontrada")

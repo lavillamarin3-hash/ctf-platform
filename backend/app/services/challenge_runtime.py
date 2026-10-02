@@ -206,6 +206,19 @@ async def _find_challenge_vm(session, challenge: Challenge):
         )
     ).unique().all()
 
+    # LAB-01 tiene un destino físico confirmado. Un inventario legado puede
+    # contener otra ficha con la misma IP (p. ej. una Kali etiquetada como
+    # víctima); nunca debe elegirse por coincidencia de IP o código del lab.
+    if challenge.code == "LAB-01":
+        matches = [
+            (lab, vm) for lab in labs if lab.status == "ready" for vm in lab.vms
+            if vm.status == "ready"
+            and _asset_ref_key(vm.name) == "LAB-LNXVICT"
+            and _asset_ref_key(vm.ip_address or "") == "192.168.146.137"
+            and ("linux" in vm.os.lower() or "ubuntu" in vm.os.lower())
+        ]
+        return matches[0] if len(matches) == 1 else (None, None)
+
     for lab in labs:
         lab_keys = {_asset_ref_key(lab.code or ""), _asset_ref_key(lab.name)}
         for vm in lab.vms:
@@ -213,13 +226,6 @@ async def _find_challenge_vm(session, challenge: Challenge):
             if refs.intersection(vm_keys) and vm.status == "ready":
                 return lab, vm
 
-    # LAB-01 tiene un objetivo operativo fijo en esta fase. La resolución se hace
-    # en memoria para no modificar asset_references ni vm_assets.
-    if challenge.code == "LAB-01":
-        for lab in labs:
-            for vm in lab.vms:
-                if vm.status == "ready" and _asset_ref_key(vm.ip_address or "") == "192.168.146.137":
-                    return lab, vm
     return None, None
 
 

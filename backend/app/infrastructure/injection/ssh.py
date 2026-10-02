@@ -24,6 +24,29 @@ class SSHFlagInjector:
         self.settings = get_settings()
         self.script = Path(__file__).with_name("scripts") / "linux" / "ctf-inject-flag.sh"
 
+    async def preflight(self, ip: str) -> None:
+        """Comprueba TCP/SSH antes de crear un run o reservar Redis, sin enviar credenciales."""
+        if not ip or not self.settings.flag_injector_enabled:
+            raise FlagInjectionError("La VM o el inyector SSH no están disponibles")
+        try:
+            _, writer = await asyncio.wait_for(
+                asyncio.open_connection(ip, self.settings.flag_injector_ssh_port),
+                timeout=self.settings.flag_injector_connect_timeout,
+            )
+        except (OSError, asyncio.TimeoutError) as exc:
+            raise FlagInjectionError("La VM no acepta SSH desde el contenedor API") from exc
+        writer.close()
+        try:
+            await writer.wait_closed()
+        except OSError:
+            # El servidor puede cerrar el socket mientras enviaba el banner.
+            # El handshake TCP ya se completó; la autenticación real se hará después.
+            pass
+
+    async def probe_authentication(self, ip: str) -> None:
+        """Comprueba credenciales del inyector con `true`; no escribe en la VM."""
+        await asyncio.to_thread(self._run_sync, ip, "", None, clear=False, probe_auth=True)
+
     async def inject(self, ip: str, path: str, value: str, os_type: str) -> None:
         """Conecta por SSH y ejecuta únicamente el script remoto permitido."""
         normalized_os = os_type.lower()
@@ -52,7 +75,7 @@ class SSHFlagInjector:
             raise FlagInjectionError("La ruta de la flag debe permanecer dentro de /opt/ctf")
         await asyncio.to_thread(self._run_sync, ip, path, None, clear=True)
 
-    def _run_sync(self, ip: str, path: str, value: str | None, *, clear: bool) -> None:
+    def _run_sync(self, ip: str, path: str, value: str | None, *, clear: bool, probe_auth: bool = False) -> None:
         try:
             import paramiko
         except ImportError as exc:  # pragma: no cover - depende de la imagen de backend
@@ -88,6 +111,11 @@ class SSHFlagInjector:
                 raise FlagInjectionError("Configure una clave privada o contraseña SSH para el inyector")
 
             client.connect(**connect_kwargs)
+            if probe_auth:
+                _, stdout, _ = client.exec_command("true", timeout=self.settings.flag_injector_command_timeout)
+                if stdout.channel.recv_exit_status() != 0:
+                    raise FlagInjectionError("La cuenta del inyector no pudo ejecutar una comprobación de solo lectura")
+                return
             if clear:
                 remote_command = (
                     f"sudo -n {shlex.quote(self.settings.flag_injector_remote_script)} "

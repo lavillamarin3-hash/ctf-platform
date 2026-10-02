@@ -5,8 +5,14 @@ nuevas. No se usa como fuente de verdad de la base existente.
 """
 
 DEMO_VM_IPS = {
-    "Atacantes": {"10.10.20.10", "10.10.20.11", "10.10.20.12", "192.168.146.134"},
-    "Víctimas": {"10.10.30.10", "10.10.30.11", "10.10.30.20", "10.10.30.21", "192.168.146.137"},
+    # Solo las dos direcciones confirmadas en el laboratorio actual.
+    "Atacantes": {"192.168.146.134"},
+    "Víctimas": {"192.168.146.137"},
+}
+
+OPERATIONAL_VM_TARGETS = {
+    "LAB-KALI": "192.168.146.134",
+    "LAB-LNXVICT": "192.168.146.137",
 }
 
 SEED_CHALLENGES = [
@@ -35,5 +41,33 @@ SEED_CHALLENGES = [
                 "is_active": True,
             }
         ],
-    }
+    },
+    {
+        # Borrador: no publicar hasta disponer de terminal atacante Kali
+        # autorizada y servicio didáctico verificado en la víctima.
+        "code": "ESC-01-RECON",
+        "name": "Descubre el servicio de evidencia",
+        "description": "Desde Kali identifica un servicio de práctica en la VM Linux víctima y recupera su evidencia dinámica.",
+        "instructions": (
+            "Escenario reservado para 192.168.146.134 (atacante) y 192.168.146.137 (víctima). "
+            "El instructor debe habilitar primero el acceso a Kali, el servicio didáctico y la captura de red. "
+            "No pruebes IPs ni puertos fuera del laboratorio asignado."
+        ),
+        "difficulty": "Básico",
+        "category": "MISC",
+        "scenario": "ESC-01-RECON",
+        "mitre_technique": "T1046 — Network Service Scanning",
+        "asset_references": ["LAB-LNXVICT", "192.168.146.137"],
+        "points": 100,
+        "is_published": False,
+        "flag_specs": [
+            {
+                "label": "Evidencia dinámica de reconocimiento",
+                "mode": "dynamic",
+                "template": "FLAG{esc-01_{{USER}}_{{RUN_ID}}_{{RAND}}}",
+                "flag_order": 1,
+                "is_active": True,
+            }
+        ],
+    },
 ]

@@ -303,10 +303,11 @@ export function PreferencesModal({
         </div>
         <div className="preference-section">
           <span className="preference-label">Tamaño de fuente</span>
+          <small>Reduce o amplía el texto de la interfaz. La terminal tiene su propio control de zoom.</small>
           <div className="font-stepper">
-            <button type="button" className="secondary-action" onClick={() => setScale((v) => Math.max(.9, [0.9,1,1.15,1.3,1.45][Math.max(0,[0.9,1,1.15,1.3,1.45].indexOf(v)-1)]))}>A−</button>
-            <strong>{Math.round(scale * 100)}%</strong>
-            <button type="button" className="secondary-action" onClick={() => setScale((v) => Math.min(1.45, [0.9,1,1.15,1.3,1.45][Math.min(4,[0.9,1,1.15,1.3,1.45].indexOf(v)+1)]))}>A+</button>
+            <button type="button" className="secondary-action" aria-label="Reducir texto de la interfaz" disabled={scale <= .9} onClick={() => setScale((v) => Math.max(.9, [0.9,1,1.15,1.3,1.45][Math.max(0,[0.9,1,1.15,1.3,1.45].indexOf(v)-1)]))}>A−</button>
+            <strong role="status" aria-live="polite">{Math.round(scale * 100)}%</strong>
+            <button type="button" className="secondary-action" aria-label="Ampliar texto de la interfaz" disabled={scale >= 1.45} onClick={() => setScale((v) => Math.min(1.45, [0.9,1,1.15,1.3,1.45][Math.min(4,[0.9,1,1.15,1.3,1.45].indexOf(v)+1)]))}>A+</button>
           </div>
         </div>
         <div className="preference-section switch-preference">

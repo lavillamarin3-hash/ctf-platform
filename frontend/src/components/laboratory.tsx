@@ -237,6 +237,7 @@ export function VMForm({
   const [ip, setIp] = useState(initial?.ip ?? "");
   const [operatingSystem, setOperatingSystem] = useState(initial?.operatingSystem ?? "Windows 10 (ES)");
   const [profile, setProfile] = useState<LabVM["profile"]>(initial?.profile ?? "Vulnerable");
+  const [status, setStatus] = useState<NonNullable<LabVM["status"]>>(initial?.status ?? "planned");
   const [guacamoleConnectionId, setGuacamoleConnectionId] = useState(initial?.guacamoleConnectionId ?? "");
 
   const usedIps = laboratory.vms.map((item) => item.ip).filter(Boolean);
@@ -267,6 +268,7 @@ export function VMForm({
       ip: selectedIp,
       operatingSystem,
       profile,
+      status,
       networkRole,
       vlan: "Red actual",
       subnet,
@@ -290,6 +292,7 @@ export function VMForm({
           <label>Sistema operativo<select value={operatingSystem} onChange={(e) => setOperatingSystem(e.target.value)}>{VM_OS_OPTIONS.map((item) => <option key={item} value={item}>{item}</option>)}</select></label>
           <label>Segmento de red<input value={`${segmentLabel} · ${subnet}`} readOnly /></label>
           <label>Perfil de seguridad<select value={profile} onChange={(e) => setProfile(e.target.value as LabVM["profile"])}><option>Vulnerable</option><option>Standard</option><option>Hardened</option></select></label>
+          <label>Estado de la VM<select value={status} onChange={(e) => setStatus(e.target.value as NonNullable<LabVM["status"]>)}><option value="planned">Planificada</option><option value="ready">Lista (comprobada)</option><option value="maintenance">Mantenimiento</option><option value="offline">Apagada</option></select></label>
           <label>Conexión de Guacamole<select value={guacamoleConnectionId} onChange={(e) => setGuacamoleConnectionId(e.target.value)}><option value="">Sin asociar</option>{guacamoleConnections.map((item) => <option key={item.identifier} value={item.identifier}>{item.name} · {item.protocol.toUpperCase()}{item.hostname ? ` · ${item.hostname}` : ""}</option>)}</select></label>
         </div>
         <div className="network-preview"><span>{LAB_NETWORK_METADATA[networkRole].label}</span><strong>{selectedIp || "Sin IP"}</strong><small>{subnet}</small></div>
@@ -313,6 +316,7 @@ export function mapBackendVM(item: import("../api").BackendVM): LabVM {
     networkRole: item.network_role === "Atacantes" ? "Atacantes" : item.network_role === "Víctimas" ? "Víctimas" : (item.vlan === "VLAN 20" ? "Atacantes" : "Víctimas"),
     vlan: item.vlan,
     subnet: item.subnet,
+    status: item.status as LabVM["status"],
     guacamoleConnectionId: item.guacamole_connection_id || undefined,
     guacamoleProtocol: item.guacamole_protocol || undefined,
     guacamoleUrl: item.guacamole_url || undefined,

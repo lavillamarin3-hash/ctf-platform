@@ -55,6 +55,7 @@ export type LabVM = {
   networkRole?: "Atacantes" | "Víctimas"; 
   vlan?: string; 
   subnet?: string; 
+  status?: "ready" | "planned" | "maintenance" | "offline";
   guacamoleConnectionId?: string; 
   guacamoleProtocol?: string; 
   guacamoleUrl?: string; 
@@ -220,7 +221,7 @@ export const categoryMeta: Record<
   MISC: { icon: "✦", tone: "slate" }, 
 }; 
 
-export const demoLabCount = 11; 
+export const demoLabCount = 2;
 
 export const VM_OS_OPTIONS = [ 
   "Windows 10 (ES)", 
@@ -256,8 +257,8 @@ export const LAB_NETWORK_METADATA = {
 // ============================================================
 // 7. LABORATORIOS DE RESPALDO
 // ============================================================
-// Este inventario se usa solo como respaldo local cuando el backend
-// no devuelve laboratorios. El inventario persistente se obtiene del API.
+// Referencia visual de las dos VMs confirmadas para esta fase. La vista
+// administrativa obtiene siempre el inventario real desde el API.
 
 export const DEFAULT_LABORATORIES: Laboratory[] = [ 
   { 
@@ -280,26 +281,6 @@ export const DEFAULT_LABORATORIES: Laboratory[] = [
         vlan: "Red actual", 
         subnet: "192.168.146.0/24", 
       }, 
-      { 
-        id: "vm-kali-purple", 
-        name: "LAB-KALI-PURPLE", 
-        ip: "10.10.20.11", 
-        operatingSystem: "Kali Linux Purple 2026.2", 
-        profile: "Standard", 
-        networkRole: "Atacantes", 
-        vlan: "VLAN 20", 
-        subnet: "10.10.20.0/24", 
-      }, 
-      { 
-        id: "vm-kali-blue", 
-        name: "LAB-KALI-BLUE", 
-        ip: "10.10.20.12", 
-        operatingSystem: "Linux Mint", 
-        profile: "Standard", 
-        networkRole: "Atacantes", 
-        vlan: "VLAN 20", 
-        subnet: "10.10.20.0/24", 
-      }, 
     ], 
   }, 
   { 
@@ -313,26 +294,6 @@ export const DEFAULT_LABORATORIES: Laboratory[] = [
       "Red actual · 192.168.146.0/24 · Nutanix AHV · Guacamole", 
     vms: [ 
       { 
-        id: "vm-win-a", 
-        name: "LAB-WINVICT-A", 
-        ip: "10.10.30.10", 
-        operatingSystem: "Windows 10 (ES)", 
-        profile: "Vulnerable", 
-        networkRole: "Víctimas", 
-        vlan: "VLAN 30", 
-        subnet: "10.10.30.0/24", 
-      }, 
-      { 
-        id: "vm-win-b", 
-        name: "LAB-WINVICT-B", 
-        ip: "10.10.30.11", 
-        operatingSystem: "Windows 10 (ES)", 
-        profile: "Vulnerable", 
-        networkRole: "Víctimas", 
-        vlan: "VLAN 30", 
-        subnet: "10.10.30.0/24", 
-      }, 
-      { 
         id: "vm-lnx", 
         name: "LAB-LNXVICT", 
         ip: "192.168.146.137", 
@@ -341,26 +302,6 @@ export const DEFAULT_LABORATORIES: Laboratory[] = [
         networkRole: "Víctimas", 
         vlan: "Red actual", 
         subnet: "192.168.146.0/24", 
-      }, 
-      { 
-        id: "vm-web", 
-        name: "LAB-SRVWEB", 
-        ip: "10.10.30.20", 
-        operatingSystem: "Ubuntu Server 26.04", 
-        profile: "Vulnerable", 
-        networkRole: "Víctimas", 
-        vlan: "VLAN 30", 
-        subnet: "10.10.30.0/24", 
-      }, 
-      { 
-        id: "vm-fsad", 
-        name: "LAB-SRVFSAD", 
-        ip: "10.10.30.21", 
-        operatingSystem: "Ubuntu Server 26.04", 
-        profile: "Vulnerable", 
-        networkRole: "Víctimas", 
-        vlan: "VLAN 30", 
-        subnet: "10.10.30.0/24", 
       }, 
     ], 
   }, 

@@ -5,9 +5,14 @@ from __future__ import annotations
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import Response
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from ..core import get_current_user, require_roles, hash_password
 from ..guacamole import GuacamoleApiError
-from ..models import User
+from ..models import (
+    AuditEvent, Challenge, ChallengeCompletion, ChallengeGroupAssignment,
+    ChallengeInstance, ChallengeRun, GroupMembership, ResetOperation,
+    StudentGroup, Submission, User,
+)
 from ..schemas import UserCreate, UserUpdate, UserView
 from ..services.bootstrap import write_audit
 
@@ -15,6 +20,28 @@ from ..services.bootstrap import write_audit
 from fastapi import APIRouter
 
 router = APIRouter()
+
+# La identidad conserva evidencias, puntuación y auditoría. No se borran en
+# cascada para poder eliminar una cuenta; el administrador puede deshabilitarla.
+_USER_REFERENCES = (
+    (AuditEvent, AuditEvent.actor_id),
+    (Challenge, Challenge.created_by),
+    (ChallengeCompletion, ChallengeCompletion.user_id),
+    (ChallengeGroupAssignment, ChallengeGroupAssignment.created_by),
+    (ChallengeInstance, ChallengeInstance.user_id),
+    (ChallengeRun, ChallengeRun.user_id),
+    (GroupMembership, GroupMembership.user_id),
+    (ResetOperation, ResetOperation.requested_by),
+    (StudentGroup, StudentGroup.created_by),
+    (Submission, Submission.user_id),
+)
+
+
+async def _has_user_references(session, user_id: int) -> bool:
+    for model, column in _USER_REFERENCES:
+        if await session.scalar(select(model.id).where(column == user_id).limit(1)) is not None:
+            return True
+    return False
 
 @router.get("/api/v1/users", response_model=list[UserView])
 async def list_users(request: Request, _=Depends(require_roles("admin"))):
@@ -125,15 +152,31 @@ async def delete_user(user_id: int, request: Request, actor=Depends(require_role
             admin_count = await session.scalar(select(func.count(User.id)).where(User.role == "admin", User.is_active.is_(True)))
             if int(admin_count or 0) <= 1:
                 raise HTTPException(status_code=409, detail="Debe existir al menos un administrador activo")
+        if await _has_user_references(session, target.id):
+            raise HTTPException(
+                status_code=409,
+                detail="El usuario tiene historial o asignaciones en CTF. Deshabilítalo desde Usuarios y roles para conservar las evidencias.",
+            )
+        # Comprobar las restricciones de PostgreSQL antes de tocar Guacamole.
+        # Si falla la eliminación SQL, la cuenta remota permanece intacta.
+        await session.delete(target)
+        try:
+            await session.flush()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(
+                status_code=409,
+                detail="El usuario tiene datos asociados. Deshabilítalo desde Usuarios y roles para conservar las evidencias.",
+            ) from exc
         try:
             remotes = await request.app.state.guacamole_admin.list_users()
             if any(item.username == target.username for item in remotes):
                 await request.app.state.guacamole_admin.delete_user(target.username)
         except GuacamoleApiError as exc:
             if exc.status_code != 404:
+                await session.rollback()
                 raise HTTPException(status_code=502, detail=f"No se pudo eliminar la cuenta de Guacamole: {exc.detail or exc}") from exc
         await write_audit(session, actor.id, "user.delete", "user", str(target.id), {"username": target.username, "role": target.role, "guacamole": True})
-        await session.delete(target)
         await session.commit()
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 

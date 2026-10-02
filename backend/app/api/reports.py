@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import csv
-from io import StringIO
+import asyncio
+from datetime import timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect, status
+from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import Response
 from sqlalchemy import func, select
 
-from ..core import decode_token, get_current_user, require_roles
+from ..core import get_current_user, get_settings, now_utc, require_roles
 from ..models import Challenge, ChallengeCompletion, ChallengeGroupAssignment, ChallengeRun, GroupMembership, StudentGroup, Submission, User
 from ..schemas import RankingResponse, RankingRow
-from ..services.bootstrap import ranking_rows
+from ..services.bootstrap import check_rate_limit, ranking_rows
 
 
 router = APIRouter()
@@ -73,22 +73,62 @@ async def progress(request: Request, user=Depends(require_roles("player"))):
         return {"total_points": total, "challenges_completed": len(completed)}
 
 
+@router.post("/api/v1/ws/ranking/session")
+async def ranking_session(request: Request, response: Response, user=Depends(get_current_user)):
+    """Autoriza el socket mediante cookie HttpOnly de un uso, sin JWT en la URL."""
+    await check_rate_limit(request.app.state.redis, f"rate:ranking:session:{user.id}", maximum=20)
+    try:
+        ticket = await request.app.state.terminal_sessions.issue(0, user.id)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="No se pudo conectar el ranking en vivo") from exc
+    response.set_cookie(
+        "ctf-ranking", ticket, max_age=60, path="/api/v1/ws/ranking", httponly=True,
+        secure=get_settings().public_origin.startswith("https://"), samesite="strict",
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return {
+        "websocket_path": "/api/v1/ws/ranking",
+        "expires_at": now_utc() + timedelta(minutes=get_settings().access_token_minutes),
+    }
+
+
 @router.websocket("/api/v1/ws/ranking")
 async def ranking_socket(websocket: WebSocket):
-    token = websocket.query_params.get("token")
+    if websocket.headers.get("origin") != get_settings().public_origin.rstrip("/") or websocket.query_params.get("token"):
+        await websocket.close(code=1008)
+        return
     try:
-        if not token:
-            raise ValueError("missing")
-        decode_token(token)
+        ticket = await websocket.app.state.terminal_sessions.consume(websocket.cookies.get("ctf-ranking"), 0)
+        if not ticket:
+            raise ValueError("Sesión del ranking no disponible")
+        async with websocket.app.state.session_factory() as session:
+            user = await session.get(User, ticket["user_id"])
+            if user is None or not user.is_active:
+                raise ValueError("Usuario no disponible")
     except Exception:
         await websocket.close(code=1008)
         return
-    await websocket.app.state.sockets.connect(websocket)
-    await websocket.send_json({"type": "ranking.updated", "rows": await ranking_rows(websocket.app.state.session_factory)})
     try:
-        while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
+        # Conserva el Observer existente: tanto la primera vista como las
+        # actualizaciones de puntuación usan el mismo ConnectionManager.
+        async with asyncio.timeout(get_settings().access_token_minutes * 60):
+            await websocket.app.state.sockets.connect(websocket)
+            await websocket.send_json({"type": "ranking.updated", "rows": await ranking_rows(websocket.app.state.session_factory)})
+            while True:
+                await websocket.receive_text()
+    except (WebSocketDisconnect, TimeoutError):
+        pass
+    except Exception:
+        # La respuesta de error nunca incluye credenciales ni detalles del transporte.
+        try:
+            await websocket.close(code=1011)
+        except Exception:
+            pass
+    finally:
         websocket.app.state.sockets.disconnect(websocket)
+        try:
+            await websocket.close(code=1000)
+        except Exception:
+            pass
 
 

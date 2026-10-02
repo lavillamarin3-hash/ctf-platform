@@ -13,6 +13,10 @@ export const session = {
 };
 
 /** Ejecuta una petición al backend CTF y convierte errores HTTP en Error. */
+export class ApiError extends Error {
+  constructor(message: string, public status: number) { super(message); }
+}
+
 export async function request<T>(
   path: string,
   init: RequestInit = {},
@@ -33,7 +37,7 @@ export async function request<T>(
   const body = await response.json().catch(() => ({}));
 
   if (!response.ok) {
-    throw new Error(body.detail || "No se pudo completar la operación");
+    throw new ApiError(typeof body.detail === "string" ? body.detail : "Revisa los datos e intenta nuevamente", response.status);
   }
 
   return body as T;

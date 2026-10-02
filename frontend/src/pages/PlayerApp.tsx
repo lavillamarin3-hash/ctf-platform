@@ -28,7 +28,7 @@ export function PlayerApp({
   onThemePreferenceChange: (value: ThemePreference) => void;
   onUserChange: (user: User) => void;
 }) {
-  const controller = usePlayerController();
+  const controller = usePlayerController(user.id);
 
   return (
     <div className="app-shell">

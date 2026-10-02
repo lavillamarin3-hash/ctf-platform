@@ -6,6 +6,9 @@ from ..domain.challenges.catalog import SEED_CHALLENGES
 from ..models import ChallengeFlag
 
 
+EXPLICIT_STATIC_VALIDATOR = "exact_hash_explicit"
+
+
 _OVERRIDES: dict[str, dict[int, dict[str, str]]] = {}
 for challenge in SEED_CHALLENGES:
     specs: dict[int, dict[str, str]] = {}
@@ -23,6 +26,11 @@ def effective_mode_template(challenge_code: str, flag: ChallengeFlag) -> tuple[s
     """Resuelve modo/plantilla sin persistir cambios en PostgreSQL."""
     if flag.mode == "dynamic" and flag.template:
         return "dynamic", flag.template
+    # LAB-01 conserva el fallback para filas heredadas. Una flag estática creada
+    # o confirmada por el administrador usa una marca en la columna existente
+    # validator y no debe ser reinterpretada como dinámica por el seed.
+    if flag.mode == "static" and getattr(flag, "validator", None) == EXPLICIT_STATIC_VALIDATOR:
+        return "static", None
     override = _OVERRIDES.get(challenge_code, {}).get(int(flag.flag_order))
     if flag.is_active and override:
         return override["mode"], override["template"]

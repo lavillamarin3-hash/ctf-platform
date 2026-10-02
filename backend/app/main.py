@@ -7,6 +7,7 @@ La lógica funcional vive en servicios y módulos de API separados.
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy.exc import IntegrityError
 
 from .core import get_settings
@@ -19,6 +20,7 @@ from .api.laboratories import router as laboratories_router
 from .api.challenges import router as challenges_router
 from .api.runs import router as runs_router
 from .api.reports import router as reports_router
+from .api.terminal import router as terminal_router
 
 # Configuración central de la API. Los routers se registran abajo por contexto.
 app = FastAPI(title="Plataforma CTF del laboratorio", version="0.1.0", lifespan=lifespan)
@@ -39,9 +41,16 @@ app.include_router(laboratories_router)
 app.include_router(challenges_router)
 app.include_router(runs_router)
 app.include_router(reports_router)
+app.include_router(terminal_router)
 
 
 @app.exception_handler(IntegrityError)
 async def integrity_error_handler(_: Request, __: IntegrityError):
     """Devuelve un conflicto legible cuando PostgreSQL rechaza una restricción."""
     return JSONResponse(status_code=409, content={"detail": "La operación entra en conflicto con datos existentes."})
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_error_handler(_: Request, __: RequestValidationError):
+    # FastAPI puede incluir el valor original del campo (p. ej. una contraseña).
+    return JSONResponse(status_code=422, content={"detail": "Revisa los datos enviados y vuelve a intentarlo."})

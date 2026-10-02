@@ -17,6 +17,7 @@ from fastapi import APIRouter
 
 router = APIRouter()
 
+@router.get("/api/v1/health")
 async def health() -> dict:
     return {"status": "ok", "service": "ctf-api"}
 
@@ -31,7 +32,21 @@ async def login(payload: LoginRequest, request: Request):
         await write_audit(session, user.id, "auth.login", "user", str(user.id))
         await session.commit()
     token = create_token(str(user.id), "access", timedelta(minutes=get_settings().access_token_minutes))
+    # La sesión personal de Guacamole queda cifrada y efímera en Redis.
+    # Un fallo remoto no impide usar los contenidos CTF: la terminal permite reconectar.
+    if user.role == "player" and hasattr(request.app.state.guacamole, "authenticate_player"):
+        try:
+            delegated = await request.app.state.guacamole.authenticate_player(user.username, payload.password)
+            await request.app.state.terminal_sessions.remember_user(user.id, delegated)
+        except Exception:
+            pass
     return TokenResponse(access_token=token, user=UserView.model_validate(user))
+
+
+@router.post("/api/v1/auth/logout")
+async def logout(request: Request, user=Depends(get_current_user)):
+    await request.app.state.terminal_sessions.forget_user(user.id)
+    return {"ok": True}
 
 
 @router.get("/api/v1/auth/me", response_model=UserView)
@@ -57,6 +72,7 @@ async def update_profile(payload: ProfileUpdate, request: Request, actor=Depends
         await write_audit(session, actor.id, "profile.update", "user", str(actor.id), {"fields": ["username", "email"]})
         await session.commit()
         await session.refresh(target)
+        await request.app.state.terminal_sessions.forget_user(actor.id)
         return UserView.model_validate(target)
 
 @router.post("/api/v1/auth/password")
@@ -68,6 +84,7 @@ async def change_password(payload: PasswordChange, request: Request, actor=Depen
         target.password_hash = hash_password(payload.new_password)
         await write_audit(session, actor.id, "profile.password_change", "user", str(actor.id))
         await session.commit()
+    await request.app.state.terminal_sessions.forget_user(actor.id)
     return {"ok": True}
 
 
