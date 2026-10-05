@@ -31,3 +31,7 @@ backup_pre_fase9.sql
 outputs/
 work/
 *.tsbuildinfo
+*.sql
+*.dump
+.env
+.env.*
