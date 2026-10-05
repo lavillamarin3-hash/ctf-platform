@@ -7,7 +7,8 @@ import { createElement, FormEvent, useCallback, useEffect, useMemo, useState } f
 
 import { api, session, User } from "../api";
 import { Theme } from "../config";
-import { Logo, ThemeToggle, ErrorMessage, Icon } from "./common";
+import { ThemeToggle, ErrorMessage, Icon } from "./common";
+import comciberLogo from "../assets/images/comciber-ctf-logo.jpg";
 
 export function Login({
   onLogin,
@@ -72,48 +73,27 @@ export function Login({
       </div>
 
       <section className="login-card">
+
+        {/* ── Panel izquierdo: imagen de portada ── */}
         <div className="login-visual">
-          <Logo />
-
-          <div className="login-visual-content">
-            <span className="eyebrow">
-              LABORATORIO INTERNO
-            </span>
-
-            <h1>
-              Entrena.
-              <br />
-              <em>Analiza.</em>
-              <br />
-              Supera.
-            </h1>
-
-            <p>
-              Plataforma CTF conectada al
-              laboratorio MITRE ATT&amp;CK.
-              Resuelve escenarios controlados y
-              desarrolla tus habilidades de
-              ciberseguridad.
-            </p>
-
-            <div className="login-pill-row">
-              <span>MITRE ATT&amp;CK</span>
-              <span>GUACAMOLE</span>
-              <span>SECURITY ONION</span>
-            </div>
-          </div>
-
+          <img
+            src={comciberLogo}
+            alt="COMCIBER CTF"
+            className="login-cover-img"
+          />
+          <div className="login-cover-overlay" />
           <div className="login-glow glow-one" />
           <div className="login-glow glow-two" />
         </div>
 
+        {/* ── Panel derecho: formulario ── */}
         <form
           className="login-form"
           onSubmit={submit}
         >
           <div className="login-form-head">
             <span className="eyebrow accent">
-              BIENVENIDO
+              COMCIBER CTF
             </span>
 
             <h2>
