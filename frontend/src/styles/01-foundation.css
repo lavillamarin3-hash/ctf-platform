@@ -27,7 +27,7 @@ button:focus-visible, input:focus-visible { outline: none; box-shadow: 0 0 0 3px
   .brand-mark span { font-size: 22px; font-weight: 900; transform: translateY(-1px); }
   .brand strong { display: block; font-size: 16px; letter-spacing: .08em; }
   .brand small { display: block; margin-top: 2px; font-size: 8px; letter-spacing: .22em; color: #687892; }
-  .login-visual-content { position: relative; z-index: 2; max-width: 470px; margin-top: 118px; }
+  .login-visual-content { position: relative; z-index: 2; max-width: 470px; margin-top: 24px; }
   .login-visual h1 { margin: 18px 0 18px; font-size: clamp(46px, 6vw, 78px); line-height: .93; letter-spacing: -.055em; }
   .login-visual h1 em { color: #6f79ff; font-style: normal; }
   .login-visual p { max-width: 480px; margin: 0; color: #93a3bb; font-size: 15px; line-height: 1.8; }

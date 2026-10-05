@@ -6,6 +6,35 @@
 /* ===== FASE UI: roles + modo claro ===== */
 .theme-toggle { position: relative; }
 .login-theme { position: absolute; top: 22px; right: 22px; z-index: 5; }
+
+/* ── Logo de plataforma en el panel visual ── */
+.login-visual-logo {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.login-platform-logo {
+  width: 200px;
+  height: 200px;
+  object-fit: contain;
+  border-radius: 24px;
+  border: 1px solid rgba(86, 170, 255, 0.22);
+  box-shadow:
+    0 0 40px rgba(60, 139, 255, 0.18),
+    0 0 80px rgba(93, 79, 255, 0.10);
+  background: rgba(7, 17, 31, 0.60);
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+.login-platform-logo:hover {
+  transform: scale(1.03);
+  box-shadow:
+    0 0 55px rgba(60, 139, 255, 0.28),
+    0 0 100px rgba(93, 79, 255, 0.16);
+}
+
 .admin-grid { display: grid; grid-template-columns: 1fr .72fr; gap: 14px; margin-top: 14px; }
 .admin-panel { padding: 16px; }
 .admin-actions { display: grid; gap: 8px; margin-top: 12px; }
