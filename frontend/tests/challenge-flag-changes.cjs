@@ -25,9 +25,18 @@ const checks = [
     assert.equal(hasFlagDraftChanges(flag, staticDraft, 'LAB-01'), false);
     assert.equal(hasFlagDraftChanges(flag, { ...staticDraft, value: 'FLAG{replacement}' }, 'LAB-01'), true);
   }],
-  ['editor defaults for legacy metadata do not turn content edits into flag mutations', () => {
-    const flag = { ...original, template: null };
-    assert.equal(hasFlagDraftChanges(flag, { ...draft, template: initialFlagTemplate(flag, 'LAB-01') }, 'LAB-01'), false);
+  ['saving a legacy dynamic flag persists the editor fallback when no template exists', () => {
+    for (const template of [null, '', '   ']) {
+      const flag = { ...original, template };
+      const fallback = initialFlagTemplate(flag, 'LAB-01');
+      assert.equal(fallback, 'FLAG{LAB-01}-{{RUN_ID}}-{{RAND}}');
+      assert.equal(hasFlagDraftChanges(flag, { ...draft, template: fallback }, 'LAB-01'), true);
+    }
+  }],
+  ['an existing static flag still retains its value when its editor template is missing', () => {
+    const flag = { id: 7, label: 'Evidence', mode: 'static', template: null, flag_order: 1, is_active: true };
+    const staticDraft = { ...flag, mode: 'static', template: initialFlagTemplate(flag, 'LAB-01'), value: '   ' };
+    assert.equal(hasFlagDraftChanges(flag, staticDraft, 'LAB-01'), false);
   }],
   ['explicit runtime or metadata edits remain detectable', () => {
     for (const change of [{ label: 'Another label' }, { flag_order: 2 }, { is_active: false }, { mode: 'static' }, { template: 'FLAG{different_{{RAND}}}' }]) {

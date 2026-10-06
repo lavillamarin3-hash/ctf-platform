@@ -12,11 +12,11 @@ export type FlagDraft = {
 
 /** Matches the existing editor default without generating or validating a flag. */
 export function initialFlagTemplate(flag: Flag, challengeCode: string): string {
-  return flag.template ?? `FLAG{${challengeCode}}-{{RUN_ID}}-{{RAND}}`;
+  return flag.template?.trim() ? flag.template : `FLAG{${challengeCode}}-{{RUN_ID}}-{{RAND}}`;
 }
 
-/** Content-only challenge edits must leave its runtime flags untouched. */
-export function hasFlagDraftChanges(existing: Flag | undefined, draft: FlagDraft, challengeCode: string): boolean {
+/** Content-only edits leave configured flags untouched; legacy dynamic flags still need a template. */
+export function hasFlagDraftChanges(existing: Flag | undefined, draft: FlagDraft, _challengeCode: string): boolean {
   if (!existing) return true;
   if (
     existing.label.trim() !== draft.label.trim() ||
@@ -28,5 +28,7 @@ export function hasFlagDraftChanges(existing: Flag | undefined, draft: FlagDraft
     // The API deliberately omits existing plaintext; empty means retain that value.
     return Boolean(draft.value.trim());
   }
-  return initialFlagTemplate(existing, challengeCode).trim() !== draft.template.trim();
+  // The editor's fallback is not persisted configuration; save it for legacy dynamic flags.
+  const persistedTemplate = existing.template?.trim();
+  return !persistedTemplate || persistedTemplate !== draft.template.trim();
 }

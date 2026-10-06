@@ -109,6 +109,22 @@ class TerminalAuthorizationTests(unittest.IsolatedAsyncioTestCase):
         self.assertIs(resolve.call_args.args[0].app, self.app)
         self.assertIs(resolve.call_args.args[1], vm)
 
+    async def test_esc_without_instance_reports_reconfiguration_instead_of_empty_options(self):
+        self.challenge.code = terminal.ATTACK_CHALLENGE_CODE
+        self.session.instance = None
+        with patch.object(terminal, "_assigned", AsyncMock(return_value=True)), patch.object(
+            terminal, "_find_challenge_vm", AsyncMock(
+                side_effect=AssertionError("ESC no debe usar la ruta heredada sin instancia")
+            ),
+        ):
+            with self.assertRaises(HTTPException) as options_error:
+                await terminal.terminal_options(101, SimpleNamespace(app=self.app), self.user)
+            with self.assertRaises(HTTPException) as target_error:
+                await terminal.authorized_target(self.app, 101, 7, "ssh", "attacker")
+        for error in (options_error.exception, target_error.exception):
+            self.assertEqual(error.status_code, 409)
+            self.assertIn("Cierra el laboratorio", error.detail)
+
     async def test_rdp_choice_is_limited_to_reserved_vm_host(self):
         self.instance.vm_asset_id = 71
         self.session.objects[VMAsset] = SimpleNamespace(id=71, ip_address="10.20.30.40")

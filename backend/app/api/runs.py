@@ -26,7 +26,7 @@ from ..services.lab_lock import (
     LabReservationBusy, LabReservationError, LabReservationUnavailable,
     acquire, release, reserve_for_cleanup,
 )
-from ..services.runtime_flags import is_effectively_dynamic
+from ..services.runtime_flags import effective_mode_template, is_effectively_dynamic
 from ..domain.instances.states import InstanceState
 
 
@@ -289,6 +289,19 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             raise HTTPException(status_code=404, detail="Reto no disponible")
         if not await _assigned(session, challenge.id, user.id):
             raise HTTPException(status_code=403, detail="Este reto no está asignado a tu grupo")
+
+        # ESC necesita una sola evidencia dinámica antes de tocar una corrida,
+        # Redis o la VM. Una flag estática o sin plantilla dejaba un run activo
+        # sin instancia, aunque la terminal atacante no pudiera abrirse.
+        if challenge.code == ATTACK_CHALLENGE_CODE:
+            active_flags = [flag for flag in challenge.flags if flag.is_active]
+            dynamic_flags = [flag for flag in active_flags if is_effectively_dynamic(challenge.code, flag)]
+            template = effective_mode_template(challenge.code, dynamic_flags[0])[1] if len(dynamic_flags) == 1 else None
+            if len(active_flags) != 1 or len(dynamic_flags) != 1 or not (template or "").strip():
+                raise HTTPException(
+                    status_code=409,
+                    detail="ESC-01 requiere exactamente una flag dinámica activa con plantilla. El instructor debe revisar la configuración del reto.",
+                )
 
         now = now_utc()
         active_run = await session.scalar(

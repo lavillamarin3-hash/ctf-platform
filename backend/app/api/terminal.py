@@ -98,6 +98,11 @@ async def _run_connection_context(app, session, run_id: int, user_id: int):
         vm_id = getattr(instance, "vm_asset_id", None)
         vm = await session.get(VMAsset, vm_id) if vm_id is not None else None
     else:
+        if challenge.code == ATTACK_CHALLENGE_CODE:
+            raise HTTPException(
+                409,
+                "Esta corrida no tiene una instancia preparada. Cierra el laboratorio y pide al instructor revisar su configuración antes de reabrirlo.",
+            )
         _, vm = await _find_challenge_vm(session, challenge)
         connection = await _resolve_guacamole_connection(AppRequest(app), vm) if vm else None
         if not connection:

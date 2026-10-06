@@ -428,6 +428,33 @@ class RunLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.redis.values, {})
         self.assertEqual(self.injector.files, {})
 
+    async def test_esc_invalid_flag_configuration_fails_without_start_side_effects(self):
+        cases = (
+            ("sin flags", []),
+            ("solo estática", [ChallengeFlag(id=21, mode="static", flag_order=1, is_active=True,
+                                             validator="exact_hash_explicit")]),
+            ("plantilla vacía", [ChallengeFlag(id=22, mode="dynamic", flag_order=1, is_active=True,
+                                               template="   ")]),
+            ("dos dinámicas", [self.flag, ChallengeFlag(id=23, mode="dynamic", flag_order=2,
+                                                         is_active=True, template="FLAG{extra_{{RAND}}}")]),
+            ("dinámica más estática", [self.flag, ChallengeFlag(id=24, mode="static", flag_order=2,
+                                                                  is_active=True, validator="exact_hash_explicit")]),
+        )
+        for name, flags in cases:
+            with self.subTest(name=name):
+                session = self.esc_start_session()
+                self.challenge.flags = list(flags)
+                with self.assertRaises(HTTPException) as error:
+                    await runs.start_challenge("ESC-01-RECON", self.request(session), self.user)
+                self.assertEqual(error.exception.status_code, 409)
+                self.assertIn("una flag dinámica activa", error.exception.detail)
+                self.assertEqual(session.added, [])
+                self.assertEqual(self.redis.values, {})
+                self.assertEqual(self.injector.files, {})
+                self.injector.preflight.assert_not_awaited()
+                self.guacamole.list_connections.assert_not_awaited()
+                self.assertEqual(self.guacamole.patches, [])
+
     async def test_esc_missing_kali_connection_fails_before_reservation_and_injection(self):
         session = self.esc_start_session(kali_connection=False)
         with self.assertRaises(HTTPException) as error:
