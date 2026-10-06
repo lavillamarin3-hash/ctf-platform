@@ -8,7 +8,8 @@ import { createElement, FormEvent, useCallback, useEffect, useMemo, useState } f
 import { api, session, User } from "../api";
 import { Theme } from "../config";
 import { ThemeToggle, ErrorMessage, Icon } from "./common";
-import comciberLogo from "../assets/images/comciber-ctf-logo.jpg";
+import LogoDark from "../assets/images/LogoDark.jpg";
+import LogoWhite from "../assets/images/LogoWhite.jpg";
 
 export function Login({
   onLogin,
@@ -77,7 +78,7 @@ export function Login({
         {/* ── Panel izquierdo: imagen de portada ── */}
         <div className="login-visual">
           <img
-            src={comciberLogo}
+            src={theme === "dark" ? LogoDark : LogoWhite}
             alt="COMCIBER CTF"
             className="login-cover-img"
           />
