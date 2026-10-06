@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Icon } from "../common";
 import type { Run } from "../../models";
+import { prepareFlagCandidate } from "../../lib/prepareFlagCandidate";
 import { GuacamoleTerminal } from "./GuacamoleTerminal";
 
 type SubmissionResult = { correct: boolean; challenge_completed: boolean; awarded_points: number; message: string };
@@ -51,8 +52,18 @@ export function LaboratoryRunWorkspace({ run, onClose, onSubmit }: {
     try { sessionStorage.setItem(storageKey(run.id), value); } catch { /* Las notas siguen en memoria. */ }
   };
   const prepare = (value: string, source: string) => {
-    if (!value.trim()) { setNotice({ kind: "error", message: `${source} está vacío.` }); return; }
-    setCandidate(value.trim()); setNotice({ kind: "success", message: "Texto listo para enviar. La validación se realiza en el backend." });
+    const prepared = prepareFlagCandidate(value);
+    if (prepared.kind !== "ready") {
+      setCandidate("");
+      setNotice({ kind: "error", message: prepared.kind === "empty"
+        ? `${source} está vacío.`
+        : "La selección incluye más texto o varias flags. Selecciona únicamente una flag y vuelve a intentarlo." });
+      return;
+    }
+    setCandidate(prepared.value);
+    setNotice({ kind: "success", message: prepared.joinedLineBreaks
+      ? "Se unieron los saltos de línea de la flag copiada. Revísala antes de enviarla; la validación se realiza en el backend."
+      : "Texto listo para enviar. La validación se realiza en el backend." });
   };
   const pasteFlag = async () => {
     try { prepare(await navigator.clipboard.readText(), "El portapapeles"); }
@@ -104,7 +115,10 @@ export function LaboratoryRunWorkspace({ run, onClose, onSubmit }: {
           <button type="button" className="secondary-action" disabled={!candidate.trim()} onClick={() => void copyFlag()}>Copiar flag</button>
         </div>
         <label className="lab-notes-label" htmlFor={`lab-flag-${run.id}`}>Flag lista para enviar</label>
-        <input id={`lab-flag-${run.id}`} className="lab-flag-candidate" value={candidate} onChange={(event) => setCandidate(event.target.value)} aria-describedby={candidate.length > 32 ? `lab-flag-preview-${run.id}` : undefined} autoComplete="off" spellCheck={false} placeholder="Pega la flag encontrada; no necesitas volver a escribirla" />
+        <input id={`lab-flag-${run.id}`} className="lab-flag-candidate" value={candidate} onChange={(event) => setCandidate(event.target.value)} onPaste={(event) => {
+          event.preventDefault();
+          prepare(event.clipboardData.getData("text/plain"), "El portapapeles");
+        }} aria-describedby={candidate.length > 32 ? `lab-flag-preview-${run.id}` : undefined} autoComplete="off" spellCheck={false} placeholder="Pega la flag encontrada; no necesitas volver a escribirla" />
         {candidate.length > 32 && <div className="lab-flag-preview" id={`lab-flag-preview-${run.id}`} tabIndex={0}><span>Vista completa de la flag</span><code>{candidate}</code></div>}
         <button className="primary-action laboratory-submit-flag" disabled={submitting || closing || expired || !candidate.trim()}><Icon name="flag" />{submitting ? "Validando…" : "Enviar flag"}</button>
         {notice && <p className={`laboratory-feedback ${notice.kind}`} role={notice.kind === "error" ? "alert" : "status"}>{notice.message}</p>}
