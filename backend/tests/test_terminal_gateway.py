@@ -244,7 +244,7 @@ class TerminalAuthorizationTests(unittest.IsolatedAsyncioTestCase):
 
 
 class TerminalBridgeTests(unittest.IsolatedAsyncioTestCase):
-    async def test_watch_keeps_revalidating_attacker_target(self):
+    def bridge_peers(self):
         async def pending_message():
             await asyncio.Event().wait()
 
@@ -259,13 +259,70 @@ class TerminalBridgeTests(unittest.IsolatedAsyncioTestCase):
             def __aiter__(self):
                 return pending_upstream()
 
-        upstream = Upstream()
-        sessions = SimpleNamespace(is_closed=AsyncMock(side_effect=[False, True]),
+        return browser, Upstream()
+
+    async def test_watch_rechecks_attacker_target_every_ten_seconds(self):
+        browser, upstream = self.bridge_peers()
+        sessions = SimpleNamespace(is_closed=AsyncMock(side_effect=[False] * 21 + [True]),
                                    get_user=AsyncMock(return_value={"username": "student-fixture"}))
         app = SimpleNamespace(state=SimpleNamespace(terminal_sessions=sessions))
         target = AsyncMock(return_value=("kali-ssh", now_utc() + timedelta(minutes=5), "student-fixture"))
+        clock = {"seconds": 0}
+
+        async def tick(_seconds):
+            clock["seconds"] += 1
+
+        with patch.object(terminal, "authorized_target", target), \
+             patch.object(terminal, "monotonic", side_effect=lambda: clock["seconds"]), \
+             patch.object(terminal.asyncio, "sleep", side_effect=tick):
+            await terminal.bridge(app, 101, 7, browser, upstream, "ssh", "attacker")
+        self.assertEqual(target.await_count, 2)
+        self.assertEqual(target.await_args_list[0].args, (app, 101, 7, "ssh", "attacker"))
+        self.assertEqual(target.await_args_list[1].args, (app, 101, 7, "ssh", "attacker"))
+        self.assertEqual(sessions.is_closed.await_count, 22)
+        self.assertEqual(sessions.get_user.await_count, 21)
+
+    async def test_watch_closes_on_first_tick_without_waiting_for_recheck(self):
+        browser, upstream = self.bridge_peers()
+        sessions = SimpleNamespace(is_closed=AsyncMock(return_value=True),
+                                   get_user=AsyncMock(return_value={"username": "student-fixture"}))
+        app = SimpleNamespace(state=SimpleNamespace(terminal_sessions=sessions))
+        target = AsyncMock()
         with patch.object(terminal, "authorized_target", target), patch.object(terminal.asyncio, "sleep", AsyncMock()):
             await terminal.bridge(app, 101, 7, browser, upstream, "ssh", "attacker")
+        sessions.is_closed.assert_awaited_once_with(101)
+        sessions.get_user.assert_not_awaited()
+        target.assert_not_awaited()
+
+    async def test_watch_closes_on_first_tick_after_delegated_logout(self):
+        browser, upstream = self.bridge_peers()
+        sessions = SimpleNamespace(is_closed=AsyncMock(return_value=False),
+                                   get_user=AsyncMock(return_value=None))
+        app = SimpleNamespace(state=SimpleNamespace(terminal_sessions=sessions))
+        target = AsyncMock()
+        with patch.object(terminal, "authorized_target", target), patch.object(terminal.asyncio, "sleep", AsyncMock()):
+            await terminal.bridge(app, 101, 7, browser, upstream, "ssh", "attacker")
+        sessions.is_closed.assert_awaited_once_with(101)
+        sessions.get_user.assert_awaited_once_with(7)
+        target.assert_not_awaited()
+
+    async def test_watch_rejects_revoked_attacker_authorization_at_next_recheck(self):
+        browser, upstream = self.bridge_peers()
+        sessions = SimpleNamespace(is_closed=AsyncMock(return_value=False),
+                                   get_user=AsyncMock(return_value={"username": "student-fixture"}))
+        app = SimpleNamespace(state=SimpleNamespace(terminal_sessions=sessions))
+        target = AsyncMock(side_effect=HTTPException(403, "revoked"))
+        clock = {"seconds": 0}
+
+        async def tick(_seconds):
+            clock["seconds"] += 1
+
+        with patch.object(terminal, "authorized_target", target), \
+             patch.object(terminal, "monotonic", side_effect=lambda: clock["seconds"]), \
+             patch.object(terminal.asyncio, "sleep", side_effect=tick):
+            with self.assertRaises(HTTPException):
+                await terminal.bridge(app, 101, 7, browser, upstream, "ssh", "attacker")
+        self.assertEqual(clock["seconds"], terminal.AUTHORIZATION_RECHECK_SECONDS)
         target.assert_awaited_once_with(app, 101, 7, "ssh", "attacker")
 
 

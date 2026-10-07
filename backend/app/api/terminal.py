@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from time import monotonic
 from typing import Literal
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
@@ -40,6 +41,7 @@ ATTACKER_VM_NAME = ESC_ATTACKER_NAME
 ATTACKER_IP = ESC_ATTACKER_IP
 VICTIM_VM_NAME = ESC_VICTIM_NAME
 VICTIM_IP = ESC_VICTIM_IP
+AUTHORIZATION_RECHECK_SECONDS = 10
 
 
 def _same_host(first: str | None, second: str | None) -> bool:
@@ -238,13 +240,17 @@ async def bridge(app, run_id: int, user_id: int, browser: WebSocket, upstream,
             await browser.send_text(data)
 
     async def watch_run():
+        next_authorization_at = monotonic() + AUTHORIZATION_RECHECK_SECONDS
         while True:
             await asyncio.sleep(1)
+            # El cierre y la sesión se comprueban cada segundo; los permisos remotos requieren menos consultas.
             if await app.state.terminal_sessions.is_closed(run_id):
                 return
             if not await app.state.terminal_sessions.get_user(user_id):
                 return
-            await authorized_target(app, run_id, user_id, protocol, target)
+            if monotonic() >= next_authorization_at:
+                await authorized_target(app, run_id, user_id, protocol, target)
+                next_authorization_at = monotonic() + AUTHORIZATION_RECHECK_SECONDS
 
     tasks = [asyncio.create_task(coro()) for coro in (browser_to_guac, guac_to_browser, watch_run)]
     try:
