@@ -8,6 +8,7 @@ import { createElement, FormEvent, useCallback, useEffect, useMemo, useState } f
 import { api, session, User } from "../api";
 import { Theme } from "../config";
 import { ThemeToggle, ErrorMessage, Icon } from "./common";
+import Logo from "../assets/images/Logo.png";
 import LogoDark from "../assets/images/LogoDark.jpg";
 import LogoWhite from "../assets/images/LogoWhite.jpg";
 
@@ -82,9 +83,16 @@ export function Login({
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "2rem"
+            padding: "2rem",
+            position: "relative"
           }}
         >
+          {/* Elementos visuales decorativos de fondo (burbujas y cuadrados fragmentados) */}
+          <div style={{ position: "absolute", top: "15%", left: "10%", width: "45px", height: "45px", border: "2px solid rgba(123, 108, 246, 0.2)", borderRadius: "8px", transform: "rotate(20deg)", pointerEvents: "none", zIndex: 1 }} />
+          <div style={{ position: "absolute", bottom: "25%", right: "15%", width: "80px", height: "80px", border: "1.5px solid rgba(107, 127, 247, 0.15)", borderRadius: "16px", transform: "rotate(-15deg)", pointerEvents: "none", zIndex: 1 }} />
+          <div style={{ position: "absolute", top: "50%", left: "5%", width: "30px", height: "30px", border: "2px solid rgba(123, 108, 246, 0.1)", borderRadius: "6px", transform: "rotate(45deg)", pointerEvents: "none", zIndex: 1 }} />
+          <div style={{ position: "absolute", bottom: "10%", left: "20%", width: "120px", height: "120px", background: "radial-gradient(circle, rgba(123, 108, 246, 0.05) 0%, transparent 70%)", borderRadius: "50%", pointerEvents: "none", zIndex: 1 }} />
+
           <div 
             className="login-visual-content"
             style={{
@@ -98,19 +106,21 @@ export function Login({
             }}
           >
             <img
-              src={theme === "dark" ? LogoDark : LogoWhite}
+              src={theme === "dark" ? Logo : Logo}
               alt="COMCIBER CTF"
               style={{
                 maxWidth: "240px",
                 width: "80%",
                 height: "auto",
-                marginBottom: "1.5rem"
+                marginBottom: "2rem",
+                filter: theme === "dark" ? "drop-shadow(0 4px 12px rgba(0,0,0,0.3))" : "none"
               }}
             />
-            <h1 style={{ fontSize: "clamp(22px, 3vw, 32px)", margin: "0 0 1rem 0", lineHeight: 1.2 }}>
-              Bienvenido a la plataforma CTF
+            <h1 style={{ fontSize: "clamp(24px, 3vw, 36px)", margin: "0 0 1rem 0", lineHeight: 1.2, fontWeight: "800", color: theme === "dark" ? "#e9f1fb" : "#14213a" }}>
+              Bienvenido a <br/>
+              <span className="accent-text" style={{ color: "#7b6cf6" }}>COMCIBER CTF</span>
             </h1>
-            <p style={{ fontSize: "clamp(14px, 1.5vw, 16px)", margin: 0, padding: "0 1rem" }}>
+            <p style={{ fontSize: "clamp(15px, 1.5vw, 17px)", margin: 0, padding: "0 1rem", color: theme === "dark" ? "#93a3bb" : "#637286", lineHeight: 1.6, maxWidth: "420px" }}>
               Pon a prueba tus habilidades. Explora, aprende y supera nuevos retos.
             </p>
           </div>
@@ -123,8 +133,15 @@ export function Login({
         <form
           className="login-form"
           onSubmit={submit}
+          style={{ position: "relative", overflow: "hidden" }}
         >
-          <div className="login-form-head">
+          {/* Elementos visuales decorativos - Derecha (Fondo) */}
+          <div style={{ position: "absolute", top: "-5%", right: "-10%", width: "180px", height: "180px", background: "radial-gradient(circle, rgba(123, 108, 246, 0.04) 0%, transparent 70%)", borderRadius: "50%", pointerEvents: "none", zIndex: 0 }} />
+          <div style={{ position: "absolute", bottom: "10%", left: "-15%", width: "250px", height: "250px", background: "radial-gradient(circle, rgba(107, 127, 247, 0.03) 0%, transparent 70%)", borderRadius: "50%", pointerEvents: "none", zIndex: 0 }} />
+          <div style={{ position: "absolute", top: "25%", right: "8%", width: "35px", height: "35px", border: "1.5px solid rgba(123, 108, 246, 0.12)", borderRadius: "8px", transform: "rotate(30deg)", pointerEvents: "none", zIndex: 0 }} />
+          <div style={{ position: "absolute", bottom: "35%", right: "12%", width: "20px", height: "20px", border: "2px solid rgba(107, 127, 247, 0.1)", borderRadius: "4px", transform: "rotate(-20deg)", pointerEvents: "none", zIndex: 0 }} />
+
+          <div className="login-form-head" style={{ position: "relative", zIndex: 1 }}>
             <span className="eyebrow accent">
               COMCIBER CTF
             </span>
