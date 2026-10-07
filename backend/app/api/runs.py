@@ -17,7 +17,10 @@ from ..models import (
 
 from ..schemas import RunView, SubmissionRequest, SubmissionResponse
 from ..services.bootstrap import check_rate_limit, ranking_rows, write_audit
-from ..services.challenge_runtime import _find_challenge_vm, _resolve_guacamole_connection
+from ..services.challenge_runtime import (
+    EscAttackerNotReady, _find_challenge_vm, _resolve_esc_attacker_targets,
+    _resolve_guacamole_connection,
+)
 from ..services.dynamic_flags import DynamicFlagRuntime
 from ..services.lab_lock import (
     LabReservationBusy, LabReservationError, LabReservationUnavailable,
@@ -352,6 +355,15 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
                         status_code=503,
                         detail="La API llega a la VM, pero la cuenta del inyector no puede autenticarse por SSH. Contacta al instructor.",
                     ) from exc
+
+        # ESC reserva e inyecta en la víctima, pero el jugador necesita una
+        # conexión Kali utilizable. Confirmarla antes de crear el run evita
+        # dejar evidencia cuando su terminal atacante no puede abrirse.
+        if challenge.code == ATTACK_CHALLENGE_CODE:
+            try:
+                await _resolve_esc_attacker_targets(request.app, session, user.username, challenge, target_vm)
+            except EscAttackerNotReady as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
 
         # Garantiza que el estudiante tenga READ sobre la conexión concreta del laboratorio.
         # Esto evita que Guacamole abra otra conexión previamente asignada al usuario.

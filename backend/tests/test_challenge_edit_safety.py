@@ -4,7 +4,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
 
 from fastapi import HTTPException
-from app.api.challenges import archive_challenge, create_flag, require_idle_challenge, update_flag
+from app.api.challenges import archive_challenge, create_flag, require_idle_challenge, update_challenge, update_flag
 from app.schemas import FlagUpdate
 from app.services.runtime_flags import EXPLICIT_STATIC_VALIDATOR
 
@@ -30,13 +30,68 @@ class ChallengeEditSafetyTests(unittest.IsolatedAsyncioTestCase):
         session.commit.assert_not_called()
 
     async def test_archive_preserves_challenge_row_when_idle(self):
-        challenge = SimpleNamespace(id=7, is_published=True)
+        challenge = SimpleNamespace(id=7, code="OLD-01", is_published=True)
         session, request = self.setup_edit([challenge, None])
         with patch("app.api.challenges.write_audit", new_callable=AsyncMock):
             await archive_challenge("OLD-01", request, SimpleNamespace(id=1))
         self.assertFalse(challenge.is_published)
         session.delete.assert_not_called()
         session.commit.assert_awaited_once()
+
+    async def test_publishing_esc_syncs_existing_group_and_direct_member_access(self):
+        challenge = SimpleNamespace(id=7, code="ESC-01-RECON", is_published=False,
+                                    asset_references=["LAB-LNXVICT", "LAB-KALI"])
+        session, request = self.setup_edit([challenge, None])
+        session.scalars.return_value = SimpleNamespace(all=lambda: [3])
+        payload = SimpleNamespace(code=challenge.code, is_published=True,
+                                  asset_references=challenge.asset_references,
+                                  model_dump=lambda: {"is_published": True})
+        with patch("app.api.challenges.write_audit", new_callable=AsyncMock), \
+             patch("app.api.challenges.challenge_view", return_value={"ok": True}), \
+             patch("app.api.challenges._reconcile_esc_guacamole_access", new_callable=AsyncMock) as reconcile:
+            await update_challenge(challenge.code, payload, request, SimpleNamespace(id=1))
+        self.assertTrue(challenge.is_published)
+        session.commit.assert_awaited_once()
+        reconcile.assert_awaited_once_with(request, [3])
+
+    async def test_archiving_esc_reconciles_member_access(self):
+        challenge = SimpleNamespace(id=7, code="ESC-01-RECON", is_published=True)
+        session, request = self.setup_edit([challenge, None])
+        session.scalars.return_value = SimpleNamespace(all=lambda: [3])
+        with patch("app.api.challenges.write_audit", new_callable=AsyncMock), \
+             patch("app.api.challenges._reconcile_esc_guacamole_access", new_callable=AsyncMock) as reconcile:
+            await archive_challenge(challenge.code, request, SimpleNamespace(id=1))
+        self.assertFalse(challenge.is_published)
+        reconcile.assert_awaited_once_with(request, [3])
+
+    async def test_esc_publication_reports_reconciliation_failure(self):
+        challenge = SimpleNamespace(id=7, code="ESC-01-RECON", is_published=False,
+                                    asset_references=["LAB-LNXVICT", "LAB-KALI"])
+        session, request = self.setup_edit([challenge, None])
+        session.scalars.return_value = SimpleNamespace(all=lambda: [3])
+        payload = SimpleNamespace(code=challenge.code, is_published=True,
+                                  asset_references=challenge.asset_references,
+                                  model_dump=lambda: {"is_published": True})
+        with patch("app.api.challenges.write_audit", new_callable=AsyncMock), \
+             patch("app.api.challenges.challenge_view", return_value={"ok": True}), \
+             patch("app.api.challenges._reconcile_esc_guacamole_access", new_callable=AsyncMock,
+                   side_effect=RuntimeError("Guacamole no disponible")) as reconcile:
+            with self.assertRaisesRegex(RuntimeError, "Guacamole no disponible"):
+                await update_challenge(challenge.code, payload, request, SimpleNamespace(id=1))
+        session.commit.assert_awaited_once()
+        reconcile.assert_awaited_once_with(request, [3])
+
+    async def test_esc_archive_reports_reconciliation_failure(self):
+        challenge = SimpleNamespace(id=7, code="ESC-01-RECON", is_published=True)
+        session, request = self.setup_edit([challenge, None])
+        session.scalars.return_value = SimpleNamespace(all=lambda: [3])
+        with patch("app.api.challenges.write_audit", new_callable=AsyncMock), \
+             patch("app.api.challenges._reconcile_esc_guacamole_access", new_callable=AsyncMock,
+                   side_effect=RuntimeError("Guacamole no disponible")) as reconcile:
+            with self.assertRaisesRegex(RuntimeError, "Guacamole no disponible"):
+                await archive_challenge(challenge.code, request, SimpleNamespace(id=1))
+        session.commit.assert_awaited_once()
+        reconcile.assert_awaited_once_with(request, [3])
 
     def setup_edit(self, scalar_results):
         session = AsyncMock()

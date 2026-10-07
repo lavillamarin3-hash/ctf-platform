@@ -15,7 +15,11 @@ from websockets.asyncio.client import connect
 from ..core import get_settings, now_utc, require_roles
 from ..models import Challenge, ChallengeInstance, ChallengeRun, User, VMAsset
 from ..domain.instances.states import InstanceState
-from ..services.challenge_runtime import _find_challenge_vm, _resolve_guacamole_connection
+from ..services.challenge_runtime import (
+    ESC_ATTACKER_IP, ESC_ATTACKER_NAME, ESC_VICTIM_IP, ESC_VICTIM_NAME,
+    EscAttackerNotReady, _find_challenge_vm, _resolve_esc_attacker_targets,
+    _resolve_guacamole_connection,
+)
 from ..services.bootstrap import check_rate_limit
 from .runs import _assigned
 
@@ -32,10 +36,10 @@ class TerminalSelection(BaseModel):
 
 
 ATTACK_CHALLENGE_CODE = "ESC-01-RECON"
-ATTACKER_VM_NAME = "LAB-KALI"
-ATTACKER_IP = "192.168.146.134"
-VICTIM_VM_NAME = "LAB-LNXVICT"
-VICTIM_IP = "192.168.146.137"
+ATTACKER_VM_NAME = ESC_ATTACKER_NAME
+ATTACKER_IP = ESC_ATTACKER_IP
+VICTIM_VM_NAME = ESC_VICTIM_NAME
+VICTIM_IP = ESC_VICTIM_IP
 
 
 def _same_host(first: str | None, second: str | None) -> bool:
@@ -67,37 +71,12 @@ async def _attacker_targets(app, session, username: str, challenge: Challenge,
     No concede permisos ni acepta un identificador del navegador. Si el
     inventario o el permiso READ no son inequívocos, la opción no aparece.
     """
-    if (
-        getattr(challenge, "code", None) != ATTACK_CHALLENGE_CODE or instance is None or victim_vm is None
-        or victim_vm.name != VICTIM_VM_NAME or victim_vm.ip_address != VICTIM_IP
-        or victim_vm.status != "ready"
-        or ATTACKER_VM_NAME not in (getattr(challenge, "asset_references", None) or [])
-    ):
-        return {}
-    attackers = list((await session.scalars(
-        select(VMAsset).where(VMAsset.ip_address == ATTACKER_IP)
-    )).all())
-    if len(attackers) != 1 or attackers[0].name != ATTACKER_VM_NAME or attackers[0].status != "ready":
+    if instance is None:
         return {}
     try:
-        connections = await app.state.guacamole_admin.list_connections()
-        permissions = await app.state.guacamole_admin.get_user_permissions(username)
-    except Exception as exc:
-        raise HTTPException(503, "No se pudo comprobar el acceso a la máquina atacante") from exc
-    readable = {
-        str(identifier) for identifier, values in (permissions.get("connectionPermissions") or {}).items()
-        if "READ" in (values or [])
-    }
-    targets: dict[str, str] = {}
-    for protocol in ("ssh", "rdp"):
-        candidates = [
-            connection for connection in connections
-            if (connection.protocol or "").strip().lower() == protocol
-            and _same_host(connection.hostname, ATTACKER_IP)
-        ]
-        if len(candidates) == 1 and str(candidates[0].identifier) in readable:
-            targets[protocol] = str(candidates[0].identifier)
-    return targets
+        return await _resolve_esc_attacker_targets(app, session, username, challenge, victim_vm)
+    except EscAttackerNotReady:
+        return {}
 
 
 async def _run_connection_context(app, session, run_id: int, user_id: int):

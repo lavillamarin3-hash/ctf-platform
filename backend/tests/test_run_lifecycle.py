@@ -186,6 +186,26 @@ class RunLifecycleTests(unittest.IsolatedAsyncioTestCase):
             user_id=self.user.id, state=InstanceState.IN_USE.value, guacamole_connection_id=self.connection.identifier,
             guacamole_access_granted=True, guacamole_access_preexisting=preexisting)
 
+    def esc_start_session(self, *, kali_read=True, kali_connection=True):
+        self.challenge.code = "ESC-01-RECON"
+        self.challenge.id = 2
+        self.challenge.asset_references = ["LAB-LNXVICT", "LAB-KALI"]
+        self.vm.name = "LAB-LNXVICT"
+        self.vm.ip_address = "192.168.146.137"
+        self.vm.status = "ready"
+        self.connection.hostname = self.vm.ip_address
+        self.settings.guacamole_base_url = "https://guacamole.test"
+        kali = SimpleNamespace(id=5, name="LAB-KALI", ip_address="192.168.146.134",
+                               laboratory_id=3, status="ready")
+        self.objects[(Laboratory, 3)] = SimpleNamespace(id=3, status="ready")
+        connections = [self.connection]
+        if kali_connection:
+            connections.append(SimpleNamespace(identifier="kali-ssh", hostname=kali.ip_address, protocol="ssh"))
+        self.guacamole.list_connections = AsyncMock(return_value=connections)
+        if kali_read:
+            self.guacamole.permissions["connectionPermissions"]["kali-ssh"] = ["READ"]
+        return MemorySession([self.challenge, None, None], objects=self.objects, scalar_lists=[[kali]])
+
     async def test_rejected_reservation_never_clears_other_run_flag_or_grants_read(self):
         path = (self.vm.ip_address, "/opt/ctf/flag.txt")
         self.injector.files[path] = "FLAG{another-run}"
@@ -381,10 +401,7 @@ class RunLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.injector.files, {})
 
     async def test_esc_start_never_grants_victim_read_or_exposes_its_launch_url(self):
-        self.challenge.code = "ESC-01-RECON"
-        self.challenge.id = 2
-        self.settings.guacamole_base_url = "https://guacamole.test"
-        session = MemorySession([self.challenge, None, None], objects=self.objects)
+        session = self.esc_start_session()
         with patch.object(self.guacamole, "direct_connection_url", new=AsyncMock(
             side_effect=AssertionError("No debe generar enlace directo a la víctima")
         )):
@@ -400,6 +417,26 @@ class RunLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(instance.guacamole_access_preexisting)
         self.assertEqual(runs._player_launch_url(self.challenge, self.active_run().assignment), None)
         self.assertEqual(len(self.injector.injected), 1)
+
+    async def test_esc_missing_kali_read_fails_before_reservation_and_injection(self):
+        session = self.esc_start_session(kali_read=False)
+        with self.assertRaises(HTTPException) as error:
+            await runs.start_challenge("ESC-01-RECON", self.request(session), self.user)
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertIn("permiso de lectura", error.exception.detail)
+        self.assertEqual(session.added, [])
+        self.assertEqual(self.redis.values, {})
+        self.assertEqual(self.injector.files, {})
+
+    async def test_esc_missing_kali_connection_fails_before_reservation_and_injection(self):
+        session = self.esc_start_session(kali_connection=False)
+        with self.assertRaises(HTTPException) as error:
+            await runs.start_challenge("ESC-01-RECON", self.request(session), self.user)
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertIn("conexión SSH o RDP única", error.exception.detail)
+        self.assertEqual(session.added, [])
+        self.assertEqual(self.redis.values, {})
+        self.assertEqual(self.injector.files, {})
 
     async def test_esc_rejects_two_dynamic_flags_before_injection(self):
         runtime = DynamicFlagRuntime(self.injector)

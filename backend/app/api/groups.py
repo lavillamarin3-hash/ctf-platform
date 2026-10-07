@@ -11,7 +11,7 @@ from ..guacamole import GuacamoleApiError
 from ..models import Challenge, ChallengeGroupAssignment, GroupMembership, StudentGroup, User
 from ..schemas import GroupCreate, GroupView, GroupMemberAdd
 from ..services.bootstrap import write_audit
-from ..services.challenge_runtime import _sync_guacamole_group_permissions, _sync_group_members_guacamole_permissions
+from ..services.challenge_runtime import _reconcile_esc_guacamole_access, _sync_guacamole_group_permissions
 
 
 from fastapi import APIRouter
@@ -212,7 +212,10 @@ async def assign_challenge_group(code: str, group_id: int, request: Request, act
             session.add(ChallengeGroupAssignment(challenge_id=challenge.id, group_id=group_id, created_by=actor.id))
             await write_audit(session, actor.id, "challenge.group.assign", "challenge", str(challenge.id), {"group_id": group_id, "code": code})
             await session.commit()
-    await _sync_guacamole_group_permissions(request, group_id)
+    if challenge.code == "ESC-01-RECON":
+        await _reconcile_esc_guacamole_access(request, [group_id])
+    else:
+        await _sync_guacamole_group_permissions(request, group_id)
     return await _group_view(request, group_id)
 
 
@@ -227,7 +230,10 @@ async def unassign_challenge_group(code: str, group_id: int, request: Request, a
             await session.delete(assignment)
             await write_audit(session, actor.id, "challenge.group.unassign", "challenge", str(challenge.id), {"group_id": group_id, "code": code})
             await session.commit()
-    await _sync_guacamole_group_permissions(request, group_id)
+    if challenge.code == "ESC-01-RECON":
+        await _reconcile_esc_guacamole_access(request, [group_id])
+    else:
+        await _sync_guacamole_group_permissions(request, group_id)
     return await _group_view(request, group_id)
 
 

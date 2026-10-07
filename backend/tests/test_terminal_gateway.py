@@ -13,7 +13,7 @@ from fastapi.responses import Response
 from app.api import terminal
 from app.core import now_utc
 from app.domain.instances.states import InstanceState
-from app.models import Challenge, ChallengeRun, User, VMAsset
+from app.models import Challenge, ChallengeRun, Laboratory, User, VMAsset
 
 
 class MemorySession:
@@ -144,8 +144,10 @@ class TerminalAuthorizationTests(unittest.IsolatedAsyncioTestCase):
             id=71, name=terminal.VICTIM_VM_NAME, ip_address=terminal.VICTIM_IP, status="ready"
         )
         self.session.attackers = [SimpleNamespace(
-            id=72, name=terminal.ATTACKER_VM_NAME, ip_address=terminal.ATTACKER_IP, status="ready"
+            id=72, name=terminal.ATTACKER_VM_NAME, ip_address=terminal.ATTACKER_IP,
+            laboratory_id=3, status="ready"
         )]
+        self.session.objects[Laboratory] = SimpleNamespace(id=3, status="ready")
         connections = [
             SimpleNamespace(identifier="reserved-fixture-id", protocol="ssh", hostname=terminal.VICTIM_IP),
             SimpleNamespace(identifier="kali-ssh", protocol="ssh", hostname=terminal.ATTACKER_IP),

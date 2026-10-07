@@ -10,6 +10,49 @@ from ..guacamole import GuacamoleApiError
 from ..domain.flags.service import FlagService
 from ..models import Challenge, ChallengeGroupAssignment, GroupMembership, Laboratory, StudentGroup, User, VMAsset
 
+
+ESC_ATTACKER_NAME = "LAB-KALI"
+ESC_ATTACKER_IP = "192.168.146.134"
+ESC_VICTIM_NAME = "LAB-LNXVICT"
+ESC_VICTIM_IP = "192.168.146.137"
+
+
+class EscAttackerNotReady(ValueError):
+    """Kali no puede abrirse de forma inequívoca para el jugador."""
+
+
+def _unique_esc_kali_connections(connections) -> dict[str, str]:
+    targets: dict[str, str] = {}
+    for protocol in ("ssh", "rdp"):
+        matches = [
+            connection for connection in connections
+            if (connection.protocol or "").strip().lower() == protocol
+            and _asset_ref_key(connection.hostname or "") == ESC_ATTACKER_IP
+        ]
+        if len(matches) == 1:
+            targets[protocol] = str(matches[0].identifier)
+    return targets
+
+
+def _esc_sync_connection_ids(challenge: Challenge, vms, labs, connections) -> set[str]:
+    refs = challenge.asset_references or []
+    if challenge.code != "ESC-01-RECON" or ESC_VICTIM_NAME not in refs or ESC_ATTACKER_NAME not in refs:
+        return set()
+
+    def ready_unique_vm(name: str, ip: str) -> bool:
+        owners = [vm for vm in vms if _asset_ref_key(vm.ip_address or "") == ip]
+        if len(owners) != 1:
+            return False
+        vm = owners[0]
+        return (
+            vm.name == name and vm.status == "ready"
+            and any(lab.id == vm.laboratory_id and lab.status == "ready" for lab in labs)
+        )
+
+    if not ready_unique_vm(ESC_VICTIM_NAME, ESC_VICTIM_IP) or not ready_unique_vm(ESC_ATTACKER_NAME, ESC_ATTACKER_IP):
+        return set()
+    return set(_unique_esc_kali_connections(connections).values())
+
 def render_dynamic_flag(template: str, *, code: str, username: str, run_id: int) -> str:
     """Compatibilidad con llamadas existentes; el dominio genera la parte aleatoria."""
     return FlagService().render_template(template, code=code, username=username, run_id=run_id)
@@ -29,6 +72,52 @@ def _guacamole_access_references(challenge: Challenge) -> list[str]:
     if challenge.code == "ESC-01-RECON":
         return [ref for ref in refs if _asset_ref_key(ref) == "LAB-KALI"]
     return refs
+
+
+async def _resolve_esc_attacker_targets(app, session, username: str, challenge: Challenge,
+                                        victim_vm: VMAsset | None) -> dict[str, str]:
+    """Comprueba inventario, conexiones y READ directo antes de usar Kali.
+
+    La misma resolución se aplica al inicio y a cada ticket de terminal. Una
+    conexión ambigua se omite, aunque el usuario tenga permiso sobre ella.
+    """
+    if (
+        challenge.code != "ESC-01-RECON"
+        or ESC_ATTACKER_NAME not in (challenge.asset_references or [])
+        or victim_vm is None
+        or victim_vm.name != ESC_VICTIM_NAME
+        or victim_vm.ip_address != ESC_VICTIM_IP
+        or victim_vm.status != "ready"
+    ):
+        raise EscAttackerNotReady("ESC-01-RECON requiere la VM víctima Linux confirmada y la referencia LAB-KALI")
+
+    attackers = list((await session.scalars(
+        select(VMAsset).where(VMAsset.ip_address == ESC_ATTACKER_IP)
+    )).all())
+    if len(attackers) != 1 or attackers[0].name != ESC_ATTACKER_NAME or attackers[0].status != "ready":
+        raise EscAttackerNotReady("Kali debe estar registrada una sola vez y en estado listo")
+    attacker_lab = await session.get(Laboratory, attackers[0].laboratory_id)
+    if attacker_lab is None or attacker_lab.status != "ready":
+        raise EscAttackerNotReady("El laboratorio de Kali debe estar en estado listo")
+
+    try:
+        connections = await app.state.guacamole_admin.list_connections()
+        permissions = await app.state.guacamole_admin.get_user_permissions(username)
+    except Exception as exc:
+        raise HTTPException(503, "No se pudo comprobar el acceso a Kali en Guacamole") from exc
+
+    candidates = _unique_esc_kali_connections(connections)
+    if not candidates:
+        raise EscAttackerNotReady("Kali necesita una conexión SSH o RDP única hacia 192.168.146.134")
+
+    readable = {
+        str(identifier) for identifier, values in (permissions.get("connectionPermissions") or {}).items()
+        if "READ" in (values or [])
+    }
+    targets = {protocol: identifier for protocol, identifier in candidates.items() if identifier in readable}
+    if not targets:
+        raise EscAttackerNotReady("Tu cuenta de laboratorio necesita permiso de lectura sobre la conexión Kali")
+    return targets
 
 
 async def _sync_player_guacamole_permissions(request: Request, user_id: int) -> None:
@@ -93,6 +182,10 @@ async def _sync_player_guacamole_permissions(request: Request, user_id: int) -> 
 
         desired: dict[str, list[str]] = {}
         for challenge in assigned_challenges:
+            if challenge.code == "ESC-01-RECON":
+                for connection_id in _esc_sync_connection_ids(challenge, vms, lab_rows, guac_connections):
+                    desired[connection_id] = ["READ"]
+                continue
             for raw_ref in _guacamole_access_references(challenge):
                 key = _asset_ref_key(raw_ref)
                 direct = refs_to_connections.get(key)
@@ -167,6 +260,10 @@ async def _sync_guacamole_group_permissions(request: Request, group_id: int) -> 
 
     desired: dict[str, list[str]] = {}
     for challenge in assigned_challenges:
+        if challenge.code == "ESC-01-RECON":
+            for connection_id in _esc_sync_connection_ids(challenge, vms, labs, guac_connections):
+                desired[connection_id] = ["READ"]
+            continue
         for raw_ref in _guacamole_access_references(challenge):
             key = _asset_ref_key(raw_ref)
             direct = refs_to_connections.get(key)
@@ -197,8 +294,29 @@ async def _sync_guacamole_group_permissions(request: Request, group_id: int) -> 
 async def _sync_group_members_guacamole_permissions(request: Request, group_id: int) -> None:
     async with request.app.state.session_factory() as session:
         user_ids = list((await session.scalars(select(GroupMembership.user_id).where(GroupMembership.group_id == group_id))).all())
+    first_error: Exception | None = None
     for user_id in user_ids:
-        await _sync_player_guacamole_permissions(request, int(user_id))
+        try:
+            await _sync_player_guacamole_permissions(request, int(user_id))
+        except Exception as exc:
+            if first_error is None:
+                first_error = exc
+    if first_error is not None:
+        raise first_error
+
+
+async def _reconcile_esc_guacamole_access(request: Request, group_ids: list[int]) -> None:
+    """Intenta reconciliar grupos y usuarios, aun si una escritura remota falla."""
+    first_error: Exception | None = None
+    for group_id in group_ids:
+        for sync in (_sync_guacamole_group_permissions, _sync_group_members_guacamole_permissions):
+            try:
+                await sync(request, group_id)
+            except Exception as exc:
+                if first_error is None:
+                    first_error = exc
+    if first_error is not None:
+        raise first_error
 
 
 async def _find_challenge_vm(session, challenge: Challenge):

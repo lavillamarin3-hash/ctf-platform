@@ -10,6 +10,7 @@ from ..core import get_current_user, hash_password, require_roles
 from ..models import Challenge, ChallengeCompletion, ChallengeFlag, ChallengeGroupAssignment, ChallengeRun, GroupMembership, StudentGroup, User
 from ..schemas import ChallengeCreate, ChallengeView, FlagCreate, FlagUpdate
 from ..services.bootstrap import challenge_view, write_audit
+from ..services.challenge_runtime import _reconcile_esc_guacamole_access
 from ..services.runtime_flags import EXPLICIT_STATIC_VALIDATOR, is_effectively_dynamic
 
 
@@ -98,14 +99,27 @@ async def update_challenge(code: str, payload: ChallengeCreate, request: Request
         challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == code).with_for_update())
         if challenge is None:
             raise HTTPException(status_code=404, detail="Reto no encontrado")
-        if payload.code != challenge.code or payload.asset_references != challenge.asset_references:
+        code_changed = payload.code != challenge.code
+        publication_changed = payload.is_published != challenge.is_published
+        references_changed = payload.asset_references != challenge.asset_references
+        if code_changed or references_changed or publication_changed:
             await require_idle_challenge(session, challenge.id)
+        sync_group_ids = (
+            list((await session.scalars(select(ChallengeGroupAssignment.group_id).where(
+                ChallengeGroupAssignment.challenge_id == challenge.id
+            ))).all())
+            if (challenge.code == "ESC-01-RECON" or payload.code == "ESC-01-RECON")
+            and (code_changed or publication_changed or references_changed) else []
+        )
         for field, value in payload.model_dump().items():
             setattr(challenge, field, value)
         await write_audit(session, user.id, "challenge.update", "challenge", str(challenge.id), {"code": code})
         await session.commit()
         await session.refresh(challenge, attribute_names=["flags"])
-        return challenge_view(challenge, include_flags=True)
+        result = challenge_view(challenge, include_flags=True)
+    if sync_group_ids:
+        await _reconcile_esc_guacamole_access(request, sync_group_ids)
+    return result
 
 
 @router.delete("/api/v1/challenges/{code}", status_code=status.HTTP_204_NO_CONTENT)
@@ -117,9 +131,16 @@ async def archive_challenge(code: str, request: Request, user=Depends(require_ro
         # Despublicar una corrida en curso cortaría la terminal y dejaría la
         # evidencia dinámica pendiente. Exigir cierre/limpieza antes de archivar.
         await require_idle_challenge(session, challenge.id)
+        sync_group_ids = (
+            list((await session.scalars(select(ChallengeGroupAssignment.group_id).where(
+                ChallengeGroupAssignment.challenge_id == challenge.id
+            ))).all()) if challenge.code == "ESC-01-RECON" else []
+        )
         challenge.is_published = False
         await write_audit(session, user.id, "challenge.archive", "challenge", str(challenge.id), {"code": code})
         await session.commit()
+    if sync_group_ids:
+        await _reconcile_esc_guacamole_access(request, sync_group_ids)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
