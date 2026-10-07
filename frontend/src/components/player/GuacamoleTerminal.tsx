@@ -148,6 +148,7 @@ export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = fal
     setState("loading"); setMessage(""); setTarget(next);
     setProtocol((current) => current && available.includes(current) ? current : available[0]);
   };
+  const reconnect = () => setAttempt((value) => value + 1);
 
   useEffect(() => {
     if (!protocol) return;
@@ -282,6 +283,7 @@ export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = fal
     <div className="embedded-terminal-toolbar">
       <div><span className="eyebrow">CONEXIÓN INTEGRADA</span><strong>{protocol === "rdp" ? "Escritorio RDP" : "Terminal SSH"}{target === "attacker" ? " · Kali atacante" : " · VM víctima"}</strong></div>
       <span className={`terminal-state ${state}`} role="status">{labels[state]}</span>
+      {protocol && state === "connected" && <button type="button" className="secondary-action" onClick={reconnect}>Reconectar conexión</button>}
       <div className="terminal-zoom-controls">
         <button type="button" aria-label={protocol === "rdp" ? "Reducir vista RDP" : "Reducir texto de terminal"} disabled={zoom <= ZOOM_STEPS[0]} onClick={() => changeZoom(-1)}>A−</button>
         <span aria-live="polite">{protocol === "rdp" ? `Ajuste ${Math.round(zoom * 100)}%` : `${Math.round(zoom * 100)}%`}</span>
@@ -325,7 +327,7 @@ export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = fal
     {optionsError && <div className="terminal-connection-notice" role="alert"><p>{optionsError}</p><button type="button" className="secondary-action" onClick={() => setOptionsAttempt((value) => value + 1)}>Reintentar conexiones</button></div>}
     {message && <p className="terminal-connection-notice" role="alert">{message}</p>}
     {protocol && (state === "error" || state === "disconnected") && <div className="terminal-connection-notice">
-      <button type="button" className="secondary-action" onClick={() => setAttempt((value) => value + 1)}>Reconectar terminal</button>
+      <button type="button" className="secondary-action" onClick={reconnect}>Reconectar terminal</button>
       <button type="button" className="secondary-action" onClick={() => setState("auth")}>Conectar mi cuenta</button>
     </div>}
     <p className="terminal-connection-notice">{protocol === "rdp" ? "Interactúa con el escritorio asignado. Copia la evidencia y pégala en el campo de envío." : "Haz clic en la terminal para escribir. Selecciona la evidencia para recibirla en el bloc; también puedes pegar la flag en el campo de envío."}</p>
