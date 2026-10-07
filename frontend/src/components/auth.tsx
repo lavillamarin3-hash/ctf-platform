@@ -75,13 +75,45 @@ export function Login({
 
       <section className="login-card">
 
-        {/* ── Panel izquierdo: imagen de portada ── */}
-        <div className="login-visual">
-          <img
-            src={theme === "dark" ? LogoDark : LogoWhite}
-            alt="COMCIBER CTF"
-            className="login-cover-img"
-          />
+        {/* ── Panel izquierdo: identidad y bienvenida ── */}
+        <div 
+          className="login-visual"
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "2rem"
+          }}
+        >
+          <div 
+            className="login-visual-content"
+            style={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              textAlign: "center",
+              marginTop: 0,
+              zIndex: 10,
+              width: "100%"
+            }}
+          >
+            <img
+              src={theme === "dark" ? LogoDark : LogoWhite}
+              alt="COMCIBER CTF"
+              style={{
+                maxWidth: "240px",
+                width: "80%",
+                height: "auto",
+                marginBottom: "1.5rem"
+              }}
+            />
+            <h1 style={{ fontSize: "clamp(22px, 3vw, 32px)", margin: "0 0 1rem 0", lineHeight: 1.2 }}>
+              Bienvenido a la plataforma CTF
+            </h1>
+            <p style={{ fontSize: "clamp(14px, 1.5vw, 16px)", margin: 0, padding: "0 1rem" }}>
+              Pon a prueba tus habilidades. Explora, aprende y supera nuevos retos.
+            </p>
+          </div>
           <div className="login-cover-overlay" />
           <div className="login-glow glow-one" />
           <div className="login-glow glow-two" />
