@@ -87,7 +87,7 @@ export function Logo() {
       </div>
 
       <div>
-        <strong>CYBER LAB</strong>
+        <strong>COMCIBER CTF</strong>
         <small>PLATFORM CTF</small>
       </div>
     </div>
