@@ -46,20 +46,26 @@ html[data-theme="light"] {
   --light-soft: #dde3e9;
 }
 html[data-theme="light"] body { background: var(--light-bg); color: var(--light-text); }
-html[data-theme="light"] .login-shell { background: #e8eef3; }
+/* ── Modo claro: Login ── */
+html[data-theme="light"] .login-shell { background: #dde4ef; }
 html[data-theme="light"] .login-card { border: none; background: transparent; box-shadow: none; }
-html[data-theme="light"] .login-visual { background: #e8eef3; border-right: none; }
-html[data-theme="light"] .brand strong, html[data-theme="light"] .login-visual h1, html[data-theme="light"] .login-form-head h2 { color: #14213a; }
-html[data-theme="light"] .brand small { color: #75859a; }
-html[data-theme="light"] .login-visual p, html[data-theme="light"] .login-form-head p { color: #637286; }
-html[data-theme="light"] .login-pill-row span { border-color: #ced9e7; color: #607089; background: rgba(255,255,255,.78); }
-html[data-theme="light"] .login-form { background: linear-gradient(180deg, #f4f6f8, #eef1f4); }
-html[data-theme="light"] .input-label { color: #54657a; }
-html[data-theme="light"] .dark-field { color: #1a2838; border-color: #ccd7e4; background: #eef1f4; }
+html[data-theme="light"] .login-visual { background: #3b2ab8; }
+html[data-theme="light"] .login-visual::after { background: rgba(180,196,240,.35); box-shadow: 0 0 8px rgba(200,212,247,.25); }
+html[data-theme="light"] .login-welcome-title { color: #395db9; }
+html[data-theme="light"] .login-tagline { color: rgba(24, 56, 145, 0.75); }
+html[data-theme="light"] .deco-sq-1, html[data-theme="light"] .deco-sq-2, html[data-theme="light"] .deco-sq-3, html[data-theme="light"] .deco-sq-4 { border-color: rgba(200,212,255,.3); }
+html[data-theme="light"] .login-form-panel { background: #f0f4f8; }
+html[data-theme="light"] .login-form-head h2 { color: #14213a; }
+html[data-theme="light"] .login-form-head p { color: #637286; }
+html[data-theme="light"] .input-label { color: #3b4f6b; }
+html[data-theme="light"] .dark-field { color: #1a2838; border-color: #c0cedc; background: #e6ecf2; }
 html[data-theme="light"] .dark-field::placeholder { color: #8a99aa; }
+html[data-theme="light"] .dark-field:focus { border-color: #3b2ab8; box-shadow: 0 0 0 3px rgba(59,42,184,.15); }
+html[data-theme="light"] .password-field .icon { color: #7a8fa5; }
 html[data-theme="light"] .login-helper, html[data-theme="light"] .login-note { color: #6f7f92; }
 html[data-theme="light"] .login-theme .icon-btn, html[data-theme="light"] .icon-btn { color: #526277; border-color: #cbd6e3; background: #f4f6f8; }
 html[data-theme="light"] .icon-btn:hover { color: #182230; border-color: #aebdcd; }
+
 html[data-theme="light"] .app-shell { background: var(--light-bg); }
 html[data-theme="light"] .sidebar { border-right-color: var(--light-border); background: linear-gradient(180deg, #eef2f5 0%, #e5e9ee 100%); }
 html[data-theme="light"] .sidebar-brand { border-bottom-color: var(--light-border); }

@@ -5,6 +5,8 @@
 import { createElement, FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { api, User, Challenge, RankingRow } from "../../api";
 import { Theme, ThemePreference, PlayerView, ManagementView, ManagedUser, USER_FUNCTIONS, DEMO_USERS, difficultyStyle, categoryMeta, DEFAULT_LABORATORIES, demoLabCount, VM_OS_OPTIONS, NETWORK_IPS, Laboratory, LabVM } from "../../config";
+import LogoImg from "../../assets/images/Logo.png";
+
 
 export function ErrorMessage({
   message,
@@ -83,7 +85,11 @@ export function Logo() {
   return (
     <div className="brand">
       <div className="brand-mark">
-        <span>ϟ</span>
+        <img
+          src={LogoImg}
+          alt="COMCIBER CTF"
+          style={{ width: "28px", height: "28px", objectFit: "contain", display: "block" }}
+        />
       </div>
 
       <div>
