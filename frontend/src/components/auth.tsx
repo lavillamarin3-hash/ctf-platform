@@ -87,65 +87,25 @@ export function Login({
           <div style={{ position: "absolute", top: "60%", left: "5%", width: "30px", height: "30px", border: "2px solid rgba(123, 108, 246, 0.1)", borderRadius: "6px", transform: "rotate(45deg)", pointerEvents: "none", zIndex: 1 }} />
           <div style={{ position: "absolute", bottom: "20%", left: "20%", width: "120px", height: "120px", background: "radial-gradient(circle, rgba(123, 108, 246, 0.05) 0%, transparent 70%)", borderRadius: "50%", pointerEvents: "none", zIndex: 1 }} />
 
-          {/* Logo en semicírculo en la parte superior */}
-          <div style={{
-            position: "absolute",
-            top: 0,
-            left: "50%",
-            transform: "translateX(-50%)",
-            background: theme === "dark" ? "rgba(123, 108, 246, 0.08)" : "rgba(123, 108, 246, 0.06)",
-            width: "300px",
-            height: "150px",
-            borderBottomLeftRadius: "150px",
-            borderBottomRightRadius: "150px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            paddingTop: "1rem", 
-            zIndex: 10
+          <div className="login-visual-content" style={{
+            display: "flex", flexDirection: "column", alignItems: "center",
+            justifyContent: "center", flex: 1, width: "100%", margin: 0,
+            padding: "1rem 0", textAlign: "center", zIndex: 10, gap: "1rem"
           }}>
             <img
-              src={theme === "dark" ? Logo : Logo}
+              src={Logo}
               alt="COMCIBER CTF"
               style={{
-                maxWidth: "200px",
-                width: "80%",
-                height: "auto",
+                display: "block", width: "clamp(190px, 22vw, 270px)",
+                maxWidth: "100%", height: "auto", objectFit: "contain", flexShrink: 0,
                 filter: theme === "dark" ? "drop-shadow(0 4px 12px rgba(0,0,0,0.3))" : "none"
               }}
             />
-          </div>
-
-          <div 
-            className="login-visual-content"
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              flexGrow: 1,
-              textAlign: "center",
-              zIndex: 10,
-              width: "100%",
-              paddingTop: "80px"
-            }}
-          >
-            <h1 style={{ fontSize: "clamp(28px, 3.5vw, 42px)", margin: "0 0 1rem 0", lineHeight: 1.2, fontWeight: "800", color: theme === "dark" ? "#e9f1fb" : "#14213a" }}>
+            <h1 style={{ fontSize: "clamp(28px, 3.5vw, 42px)", margin: 0, lineHeight: 1.2, fontWeight: "800", color: theme === "dark" ? "#e9f1fb" : "#14213a" }}>
               Bienvenido a <br/>
               <span className="accent-text" style={{ color: "#7b6cf6" }}>la plataforma CTF</span>
             </h1>
-          </div>
-          
-          <div style={{
-            position: "absolute",
-            bottom: "3rem",
-            left: "0",
-            width: "100%",
-            textAlign: "center",
-            zIndex: 10,
-            padding: "0 2rem"
-          }}>
-            <p style={{ fontSize: "clamp(15px, 1.5vw, 17px)", margin: "0 auto", color: theme === "dark" ? "#93a3bb" : "#637286", lineHeight: 1.6, maxWidth: "480px" }}>
+            <p style={{ fontSize: "clamp(15px, 1.5vw, 17px)", margin: 0, color: theme === "dark" ? "#93a3bb" : "#637286", lineHeight: 1.6, maxWidth: "480px" }}>
               Pon a prueba tus habilidades. Explora, aprende y supera nuevos retos.
             </p>
           </div>

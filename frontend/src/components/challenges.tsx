@@ -8,6 +8,7 @@ import { createElement, FormEvent, useCallback, useEffect, useMemo, useState } f
 import { api, Challenge, Run } from "../api";
 import { difficultyStyle, categoryMeta } from "../config";
 import { Icon, ErrorMessage } from "./common";
+import { DfirWorkspace } from "./player/DfirWorkspace";
 import { LaboratoryRunWorkspace } from "./player/LaboratoryRunWorkspace";
 import { needsLaboratoryCleanup } from "../lib/laboratoryRunState";
 import { ChallengeLearningResources } from "./ChallengeLearningResources";
@@ -165,6 +166,7 @@ export function ChallengeDetail({
       <ChallengeLearningResources resources={learning.resources} topic={challenge.category} />
 
       {activeRun ? (
+        challenge.code === "DFIR-01" ? <DfirWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
         <LaboratoryRunWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} />
       ) : (
         <section className="laboratory-start-panel" aria-label="Inicio de laboratorio" aria-busy={starting}>
@@ -174,10 +176,10 @@ export function ChallengeDetail({
           </div>
           <ol className="laboratory-flow" aria-label="Pasos del laboratorio">
             <li><span>1</span>Inicia tu instancia</li>
-            <li><span>2</span>Investiga en la terminal</li>
+            <li><span>2</span>{challenge.code === "DFIR-01" ? "Correlaciona las evidencias" : "Investiga en la terminal"}</li>
             <li><span>3</span>Pega y valida la flag</li>
           </ol>
-          <p>La terminal, el bloc de notas y el envío de flag aparecerán aquí cuando tu entorno esté listo.</p>
+          <p>{challenge.code === "DFIR-01" ? "El expediente, los registros descargables y el formulario de análisis aparecerán aquí al iniciar." : "La terminal, el bloc de notas y el envío de flag aparecerán aquí cuando tu entorno esté listo."}</p>
           {challenge.completed && <p className="practice-note">Puedes practicar de nuevo. Los puntos de este reto se otorgan una sola vez.</p>}
           <ErrorMessage message={startError} />
           <button type="button" className="primary-action" onClick={() => void startLaboratory()} disabled={starting}>
@@ -443,6 +445,7 @@ export function ChallengeForm({
           <label>Laboratorio / VM
             <select value={primaryAsset} onChange={(event) => setPrimaryAsset(event.target.value)} required>
               <option value="">Selecciona un activo…</option>
+              {code === "DFIR-01" && <option value="DFIR-CASE">DFIR-CASE · Expediente forense virtual</option>}
               {assetOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             <small className="field-help">La VM seleccionada determina IP, protocolo y conexión Guacamole cuando el jugador inicia el reto.</small>

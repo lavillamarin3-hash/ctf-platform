@@ -28,6 +28,9 @@ from ..services.lab_lock import (
 )
 from ..services.runtime_flags import effective_mode_template, is_effectively_dynamic
 from ..domain.instances.states import InstanceState
+from ..services import dfir_runtime
+from ..domain.challenges.dfir import CODE as DFIR_CODE, matches_answer
+from pydantic import BaseModel, Field
 
 
 router = APIRouter()
@@ -152,6 +155,12 @@ def _return_instance_to_pool(instance: ChallengeInstance | None) -> None:
 
 async def _cleanup_run(request: Request, session, run: ChallengeRun, challenge: Challenge | None, *, status: str):
     """Cierra una ejecución bajo lock de fila y protege la VM original de la reserva."""
+    if run.workspace_strategy == "dfir_case":
+        run.status = status
+        run.closed_at = now_utc()
+        await write_audit(session, run.user_id, "challenge_run.close", "challenge_run", str(run.id), {"workspace_strategy": "dfir_case"})
+        await session.commit()
+        return None, None
     instance = await session.scalar(
         select(ChallengeInstance).where(ChallengeInstance.run_id == run.id).with_for_update()
     )
@@ -316,6 +325,8 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             .with_for_update()
         )
         if active_run and active_run.expires_at >= now:
+            if active_run.workspace_strategy == "dfir_case":
+                return _view_from_run(active_run, challenge, None)
             instance = await session.scalar(select(ChallengeInstance).where(ChallengeInstance.run_id == active_run.id))
             if instance:
                 target_vm = await session.get(VMAsset, instance.vm_asset_id)
@@ -329,6 +340,10 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             await _cleanup_run(request, session, active_run, challenge, status="expired")
 
         now = now_utc()
+
+        if challenge.code == DFIR_CODE:
+            run = await dfir_runtime.start(session, challenge, user)
+            return _view_from_run(run, challenge, None)
 
         dynamic_flags = [flag for flag in challenge.flags if is_effectively_dynamic(challenge.code, flag)]
         target_lab, target_vm = await _find_challenge_vm(session, challenge)
@@ -627,7 +642,7 @@ async def list_runs(request: Request, user=Depends(get_current_user)):
             # de forma no mutante cuando el registro de instancia todavía no existe.
             display_vm = vm
             display_protocol = None
-            if display_vm is None and challenge and state == "active":
+            if display_vm is None and challenge and state == "active" and run.workspace_strategy != "dfir_case":
                 _, display_vm = await _find_challenge_vm(session, challenge)
 
             if instance and instance.guacamole_connection_id:
@@ -737,3 +752,48 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
     if matched:
         return SubmissionResponse(correct=True, challenge_completed=False, awarded_points=0, message="Flag correcta. Continúa con las flags restantes.")
     return SubmissionResponse(correct=False, challenge_completed=False, awarded_points=0, message="Flag incorrecta. Revisa el escenario e inténtalo de nuevo.")
+
+
+class DfirAnswer(BaseModel):
+    session: str = Field(max_length=100)
+    user: str = Field(max_length=100)
+    request: str = Field(max_length=100)
+    destination: str = Field(max_length=100)
+    auth_utc: str = Field(max_length=100)
+
+
+async def _dfir_run(session, run_id, user):
+    run = await session.scalar(select(ChallengeRun).where(
+        ChallengeRun.id == run_id, ChallengeRun.user_id == user.id,
+    ).with_for_update())
+    if run is None:
+        raise HTTPException(404, "Caso no disponible")
+    challenge = await session.get(Challenge, run.challenge_id)
+    if (challenge is None or challenge.code != DFIR_CODE or not challenge.is_published
+            or not await _assigned(session, challenge.id, user.id)):
+        raise HTTPException(404, "Caso no disponible")
+    if run.workspace_strategy != "dfir_case" or run.status != "active" or run.expires_at <= now_utc():
+        raise HTTPException(409, "Inicia una corrida vigente para consultar el caso")
+    return run
+
+
+@router.get("/api/v1/runs/{run_id}/dfir")
+async def get_dfir_case(run_id: int, request: Request, user=Depends(require_roles("player"))):
+    async with request.app.state.session_factory() as session:
+        run = await _dfir_run(session, run_id, user)
+        bundle, _ = dfir_runtime.case_for(run)
+        from fastapi.responses import JSONResponse
+        return JSONResponse(bundle, headers={"Cache-Control": "no-store"})
+
+
+@router.post("/api/v1/runs/{run_id}/dfir/answer")
+async def answer_dfir_case(run_id: int, payload: DfirAnswer, request: Request, user=Depends(require_roles("player"))):
+    await check_rate_limit(request.app.state.redis, f"rate:dfir:{user.id}:{run_id}", maximum=8)
+    async with request.app.state.session_factory() as session:
+        run = await _dfir_run(session, run_id, user)
+        _, expected = dfir_runtime.case_for(run)
+        correct = matches_answer(expected, payload.model_dump())
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"correct": correct, "flag": dfir_runtime.flag_for(run) if correct else None,
+                             "message": "Correlación correcta. Envía la flag para registrar tus puntos." if correct else "La correlación no coincide. Revisa las fuentes y los relojes."},
+                            headers={"Cache-Control": "no-store"})

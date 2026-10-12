@@ -57,7 +57,7 @@ export const BEGINNER_CHALLENGE_DRAFTS: ReadonlyArray<{
   },
 ];
 
-export const PILOT_PUBLISHED_CODES = ["LAB-01"] as const;
+export const PILOT_PUBLISHED_CODES = ["LAB-01", "DFIR-01"] as const;
 
 /** Solo el seed antiguo exacto puede actualizarse automáticamente sin pisar un reto editado. */
 export function isLegacyReconDraft(challenge: Challenge): boolean {

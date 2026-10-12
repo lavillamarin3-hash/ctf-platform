@@ -3,13 +3,25 @@
 // Responsabilidad: presentación de una sección del panel.
 // ============================================================
 
-import { createElement } from "react";
+import { request } from "../../services/api/client";
+import { createElement, useState } from "react";
 import { difficultyStyle } from "../../config";
 import { inferCategory } from "../../components/challenges";
 import { legacyPublishedCodes } from "../../lib/pilotChallenges";
 import type { ManagementController } from "../../controllers/useManagementController";
 
 export function ManagementChallenges({ controller }: { controller: ManagementController }) {
+  const [dfirBusy, setDfirBusy] = useState(false);
+  const [dfirMessage, setDfirMessage] = useState("");
+  async function createDfir() {
+    setDfirBusy(true);
+    try {
+      await request("/challenges/dfir-draft", { method: "POST" });
+      await controller.load();
+      setDfirMessage("DFIR-01 está en el catálogo. Revisa el borrador, publícalo y asígnalo a un grupo para probarlo como estudiante.");
+    } catch (error) { setDfirMessage(error instanceof Error ? error.message : "No se pudo crear el borrador."); }
+    finally { setDfirBusy(false); }
+  }
   // Estado y datos que esta vista presenta.
   const {
     challenges, published, draft, points, isAdmin, catalogActionBusy,
@@ -74,6 +86,12 @@ export function ManagementChallenges({ controller }: { controller: ManagementCon
       </div>
     </div>}
 
+    <div className="glass-panel" style={{ padding: "1rem", marginBottom: "1rem" }}>
+      <h2>DFIR-01 · Correlación forense avanzada</h2>
+      <p>500 puntos · Tres fuentes de registros · Relojes desfasados · Caso diferente por corrida</p>
+      <button className="primary-action" disabled={dfirBusy} onClick={() => void createDfir()}>{dfirBusy ? "Preparando…" : "Crear o localizar borrador DFIR-01"}</button>
+      {dfirMessage && <p role="status">{dfirMessage}</p>}
+    </div>
     <div className="table-panel glass-panel">
       <table>
         <thead>
