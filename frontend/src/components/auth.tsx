@@ -90,7 +90,6 @@ export function Login({
           <div className="login-visual-center">
             <img
               src={Logo}
-              src={Logo}
               alt="COMCIBER CTF"
               className="login-logo-main"
             />
