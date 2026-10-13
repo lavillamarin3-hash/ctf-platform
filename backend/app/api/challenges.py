@@ -227,3 +227,20 @@ async def delete_flag(code: str, flag_id: int, request: Request, user=Depends(re
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+
+
+@router.post("/api/v1/challenges/dfir-draft", response_model=ChallengeView)
+async def create_dfir_draft(request: Request, user=Depends(require_roles("admin", "instructor"))):
+    from ..domain.challenges.catalog import DFIR_DRAFT
+    async with request.app.state.session_factory() as session:
+        existing = await session.scalar(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code == "DFIR-01"))
+        if existing:
+            return challenge_view(existing, include_flags=True)
+        values = {key: value for key, value in DFIR_DRAFT.items() if key != "flag_specs"}
+        challenge = Challenge(**values, created_by=user.id)
+        challenge.flags = [ChallengeFlag(**spec) for spec in DFIR_DRAFT["flag_specs"]]
+        session.add(challenge)
+        await session.flush()
+        await write_audit(session, user.id, "challenge.create", "challenge", str(challenge.id), {"code": "DFIR-01"})
+        await session.commit()
+        return challenge_view(challenge, include_flags=True)
