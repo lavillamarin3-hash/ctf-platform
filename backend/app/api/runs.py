@@ -28,7 +28,8 @@ from ..services.lab_lock import (
 )
 from ..services.runtime_flags import effective_mode_template, is_effectively_dynamic
 from ..domain.instances.states import InstanceState
-from ..services import dfir_runtime
+from ..services import dfir_runtime, offline_runtime
+from ..domain.challenges import offline
 from ..domain.challenges.dfir import CODE as DFIR_CODE, matches_answer
 from pydantic import BaseModel, Field
 
@@ -155,10 +156,10 @@ def _return_instance_to_pool(instance: ChallengeInstance | None) -> None:
 
 async def _cleanup_run(request: Request, session, run: ChallengeRun, challenge: Challenge | None, *, status: str):
     """Cierra una ejecución bajo lock de fila y protege la VM original de la reserva."""
-    if run.workspace_strategy == "dfir_case":
+    if run.workspace_strategy in ("dfir_case", "offline_case"):
         run.status = status
         run.closed_at = now_utc()
-        await write_audit(session, run.user_id, "challenge_run.close", "challenge_run", str(run.id), {"workspace_strategy": "dfir_case"})
+        await write_audit(session, run.user_id, "challenge_run.expire" if status == "expired" else "challenge_run.close", "challenge_run", str(run.id), {"workspace_strategy": run.workspace_strategy})
         await session.commit()
         return None, None
     instance = await session.scalar(
@@ -325,7 +326,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             .with_for_update()
         )
         if active_run and active_run.expires_at >= now:
-            if active_run.workspace_strategy == "dfir_case":
+            if active_run.workspace_strategy in ("dfir_case", "offline_case"):
                 return _view_from_run(active_run, challenge, None)
             instance = await session.scalar(select(ChallengeInstance).where(ChallengeInstance.run_id == active_run.id))
             if instance:
@@ -343,6 +344,10 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
 
         if challenge.code == DFIR_CODE:
             run = await dfir_runtime.start(session, challenge, user)
+            return _view_from_run(run, challenge, None)
+
+        if challenge.asset_references == ["OFFLINE-CASE"]:
+            run = await offline_runtime.start(session, challenge, user)
             return _view_from_run(run, challenge, None)
 
         dynamic_flags = [flag for flag in challenge.flags if is_effectively_dynamic(challenge.code, flag)]
@@ -642,7 +647,7 @@ async def list_runs(request: Request, user=Depends(get_current_user)):
             # de forma no mutante cuando el registro de instancia todavía no existe.
             display_vm = vm
             display_protocol = None
-            if display_vm is None and challenge and state == "active" and run.workspace_strategy != "dfir_case":
+            if display_vm is None and challenge and state == "active" and run.workspace_strategy not in ("dfir_case", "offline_case"):
                 _, display_vm = await _find_challenge_vm(session, challenge)
 
             if instance and instance.guacamole_connection_id:
@@ -748,10 +753,63 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
                 pass
         message = ("Flag correcta. Reto completado; cierra la sesión del laboratorio para limpiar la VM."
                    if awarded_points else "Flag correcta. Este reto ya estaba completado; puedes cerrar el laboratorio para limpiar la VM.")
+        if run.workspace_strategy in ("dfir_case", "offline_case"):
+            message = "Flag correcta. Puntos registrados; puedes cerrar el ejercicio." if awarded_points else "Flag correcta. Este reto ya estaba completado; no se duplican los puntos."
         return SubmissionResponse(correct=True, challenge_completed=True, awarded_points=awarded_points, message=message)
     if matched:
         return SubmissionResponse(correct=True, challenge_completed=False, awarded_points=0, message="Flag correcta. Continúa con las flags restantes.")
     return SubmissionResponse(correct=False, challenge_completed=False, awarded_points=0, message="Flag incorrecta. Revisa el escenario e inténtalo de nuevo.")
+
+
+class OfflineAnswer(BaseModel):
+    value: str = Field(min_length=1, max_length=200)
+
+
+async def _offline_run(session, run_id, user):
+    run = await session.scalar(select(ChallengeRun).where(
+        ChallengeRun.id == run_id, ChallengeRun.user_id == user.id,
+    ).with_for_update())
+    if run is None:
+        raise HTTPException(404, "Ejercicio no disponible")
+    challenge = await session.get(Challenge, run.challenge_id)
+    if (challenge is None or challenge.code not in offline.CATALOG or not challenge.is_published
+            or challenge.asset_references != ["OFFLINE-CASE"] or not await _assigned(session, challenge.id, user.id)):
+        raise HTTPException(404, "Ejercicio no disponible")
+    if run.workspace_strategy != "offline_case" or run.status != "active" or run.expires_at <= now_utc():
+        raise HTTPException(409, "Inicia una corrida vigente para consultar el ejercicio")
+    return run, challenge
+
+
+@router.get("/api/v1/runs/{run_id}/offline")
+async def get_offline_case(run_id: int, request: Request, user=Depends(require_roles("player"))):
+    async with request.app.state.session_factory() as session:
+        run, challenge = await _offline_run(session, run_id, user)
+        bundle, _ = offline_runtime.case_for(run, challenge.code)
+        from fastapi.responses import JSONResponse
+        return JSONResponse(bundle, headers={"Cache-Control": "no-store"})
+
+
+@router.get("/api/v1/runs/{run_id}/offline/download")
+async def download_offline_case(run_id: int, request: Request, user=Depends(require_roles("player"))):
+    async with request.app.state.session_factory() as session:
+        run, challenge = await _offline_run(session, run_id, user)
+        bundle, _ = offline_runtime.case_for(run, challenge.code)
+        from fastapi.responses import Response
+        return Response(offline.archive(bundle), media_type="application/zip", headers={
+            "Cache-Control": "no-store", "Content-Disposition": f'attachment; filename="exercise-{run.id}.zip"',
+        })
+
+
+@router.post("/api/v1/runs/{run_id}/offline/answer")
+async def answer_offline_case(run_id: int, payload: OfflineAnswer, request: Request, user=Depends(require_roles("player"))):
+    await check_rate_limit(request.app.state.redis, f"rate:offline:{user.id}:{run_id}", maximum=8)
+    async with request.app.state.session_factory() as session:
+        run, challenge = await _offline_run(session, run_id, user)
+        _, expected = offline_runtime.case_for(run, challenge.code)
+        correct = offline.matches_answer(expected, payload.value)
+        from fastapi.responses import JSONResponse
+        return JSONResponse({"correct": correct, "flag": offline_runtime.flag_for(run) if correct else None,
+                             "message": "Respuesta correcta. Registra los puntos para completar el reto." if correct else "La respuesta no coincide. Revisa el objetivo y los archivos."}, headers={"Cache-Control": "no-store"})
 
 
 class DfirAnswer(BaseModel):
