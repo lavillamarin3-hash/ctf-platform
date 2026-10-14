@@ -20,11 +20,15 @@ async def configure(session, group_code):
         raise ValueError('Faltan retos del catálogo: ' + ', '.join(sorted(missing)))
     # Validar todos antes de modificar cualquiera. No convertir una corrida en uso.
     for code in CATALOG:
+        if by_code[code].scenario == 'SSH-PASSWORD-LAB': continue
         if by_code[code].scenario != VERSION:
             await require_idle_challenge(session, by_code[code].id)
     report = []
     for code, (title, kind, objective) in CATALOG.items():
         challenge = by_code[code]
+        if challenge.scenario == 'SSH-PASSWORD-LAB':
+            report.append({'code':code,'name':challenge.name,'mode':'ssh_password_lab'})
+            continue
         if challenge.scenario != VERSION:
             before = {key: getattr(challenge, key) for key in ('name', 'description', 'instructions', 'scenario', 'asset_references', 'difficulty', 'is_published')}
             before['active_flag_ids'] = [f.id for f in challenge.flags if f.is_active]

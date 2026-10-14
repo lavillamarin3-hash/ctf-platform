@@ -17,6 +17,12 @@ import { applyFontScale } from "./components/shared/ui";
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [checking, setChecking] = useState(Boolean(session.get()));
+  const [sessionNotice, setSessionNotice] = useState('');
+  useEffect(() => {
+    const expired = () => { setUser(null); setChecking(false); setSessionNotice('Tu sesión venció. Inicia sesión de nuevo para continuar con tus retos.'); };
+    window.addEventListener('ctf-session-expired', expired);
+    return () => window.removeEventListener('ctf-session-expired', expired);
+  }, []);
   const [themePreference, setThemePreference] = useState<ThemePreference>(() => {
     const saved = localStorage.getItem("ctf-theme-preference");
     return saved === "system" || saved === "light" || saved === "dark" ? saved : "dark";
@@ -79,7 +85,7 @@ export default function App() {
   }
 
   if (!user) {
-    return <Login onLogin={setUser} theme={theme} onToggleTheme={toggleTheme} />;
+    return <>{sessionNotice && <p role="status" style={{padding:'1rem',textAlign:'center'}}>{sessionNotice}</p>}<Login onLogin={value => {setSessionNotice(''); setUser(value);}} theme={theme} onToggleTheme={toggleTheme} /></>;
   }
 
   const handleLogout = () => {

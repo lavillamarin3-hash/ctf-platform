@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from time import monotonic
 from typing import Literal
 from urllib.parse import urlencode, urlsplit, urlunsplit
@@ -23,8 +24,10 @@ from ..services.challenge_runtime import (
 )
 from ..services.bootstrap import check_rate_limit
 from .runs import _assigned
+from ..services import kali_workspace
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 class TerminalLogin(BaseModel):
@@ -92,6 +95,12 @@ async def _run_connection_context(app, session, run_id: int, user_id: int):
     challenge = await session.get(Challenge, run.challenge_id)
     if challenge is None or not challenge.is_published or not await _assigned(session, challenge.id, user_id):
         raise HTTPException(403, "Este laboratorio ya no está asignado a tu grupo")
+    if getattr(run,'workspace_strategy',None) in kali_workspace.STRATEGIES:
+        if 'LAB-KALI' not in (challenge.asset_references or []):
+            raise HTTPException(409,'Este ejercicio no tiene una terminal Kali asignada.')
+        vm,targets=await kali_workspace.context(app,session,user)
+        primary=targets.get('ssh') or targets.get('rdp')
+        return run,challenge,None,vm,str(primary),user.username
     instance = await session.scalar(select(ChallengeInstance).where(ChallengeInstance.run_id == run.id))
     if instance:
         if instance.user_id != user_id or instance.state != InstanceState.IN_USE.value or not instance.guacamole_connection_id:
@@ -120,6 +129,12 @@ async def authorized_target(app, run_id: int, user_id: int, protocol: str | None
         run, challenge, instance, vm, connection_id, username = await _run_connection_context(
             app, session, run_id, user_id
         )
+        if getattr(run,'workspace_strategy',None) in kali_workspace.STRATEGIES:
+            if target!='victim': raise HTTPException(409,'Usa la terminal Kali asignada al ejercicio.')
+            user=await session.get(User,user_id)
+            _,targets=await kali_workspace.context(app,session,user)
+            if protocol and protocol not in targets: raise HTTPException(403,'Protocolo no autorizado para tu cuenta Kali.')
+            return str(targets[protocol] if protocol else connection_id),run.expires_at,username
         if challenge.code == ATTACK_CHALLENGE_CODE and target != "attacker":
             raise HTTPException(409, "Este reto solo permite trabajar desde la máquina atacante")
         if target == "attacker":
@@ -188,9 +203,12 @@ async def terminal_auth(payload: TerminalLogin, request: Request, user=Depends(r
 @router.get("/api/v1/runs/{run_id}/terminal/options")
 async def terminal_options(run_id: int, request: Request, user=Depends(require_roles("player"))):
     async with request.app.state.session_factory() as session:
-        _, challenge, instance, vm, primary_id, username = await _run_connection_context(
+        run, challenge, instance, vm, primary_id, username = await _run_connection_context(
             request.app, session, run_id, user.id
         )
+        if getattr(run,'workspace_strategy',None) in kali_workspace.STRATEGIES:
+            _,targets=await kali_workspace.context(request.app,session,user)
+            return {'protocols':[name for name in ('ssh','rdp') if name in targets],'attacker_protocols':[]}
         attacker_targets = await _attacker_targets(request.app, session, username, challenge, instance, vm)
     targets = {} if challenge.code == ATTACK_CHALLENGE_CODE else await _protocol_targets(request.app, vm, primary_id)
     return {
@@ -270,6 +288,7 @@ async def terminal_websocket(run_id: int, websocket: WebSocket):
         await websocket.close(code=1008)
         return
     sessions = websocket.app.state.terminal_sessions
+    accepted = False
     try:
         ticket = await sessions.consume(websocket.cookies.get(f"ctf-terminal-{run_id}"), run_id)
         if not ticket:
@@ -289,6 +308,7 @@ async def terminal_websocket(run_id: int, websocket: WebSocket):
         adapter = websocket.app.state.guacamole
         url = tunnel_url(adapter.base_url, delegated, connection_id, websocket.query_params)
         await websocket.accept(subprotocol="guacamole" if "guacamole" in websocket.scope.get("subprotocols", []) else None)
+        accepted = True
         async with connect(url, subprotocols=["guacamole"], open_timeout=15, max_size=8_000_000) as upstream:
             if await sessions.is_closed(run_id):
                 return
@@ -300,8 +320,15 @@ async def terminal_websocket(run_id: int, websocket: WebSocket):
                 sessions.connections.get(run_id, set()).discard(upstream)
     except (WebSocketDisconnect, asyncio.CancelledError):
         pass
-    except Exception:
+    except Exception as exc:
         # Nunca registrar la URL upstream: contiene el token personal de Guacamole.
+        logger.warning("Terminal run=%s failed (%s)", run_id, type(exc).__name__)
+        if accepted:
+            message = "El servidor de terminal no pudo abrir la conexión. Vuelve a conectar o consulta al instructor."
+            try:
+                await websocket.send_text(f"5.error,{len(message)}.{message},3.512;")
+            except Exception:
+                pass
         try:
             await websocket.close(code=1011, reason="No se pudo mantener la conexión del laboratorio")
         except Exception:

@@ -51,7 +51,7 @@ async def main():
                 sockets=SimpleNamespace(broadcast=AsyncMock()))))
             catalog = await list_challenges(request,difficulty=None,category=None,mitre=None,user=user)
             assert set(CATALOG).issubset({c.code for c in catalog})
-            for code in CATALOG:
+            for code in [c.code for c in catalog if c.code in CATALOG and c.scenario != 'SSH-PASSWORD-LAB']:
                 first = await runs.start_challenge(code,request,user)
                 assert first.workspace_strategy=='offline_case' and first.launch_url is None
                 assert (await runs.start_challenge(code,request,user)).id==first.id

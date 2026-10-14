@@ -755,13 +755,17 @@ html { scrollbar-gutter: stable; }
 .terminal-fullscreen-action { white-space: nowrap; min-height: 2.5rem; }
 .terminal-stage { display: flex; position: relative; flex: 1 1 auto; min-width: 0; min-height: 0; background: #07111c; }
 .terminal-stage .guacamole-viewport.guacamole-canvas { flex: 1 1 auto; }
+.guacamole-viewport.guacamole-canvas[data-protocol="rdp"] { display: flex; scrollbar-gutter: auto; }
+.guacamole-viewport[data-protocol="rdp"] > div { flex: none; margin: auto; }
 .guacamole-viewport[aria-hidden="true"] { pointer-events: none; }
 .terminal-stage-overlay { position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; margin: 0; padding: 1rem; color: #dce9f8; background: rgba(7, 17, 28, .9); font-size: 1rem; font-weight: 700; text-align: center; }
 .terminal-stage .terminal-auth-form { position: absolute; top: 50%; left: 50%; z-index: 3; width: min(calc(100% - 2rem), 26rem); margin: 0; transform: translate(-50%, -50%); box-shadow: 0 18px 40px rgba(0, 0, 0, .32); }
 .embedded-terminal-panel > p.terminal-connection-notice { display: block; padding: .65rem 1rem; font-size: .8rem; line-height: 1.45; }
 .embedded-terminal-panel:fullscreen { display: flex; flex-direction: column; width: 100vw; height: 100dvh; min-height: 0; overflow: hidden; border: 0; border-radius: 0; background: var(--ui-surface); }
-.embedded-terminal-panel:fullscreen .terminal-stage { flex: 1 1 auto; min-height: 0; }
-.embedded-terminal-panel:fullscreen .guacamole-viewport.guacamole-canvas { height: 100%; min-height: 0; }
+.embedded-terminal-panel:fullscreen > :is(.embedded-terminal-toolbar, .terminal-protocol-selector) { flex: 0 0 auto; }
+.embedded-terminal-panel:fullscreen .terminal-protocol-selector small { flex-basis: auto; min-height: 0; }
+.embedded-terminal-panel:fullscreen .terminal-stage { flex: 1 1 0; min-height: 0; overflow: hidden; }
+.embedded-terminal-panel:fullscreen .guacamole-viewport.guacamole-canvas { height: auto; min-height: 0; }
 .embedded-terminal-panel:fullscreen > p.terminal-connection-notice { display: none; }
 
 @media (max-width: 640px) {

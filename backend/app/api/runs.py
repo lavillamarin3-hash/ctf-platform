@@ -28,7 +28,7 @@ from ..services.lab_lock import (
 )
 from ..services.runtime_flags import effective_mode_template, is_effectively_dynamic
 from ..domain.instances.states import InstanceState
-from ..services import dfir_runtime, offline_runtime
+from ..services import dfir_runtime, offline_runtime, ssh_practice, http_practice, kali_workspace
 from ..domain.challenges import offline
 from ..domain.challenges.dfir import CODE as DFIR_CODE, matches_answer
 from pydantic import BaseModel, Field
@@ -37,6 +37,10 @@ from pydantic import BaseModel, Field
 router = APIRouter()
 logger = logging.getLogger(__name__)
 ATTACK_CHALLENGE_CODE = "ESC-01-RECON"
+HTTP_SCENARIOS = {
+    'ESC-06-WEBAUTH': ('http_password_lab', 'HTTP-PASSWORD-LAB'),
+    'ESC-07-EXPOSED': ('http_files_lab', 'HTTP-EXPOSED-FILES-LAB'),
+}
 
 
 def _player_launch_url(challenge: Challenge, assignment: RemoteAccessAssignment | None, *, player: bool = True) -> str | None:
@@ -46,6 +50,7 @@ def _player_launch_url(challenge: Challenge, assignment: RemoteAccessAssignment 
 
 
 def _view_from_run(run: ChallengeRun, challenge: Challenge, assignment: RemoteAccessAssignment | None, vm=None, protocol: str | None = None, *, player: bool = True) -> RunView:
+    kali = run.workspace_strategy in kali_workspace.STRATEGIES and 'LAB-KALI' in (challenge.asset_references or [])
     return RunView(
         id=run.id,
         challenge_code=challenge.code,
@@ -55,8 +60,8 @@ def _view_from_run(run: ChallengeRun, challenge: Challenge, assignment: RemoteAc
         launch_url=_player_launch_url(challenge, assignment, player=player),
         connection_state=assignment.status if assignment else None,
         workspace_strategy=run.workspace_strategy,
-        target_vm_name=vm.name if vm else None,
-        target_vm_ip=vm.ip_address if vm else None,
+        target_vm_name=vm.name if vm else ('LAB-KALI' if kali else None),
+        target_vm_ip=vm.ip_address if vm else ('192.168.146.134' if kali else None),
         target_protocol=protocol,
         laboratory_code=None,
     )
@@ -156,7 +161,15 @@ def _return_instance_to_pool(instance: ChallengeInstance | None) -> None:
 
 async def _cleanup_run(request: Request, session, run: ChallengeRun, challenge: Challenge | None, *, status: str):
     """Cierra una ejecución bajo lock de fila y protege la VM original de la reserva."""
-    if run.workspace_strategy in ("dfir_case", "offline_case"):
+    if run.workspace_strategy in kali_workspace.STRATEGIES:
+        if run.workspace_strategy == 'ssh_password_lab':
+            try: await ssh_practice.cleanup(run)
+            except Exception as exc: raise HTTPException(503,'No se pudo invalidar la práctica SSH. Reintenta el cierre; el acceso también caduca automáticamente.') from exc
+        elif run.workspace_strategy in ('http_password_lab', 'http_files_lab'):
+            try: await http_practice.cleanup(run)
+            except Exception as exc: raise HTTPException(503,'No se pudo invalidar la práctica web. Reintenta el cierre; el acceso también caduca automáticamente.') from exc
+        terminal_sessions = getattr(request.app.state, 'terminal_sessions', None)
+        if terminal_sessions is not None: await terminal_sessions.close_run(run.id)
         run.status = status
         run.closed_at = now_utc()
         await write_audit(session, run.user_id, "challenge_run.expire" if status == "expired" else "challenge_run.close", "challenge_run", str(run.id), {"workspace_strategy": run.workspace_strategy})
@@ -326,7 +339,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             .with_for_update()
         )
         if active_run and active_run.expires_at >= now:
-            if active_run.workspace_strategy in ("dfir_case", "offline_case"):
+            if active_run.workspace_strategy in kali_workspace.STRATEGIES:
                 return _view_from_run(active_run, challenge, None)
             instance = await session.scalar(select(ChallengeInstance).where(ChallengeInstance.run_id == active_run.id))
             if instance:
@@ -346,7 +359,63 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             run = await dfir_runtime.start(session, challenge, user)
             return _view_from_run(run, challenge, None)
 
-        if challenge.asset_references == ["OFFLINE-CASE"]:
+        if challenge.code == ssh_practice.CODE and challenge.scenario == 'SSH-PASSWORD-LAB':
+            await kali_workspace.context(request.app, session, user)
+            flags = [flag for flag in challenge.flags if flag.is_active]
+            if len(flags)!=1 or flags[0].mode!='dynamic' or not flags[0].template:
+                raise HTTPException(409,'La práctica SSH requiere una flag dinámica activa.')
+            run = ChallengeRun(user_id=user.id,challenge_id=challenge.id,status='active',expires_at=now_utc()+timedelta(hours=1),workspace_strategy='ssh_password_lab')
+            session.add(run); await session.flush()
+            prepared_run_id = run.id
+            from ..core import hash_password
+            value=ssh_practice.flag_for(run)
+            session.add(ChallengeRunFlag(run_id=run.id,flag_id=flags[0].id,flag_hash=hash_password(value),fingerprint=submission_fingerprint(value)))
+            try:
+                await ssh_practice.prepare(run)
+                await write_audit(session,user.id,'challenge_run.start','challenge_run',str(run.id),{'challenge':challenge.code,'workspace_strategy':run.workspace_strategy})
+                await session.commit()
+            except Exception as exc:
+                await session.rollback()
+                try:
+                    from types import SimpleNamespace
+                    await ssh_practice.cleanup(SimpleNamespace(id=prepared_run_id))
+                except Exception: pass  # El servicio aplica también la caducidad del expediente.
+                raise HTTPException(503,'No se pudo preparar SSH de práctica en LNX-VICT. Comprueba que la VM esté encendida.') from exc
+            return _view_from_run(run,challenge,None)
+
+        if challenge.code in HTTP_SCENARIOS:
+            strategy, scenario = HTTP_SCENARIOS[challenge.code]
+            if challenge.scenario != scenario or not {'LAB-KALI', 'LAB-LNXVICT'}.issubset(challenge.asset_references or []):
+                raise HTTPException(409, 'La práctica web requiere su escenario y las VMs Kali y LNX-VICT configuradas.')
+            await kali_workspace.context(request.app, session, user)
+            flags = [flag for flag in challenge.flags if flag.is_active]
+            if len(flags) != 1 or flags[0].mode != 'dynamic' or not flags[0].template:
+                raise HTTPException(409, 'La práctica web requiere una flag dinámica activa.')
+            run = ChallengeRun(user_id=user.id, challenge_id=challenge.id, status='active',
+                               expires_at=now_utc() + timedelta(hours=1), workspace_strategy=strategy)
+            session.add(run)
+            await session.flush()
+            prepared_run_id = run.id
+            from ..core import hash_password
+            value = http_practice.flag_for(run)
+            session.add(ChallengeRunFlag(run_id=run.id, flag_id=flags[0].id,
+                                        flag_hash=hash_password(value), fingerprint=submission_fingerprint(value)))
+            try:
+                await http_practice.prepare(run)
+                await write_audit(session, user.id, 'challenge_run.start', 'challenge_run', str(run.id),
+                                  {'challenge': challenge.code, 'workspace_strategy': strategy, 'run_id': run.id})
+                await session.commit()
+            except Exception as exc:
+                await session.rollback()
+                try:
+                    from types import SimpleNamespace
+                    await http_practice.cleanup(SimpleNamespace(id=prepared_run_id))
+                except Exception:
+                    pass
+                raise HTTPException(503, 'No se pudo preparar la web de práctica en LNX-VICT. Comprueba que la VM esté encendida.') from exc
+            return _view_from_run(run, challenge, None)
+
+        if "OFFLINE-CASE" in (challenge.asset_references or []):
             run = await offline_runtime.start(session, challenge, user)
             return _view_from_run(run, challenge, None)
 
@@ -635,7 +704,8 @@ async def list_runs(request: Request, user=Depends(get_current_user)):
             )
         elif user.role not in ("admin", "instructor"):
             return []
-        statement = statement.order_by(ChallengeRun.started_at.desc()).limit(30)
+        # Priorizar corridas activas para no ocultar la sesión que reserva la VM.
+        statement = statement.order_by((ChallengeRun.status == 'active').desc(), ChallengeRun.started_at.desc()).limit(100)
         rows = (await session.execute(statement)).all()
         current = now_utc()
         response: list[RunView] = []
@@ -647,7 +717,7 @@ async def list_runs(request: Request, user=Depends(get_current_user)):
             # de forma no mutante cuando el registro de instancia todavía no existe.
             display_vm = vm
             display_protocol = None
-            if display_vm is None and challenge and state == "active" and run.workspace_strategy not in ("dfir_case", "offline_case"):
+            if display_vm is None and challenge and state == "active" and run.workspace_strategy not in kali_workspace.STRATEGIES:
                 _, display_vm = await _find_challenge_vm(session, challenge)
 
             if instance and instance.guacamole_connection_id:
@@ -666,8 +736,8 @@ async def list_runs(request: Request, user=Depends(get_current_user)):
                     launch_url=_player_launch_url(challenge, assignment, player=user.role == "player"),
                     connection_state=assignment.status if assignment else None,
                     workspace_strategy=run.workspace_strategy,
-                    target_vm_name=display_vm.name if display_vm else None,
-                    target_vm_ip=display_vm.ip_address if display_vm else None,
+                    target_vm_name=display_vm.name if display_vm else ('LAB-KALI' if run.workspace_strategy in kali_workspace.STRATEGIES and 'LAB-KALI' in challenge.asset_references else None),
+                    target_vm_ip=display_vm.ip_address if display_vm else ('192.168.146.134' if run.workspace_strategy in kali_workspace.STRATEGIES and 'LAB-KALI' in challenge.asset_references else None),
                     target_protocol=display_protocol,
                     laboratory_code=None,
                 )
@@ -753,12 +823,45 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
                 pass
         message = ("Flag correcta. Reto completado; cierra la sesión del laboratorio para limpiar la VM."
                    if awarded_points else "Flag correcta. Este reto ya estaba completado; puedes cerrar el laboratorio para limpiar la VM.")
-        if run.workspace_strategy in ("dfir_case", "offline_case"):
+        if run.workspace_strategy in kali_workspace.STRATEGIES:
             message = "Flag correcta. Puntos registrados; puedes cerrar el ejercicio." if awarded_points else "Flag correcta. Este reto ya estaba completado; no se duplican los puntos."
         return SubmissionResponse(correct=True, challenge_completed=True, awarded_points=awarded_points, message=message)
     if matched:
         return SubmissionResponse(correct=True, challenge_completed=False, awarded_points=0, message="Flag correcta. Continúa con las flags restantes.")
     return SubmissionResponse(correct=False, challenge_completed=False, awarded_points=0, message="Flag incorrecta. Revisa el escenario e inténtalo de nuevo.")
+
+
+@router.get('/api/v1/runs/{run_id}/ssh-practice')
+async def ssh_practice_info(run_id: int, request: Request, user=Depends(require_roles('player'))):
+    async with request.app.state.session_factory() as session:
+        run=await session.scalar(select(ChallengeRun).where(ChallengeRun.id==run_id,ChallengeRun.user_id==user.id).with_for_update())
+        if run is None: raise HTTPException(404,'Práctica no disponible')
+        challenge=await session.get(Challenge,run.challenge_id)
+        if not challenge or challenge.code!=ssh_practice.CODE or not challenge.is_published or not await _assigned(session,challenge.id,user.id):
+            raise HTTPException(404,'Práctica no disponible')
+        if run.workspace_strategy!='ssh_password_lab' or run.status!='active' or run.expires_at<=now_utc():
+            raise HTTPException(409,'Inicia una práctica vigente')
+        from fastapi.responses import JSONResponse
+        return JSONResponse(ssh_practice.instructions(run),headers={'Cache-Control':'no-store'})
+
+
+@router.get('/api/v1/runs/{run_id}/http-practice')
+async def http_practice_info(run_id: int, request: Request, user=Depends(require_roles('player'))):
+    async with request.app.state.session_factory() as session:
+        run = await session.scalar(select(ChallengeRun).where(
+            ChallengeRun.id == run_id, ChallengeRun.user_id == user.id).with_for_update())
+        if run is None:
+            raise HTTPException(404, 'Práctica no disponible')
+        challenge = await session.get(Challenge, run.challenge_id)
+        if (challenge is None or challenge.code not in HTTP_SCENARIOS or not challenge.is_published
+                or not await _assigned(session, challenge.id, user.id)):
+            raise HTTPException(404, 'Práctica no disponible')
+        expected_strategy, expected_scenario = HTTP_SCENARIOS[challenge.code]
+        if (run.workspace_strategy != expected_strategy or challenge.scenario != expected_scenario
+                or run.status != 'active' or run.expires_at <= now_utc()):
+            raise HTTPException(409, 'Inicia una práctica vigente')
+        from fastapi.responses import JSONResponse
+        return JSONResponse(http_practice.instructions(run), headers={'Cache-Control': 'no-store'})
 
 
 class OfflineAnswer(BaseModel):
@@ -773,7 +876,7 @@ async def _offline_run(session, run_id, user):
         raise HTTPException(404, "Ejercicio no disponible")
     challenge = await session.get(Challenge, run.challenge_id)
     if (challenge is None or challenge.code not in offline.CATALOG or not challenge.is_published
-            or challenge.asset_references != ["OFFLINE-CASE"] or not await _assigned(session, challenge.id, user.id)):
+            or 'OFFLINE-CASE' not in challenge.asset_references or not await _assigned(session, challenge.id, user.id)):
         raise HTTPException(404, "Ejercicio no disponible")
     if run.workspace_strategy != "offline_case" or run.status != "active" or run.expires_at <= now_utc():
         raise HTTPException(409, "Inicia una corrida vigente para consultar el ejercicio")
@@ -785,6 +888,9 @@ async def get_offline_case(run_id: int, request: Request, user=Depends(require_r
     async with request.app.state.session_factory() as session:
         run, challenge = await _offline_run(session, run_id, user)
         bundle, _ = offline_runtime.case_for(run, challenge.code)
+        if 'LAB-KALI' in challenge.asset_references:
+            import base64
+            bundle['kali_command']=kali_workspace.transfer_command(run,{name:base64.b64decode(data) for name,data in bundle['files'].items()})
         from fastapi.responses import JSONResponse
         return JSONResponse(bundle, headers={"Cache-Control": "no-store"})
 
@@ -840,6 +946,10 @@ async def get_dfir_case(run_id: int, request: Request, user=Depends(require_role
     async with request.app.state.session_factory() as session:
         run = await _dfir_run(session, run_id, user)
         bundle, _ = dfir_runtime.case_for(run)
+        challenge=await session.get(Challenge,run.challenge_id)
+        if 'LAB-KALI' in challenge.asset_references:
+            import json
+            bundle['kali_command']=kali_workspace.transfer_command(run,{**bundle['files'],'case.json':json.dumps(bundle,ensure_ascii=False)})
         from fastapi.responses import JSONResponse
         return JSONResponse(bundle, headers={"Cache-Control": "no-store"})
 

@@ -10,6 +10,8 @@ import { difficultyStyle, categoryMeta } from "../config";
 import { Icon, ErrorMessage } from "./common";
 import { DfirWorkspace } from "./player/DfirWorkspace";
 import { OfflineWorkspace } from "./player/OfflineWorkspace";
+import { SshPracticeWorkspace } from './player/SshPracticeWorkspace';
+import { HttpPracticeWorkspace } from './player/HttpPracticeWorkspace';
 import { LaboratoryRunWorkspace } from "./player/LaboratoryRunWorkspace";
 import { needsLaboratoryCleanup } from "../lib/laboratoryRunState";
 import { ChallengeLearningResources } from "./ChallengeLearningResources";
@@ -131,6 +133,8 @@ export function ChallengeDetail({
   }
 
   const activeRun = runs.find((run) => run.challenge_code === challenge.code && needsLaboratoryCleanup(run));
+  const httpPractice = ['ESC-06-WEBAUTH', 'ESC-07-EXPOSED'].includes(challenge.code);
+  const otherVmRun = ['LAB-01','ESC-01-RECON'].includes(challenge.code) ? runs.find(run => run.challenge_code !== challenge.code && run.workspace_strategy === 'shared_lab_vm' && needsLaboratoryCleanup(run)) : null;
   const startLaboratory = async () => {
     setStarting(true);
     setStartError(null);
@@ -167,6 +171,8 @@ export function ChallengeDetail({
       <ChallengeLearningResources resources={learning.resources} topic={challenge.category} />
 
       {activeRun ? (
+        activeRun.workspace_strategy === 'ssh_password_lab' ? <SshPracticeWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
+        ['http_password_lab', 'http_files_lab'].includes(activeRun.workspace_strategy) ? <HttpPracticeWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
         activeRun.workspace_strategy === "offline_case" ? <OfflineWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
         challenge.code === "DFIR-01" ? <DfirWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
         <LaboratoryRunWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} />
@@ -178,12 +184,14 @@ export function ChallengeDetail({
           </div>
           <ol className="laboratory-flow" aria-label="Pasos del laboratorio">
             <li><span>1</span>Inicia tu instancia</li>
-            <li><span>2</span>{challenge.asset_references.includes("OFFLINE-CASE") ? "Descarga y resuelve el ejercicio" : challenge.code === "DFIR-01" ? "Correlaciona las evidencias" : "Investiga en la terminal"}</li>
+            <li><span>2</span>{httpPractice ? "Investiga el servicio web desde Kali" : challenge.asset_references.includes("OFFLINE-CASE") ? "Descarga y resuelve el ejercicio" : challenge.code === "DFIR-01" ? "Correlaciona las evidencias" : "Investiga en la terminal"}</li>
             <li><span>3</span>{challenge.asset_references.includes("OFFLINE-CASE") ? "Valida y registra tus puntos" : "Pega y valida la flag"}</li>
           </ol>
-          <p>{challenge.asset_references.includes("OFFLINE-CASE") ? "Al iniciar tendrás un ZIP con evidencias e instrucciones. Resuélvelo localmente, valida tu respuesta y registra los puntos. No requiere una máquina virtual." : challenge.code === "DFIR-01" ? "El expediente, los registros descargables y el formulario de análisis aparecerán aquí al iniciar." : "La terminal, el bloc de notas y el envío de flag aparecerán aquí cuando tu entorno esté listo."}</p>
+          <p>{httpPractice ? "Al iniciar se prepara tu ejercicio HTTP en LNX-VICT y se abre la terminal Kali. Tendrás la dirección del objetivo y comandos para probar contraseñas o descubrir archivos expuestos; encuentra la flag y valídala aquí." : challenge.asset_references.includes("OFFLINE-CASE") ? "Al iniciar tendrás evidencias, instrucciones y acceso a la terminal Kali. Prepara los archivos con el comando de la pantalla, resuelve, valida tu respuesta y registra los puntos. También puedes descargar el ZIP." : challenge.code === "DFIR-01" ? "El expediente, la terminal Kali y el formulario de análisis aparecerán aquí al iniciar." : "La terminal, el bloc de notas y el envío de flag aparecerán aquí cuando tu entorno esté listo."}</p>
           {challenge.completed && <p className="practice-note">Puedes practicar de nuevo. Los puntos de este reto se otorgan una sola vez.</p>}
           <ErrorMessage message={startError} />
+          {otherVmRun && <div role="status" className="instruction-box"><p>La VM está reservada por tu reto {otherVmRun.challenge_code}. Ciérralo antes de abrir este laboratorio.</p>
+            <button className="secondary-action" disabled={starting} onClick={() => {setStarting(true); void onClose(otherVmRun.id).catch(error=>setStartError(error instanceof Error ? error.message : 'No se pudo cerrar la sesión anterior.')).finally(()=>setStarting(false));}}>Cerrar {otherVmRun.challenge_code} y liberar la VM</button></div>}
           <button type="button" className="primary-action" onClick={() => void startLaboratory()} disabled={starting}>
             <Icon name="play" />{starting ? "Preparando laboratorio…" : challenge.completed ? "Reabrir entorno de práctica" : "Iniciar laboratorio"}
           </button>

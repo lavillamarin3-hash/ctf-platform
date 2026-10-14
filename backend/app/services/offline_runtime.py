@@ -17,7 +17,7 @@ def flag_for(run):
 
 async def start(session, challenge, user):
     flags = [flag for flag in challenge.flags if flag.is_active]
-    if (challenge.code not in CATALOG or challenge.asset_references != ['OFFLINE-CASE']
+    if (challenge.code not in CATALOG or set(challenge.asset_references) not in ({'OFFLINE-CASE'}, {'OFFLINE-CASE', 'LAB-KALI'})
             or len(flags) != 1 or flags[0].mode != 'dynamic' or not flags[0].template):
         raise HTTPException(409, 'El ejercicio descargable necesita una flag dinámica activa y el activo OFFLINE-CASE.')
     run = ChallengeRun(user_id=user.id, challenge_id=challenge.id, status='active',

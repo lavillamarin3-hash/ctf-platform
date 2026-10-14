@@ -95,13 +95,13 @@ export function LaboratoryRunWorkspace({ run, onClose, onSubmit }: {
       <div><span className="eyebrow accent">LABORATORIO ASIGNADO</span><h2>{run.target_vm_name || run.challenge_code}</h2>
         <p>{run.challenge_code} · Conexión remota · Disponible hasta {new Date(run.expires_at).toLocaleString("es-ES")}</p></div>
       <div className="laboratory-run-heading-actions">
-        <span className={`laboratory-state ${expired ? "pending" : "connected"}`}><span className="status-dot" />{expired ? "Tiempo agotado" : "Instancia reservada"}</span>
+        <span className={`laboratory-state ${expired ? "pending" : "connected"}`}><span className="status-dot" />{expired ? "Tiempo agotado" : run.workspace_strategy === 'ssh_password_lab' ? "Cuenta de práctica activa" : run.workspace_strategy === 'http_password_lab' || run.workspace_strategy === 'http_files_lab' ? "Práctica web activa" : "Instancia reservada"}</span>
         <button type="button" className="secondary-action lab-fullscreen-action" aria-pressed={fullscreen} onClick={() => void toggleFullscreen()}>{fullscreen ? "Salir de pantalla completa" : "Pantalla completa"}</button>
       </div>
     </header>
     <div className="laboratory-workspace-grid">
       {expired ? <section className="embedded-terminal-panel terminal-integration-notice"><h3>El laboratorio ha expirado</h3><p>La conexión remota se desconectó. La evidencia dinámica se limpia cuando corresponde; puedes reintentar el cierre si aparece un error.</p></section>
-        : <GuacamoleTerminal key={run.id} runId={run.id} preferredProtocol={run.target_protocol} attackerOnly={run.challenge_code === "ESC-01-RECON"} onClipboard={(text) => { setSelection(text); setNotice({ kind: "success", message: "Selección recibida de la conexión. Pulsa Usar selección para preparar el envío." }); }} />}
+        : <GuacamoleTerminal key={run.id} runId={run.id} preferredProtocol={run.target_protocol} attackerOnly={run.challenge_code === "ESC-01-RECON"} workspaceName={run.target_vm_name === "LAB-KALI" ? "Kali" : undefined} onClipboard={(text) => { setSelection(text); setNotice({ kind: "success", message: "Selección recibida de la conexión. Pulsa Usar selección para preparar el envío." }); }} />}
       <form className="laboratory-flag-workspace" onSubmit={submit}>
         <div><span className="eyebrow accent">BLOC DE NOTAS Y FLAG</span><h3>Investiga, copia y valida</h3><p>Notas privadas de esta pestaña. Se eliminan al cerrar la corrida o salir de tu cuenta.</p></div>
         <label className="lab-notes-label" htmlFor={`lab-notes-${run.id}`}>Notas del laboratorio</label>

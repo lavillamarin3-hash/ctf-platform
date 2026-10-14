@@ -49,6 +49,14 @@ class GuacamoleApiError(RuntimeError):
         self.detail = detail
 
 
+def _connection_parameters(protocol: str, parameters: dict) -> dict:
+    """RDP debe aceptar el tamaño del cliente; respetar un método ya elegido."""
+    result = dict(parameters)
+    if protocol.lower() == "rdp" and not result.get("resize-method"):
+        result["resize-method"] = "reconnect"
+    return result
+
+
 class RemoteAccessProvisioningPort:
     async def provision(self, username: str, challenge_code: str, run_id: int) -> RemoteConnection:
         raise NotImplementedError
@@ -144,6 +152,7 @@ class StubGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
         if username is not None: params["username"]=username
         if password is not None: params["password"]=password
         if domain is not None: params["domain"]=domain
+        params = _connection_parameters(protocol, params)
         c=GuacamoleConnection(ident,name,protocol,parent_identifier,str(hostname),str(port),params,{},{0}); self.connections[ident]=c; return c
     async def update_connection(self, identifier: str, *, name, protocol, hostname, port, username=None, password=None, domain=None, parent_identifier="ROOT"):
         if identifier not in self.connections: raise GuacamoleApiError("Conexión no encontrada",404)
@@ -151,6 +160,7 @@ class StubGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
         if username is not None: params["username"]=username
         if password is not None: params["password"]=password
         if domain is not None: params["domain"]=domain
+        params = _connection_parameters(protocol, params)
         c=GuacamoleConnection(identifier,name,protocol,parent_identifier,hostname,str(port),params,old.attributes or {},old.active_connections); self.connections[identifier]=c; return c
     async def delete_connection(self, identifier: str) -> None: self.connections.pop(identifier,None)
     async def get_user_permissions(self, username: str) -> dict:
@@ -302,6 +312,7 @@ class ManagedGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
         if username is not None: params['username']=username
         if password is not None: params['password']=password
         if domain is not None: params['domain']=domain
+        params = _connection_parameters(protocol, params)
         p=await self._api_request('POST','/connections',data={"parentIdentifier":parent_identifier,"name":name,"protocol":protocol,"parameters":params,"attributes":{}}); return self._conn((p or {}).get('identifier',''),p or {"name":name,"protocol":protocol,"parameters":params,"attributes":{}})
     async def update_connection(self,identifier,*,name,protocol,hostname,port,username=None,password=None,domain=None,parent_identifier='ROOT'):
         p=await self._api_request('GET',f'/connections/{quote(identifier,safe="")}');
@@ -316,6 +327,7 @@ class ManagedGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
         if username is not None: params['username']=username
         if password is not None: params['password']=password
         if domain is not None: params['domain']=domain
+        params = _connection_parameters(protocol, params)
         body={"parentIdentifier":parent_identifier,"name":name,"protocol":protocol,"identifier":identifier,"activeConnections":p.get('activeConnections',0),"parameters":params,"attributes":dict(p.get('attributes') or {})}; await self._api_request('PUT',f'/connections/{quote(identifier,safe="")}',data=body); return self._conn(identifier,body)
     async def delete_connection(self,identifier): await self._api_request('DELETE',f'/connections/{quote(identifier,safe="")}')
     async def get_user_permissions(self,username):

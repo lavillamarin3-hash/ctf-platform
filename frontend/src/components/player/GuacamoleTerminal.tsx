@@ -5,6 +5,12 @@ import { selectTerminalConnection } from "../../lib/terminalConnectionOptions";
 import type { TerminalProtocol as Protocol, TerminalTarget as Target } from "../../lib/terminalConnectionOptions";
 
 type Stream = { sendAck: (message: string, code: number) => void };
+type Status = { code: number; message: string };
+type Tunnel = {
+  disconnect: () => void;
+  onerror: ((status: Status) => void) | null;
+  onstatechange: ((state: number) => void) | null;
+};
 type Display = {
   getElement: () => HTMLElement;
   getWidth: () => number;
@@ -23,10 +29,16 @@ type Client = {
   onerror: ((status: unknown) => void) | null;
   onclipboard: ((stream: Stream, mimetype: string) => void) | null;
 };
-type Keyboard = { onkeydown: (keysym: number) => boolean; onkeyup: (keysym: number) => void; reset: () => void };
+type Keyboard = {
+  modifiers: { ctrl: boolean; meta?: boolean };
+  onkeydown: (keysym: number) => boolean;
+  onkeyup: (keysym: number) => void;
+  reset: () => void;
+};
 type Namespace = {
-  WebSocketTunnel: new (url: string) => unknown;
-  Client: new (tunnel: unknown) => Client;
+  WebSocketTunnel: new (url: string) => Tunnel;
+  Tunnel: { State: { CLOSED: number } };
+  Client: new (tunnel: Tunnel) => Client;
   Keyboard: new (element: HTMLElement) => Keyboard;
   Mouse: new (element: HTMLElement) => { onmousedown: (state: unknown) => void; onmouseup: (state: unknown) => void; onmousemove: (state: unknown) => void };
   StringReader: new (stream: Stream) => { ontext: (text: string) => void; onend: () => void };
@@ -52,6 +64,7 @@ function loadClient(): Promise<Namespace> {
 }
 type State = "loading" | "connected" | "auth" | "error" | "disconnected";
 const ZOOM_STEPS = [0.75, 1, 1.25, 1.5, 1.75, 2];
+const OPEN_TIMEOUT_MS = 30_000;
 
 // La caja externa permanece estable aunque Guacamole agregue/quiete scrollbars.
 function terminalDimensions(panel: HTMLElement, scale: number) {
@@ -62,10 +75,11 @@ function terminalDimensions(panel: HTMLElement, scale: number) {
   };
 }
 
-export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = false, onClipboard }: {
+export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = false, workspaceName, onClipboard }: {
   runId: number;
   preferredProtocol?: string | null;
   attackerOnly?: boolean;
+  workspaceName?: string;
   onClipboard: (text: string) => void;
 }) {
   const terminalRef = useRef<HTMLElement>(null);
@@ -124,9 +138,20 @@ export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = fal
   }, [runId, preferredProtocol, attackerOnly, optionsAttempt]);
 
   useEffect(() => {
-    const updateFullscreen = () => setFullscreen(document.fullscreenElement === terminalRef.current);
+    let frame = 0;
+    const updateFullscreen = () => {
+      setFullscreen(document.fullscreenElement === terminalRef.current);
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        applyScaleRef.current?.();
+        scheduleSizeRef.current?.();
+      });
+    };
     document.addEventListener("fullscreenchange", updateFullscreen);
-    return () => document.removeEventListener("fullscreenchange", updateFullscreen);
+    return () => {
+      window.cancelAnimationFrame(frame);
+      document.removeEventListener("fullscreenchange", updateFullscreen);
+    };
   }, []);
   const toggleFullscreen = async () => {
     try {
@@ -149,28 +174,61 @@ export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = fal
     setProtocol((current) => current && available.includes(current) ? current : available[0]);
   };
   const reconnect = () => setAttempt((value) => value + 1);
+  const fitDesktop = () => {
+    zoomRef.current = 1;
+    setRdpZoom(1);
+    applyScaleRef.current?.();
+    scheduleSizeRef.current?.();
+    viewport.current?.scrollTo(0, 0);
+  };
 
   useEffect(() => {
     if (!protocol) return;
     let disposed = false;
     let observer: ResizeObserver | null = null;
     let client: Client | null = null;
+    let tunnel: Tunnel | null = null;
     let keyboard: Keyboard | null = null;
+    let openingTimer = 0;
+    let failed = false;
     let resizeTimer = 0;
     let resizeFrame = 0;
     let scaleFrame = 0;
     let restoreDisplayResize: (() => void) | null = null;
     setState("loading"); setMessage("");
+    const clearOpeningTimer = () => {
+      window.clearTimeout(openingTimer);
+      openingTimer = 0;
+    };
+    const failConnection = (notice: string) => {
+      if (disposed || failed) return;
+      failed = true;
+      clearOpeningTimer();
+      setState("error"); setMessage(notice);
+      if (client) client.disconnect();
+      else tunnel?.disconnect();
+    };
+    openingTimer = window.setTimeout(() => failConnection(
+      "La conexión tardó demasiado en abrirse. Comprueba que la máquina esté encendida y vuelve a conectar la terminal."
+    ), OPEN_TIMEOUT_MS);
     const connect = async () => {
       try {
         const ticket = await request<{ websocket_path: string }>(`/runs/${runId}/terminal/session`, {
           method: "POST", body: JSON.stringify({ protocol, target }),
         });
+        if (disposed || failed) return;
         const Guacamole = await loadClient();
-        if (disposed || !viewport.current) return;
+        if (disposed || failed || !viewport.current) return;
         if (ticket.websocket_path !== `/api/v1/runs/${runId}/terminal/ws`) throw new Error("Destino no válido");
         const wsScheme = location.protocol === "https:" ? "wss:" : "ws:";
-        const tunnel = new Guacamole.WebSocketTunnel(`${wsScheme}//${location.host}${ticket.websocket_path}`);
+        tunnel = new Guacamole.WebSocketTunnel(`${wsScheme}//${location.host}${ticket.websocket_path}`);
+        tunnel.onerror = () => failConnection("No se pudo abrir o mantener el túnel. Revisa tu conexión o reconecta tu cuenta de laboratorio.");
+        tunnel.onstatechange = (value) => {
+          if (disposed || value !== Guacamole.Tunnel.State.CLOSED) return;
+          failed = true;
+          clearOpeningTimer();
+          setState((previous) => previous === "error" || previous === "auth" ? previous : "disconnected");
+        };
         const current = new Guacamole.Client(tunnel);
         client = current; clientRef.current = current;
         const display = current.getDisplay();
@@ -205,12 +263,14 @@ export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = fal
         scaleToViewport();
         current.onstatechange = (value) => {
           if (disposed) return;
-          if (value === 3) setState("connected");
-          else if (value === 5) setState((previous) => previous === "error" ? previous : "disconnected");
+          if (value === 3 && !failed) { clearOpeningTimer(); setState("connected"); }
+          else if (value === 5) {
+            failed = true;
+            clearOpeningTimer();
+            setState((previous) => previous === "error" || previous === "auth" ? previous : "disconnected");
+          }
         };
-        current.onerror = () => {
-          if (!disposed) { setState("error"); setMessage("No se pudo mantener el túnel. Revisa tu conexión o reconecta tu cuenta de laboratorio."); }
-        };
+        current.onerror = () => failConnection("No se pudo mantener el túnel. Revisa tu conexión o reconecta tu cuenta de laboratorio.");
         current.onclipboard = (stream, mimetype) => {
           if (mimetype !== "text/plain") { stream.sendAck("Solo texto", 0x030F); return; }
           const reader = new Guacamole.StringReader(stream);
@@ -222,7 +282,12 @@ export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = fal
           reader.onend = () => { if (!disposed) clipboardCallback.current(text); };
         };
         keyboard = new Guacamole.Keyboard(viewport.current); keyboardRef.current = keyboard;
-        keyboard.onkeydown = (keysym) => { current.sendKeyEvent(1, keysym); return false; };
+        keyboard.onkeydown = (keysym) => {
+          // Let the browser deliver clipboard text before asking the SSH terminal to paste it.
+          if (protocol === "ssh" && (keysym === 0x76 || keysym === 0x56)
+              && (keyboard?.modifiers.ctrl || keyboard?.modifiers.meta)) return true;
+          current.sendKeyEvent(1, keysym); return false;
+        };
         keyboard.onkeyup = (keysym) => current.sendKeyEvent(0, keysym);
         const mouse = new Guacamole.Mouse(element);
         mouse.onmousedown = mouse.onmouseup = mouse.onmousemove = (value) => current.sendMouseState(value, true);
@@ -249,17 +314,26 @@ export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = fal
         current.connect(`width=${initialSize.width}&height=${initialSize.height}`);
       } catch (error) {
         if (disposed) return;
-        setState(error instanceof ApiError && error.status === 428 ? "auth" : "error");
+        clearOpeningTimer();
+        if (error instanceof ApiError && error.status === 428) {
+          failed = true;
+          setState("auth"); setMessage(error.message);
+          return;
+        }
+        if (failed) return;
+        setState("error");
         setMessage(error instanceof ApiError ? error.message : "No se pudo cargar la terminal. Verifica la disponibilidad de Guacamole.");
       }
     };
     void connect();
     return () => {
       disposed = true; observer?.disconnect(); keyboard?.reset();
+      clearOpeningTimer();
       window.clearTimeout(resizeTimer); window.cancelAnimationFrame(resizeFrame); window.cancelAnimationFrame(scaleFrame);
       restoreDisplayResize?.();
       applyScaleRef.current = null;
       scheduleSizeRef.current = null;
+      if (tunnel) { tunnel.onerror = null; tunnel.onstatechange = null; }
       if (client) { client.onstatechange = null; client.onerror = null; client.onclipboard = null; client.disconnect(); }
       viewport.current?.replaceChildren();
       if (clientRef.current === client) clientRef.current = null;
@@ -281,14 +355,14 @@ export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = fal
   const labels: Record<State, string> = { loading: "Conectando…", connected: "Conectada", auth: "Conecta tu cuenta", error: "Error de conexión", disconnected: "Desconectada" };
   return <section className="embedded-terminal-panel" ref={terminalRef} aria-label="Conexión remota del laboratorio">
     <div className="embedded-terminal-toolbar">
-      <div><span className="eyebrow">CONEXIÓN INTEGRADA</span><strong>{protocol === "rdp" ? "Escritorio RDP" : "Terminal SSH"}{target === "attacker" ? " · Kali atacante" : " · VM víctima"}</strong></div>
+      <div><span className="eyebrow">CONEXIÓN INTEGRADA</span><strong>{protocol === "rdp" ? "Escritorio RDP" : "Terminal SSH"} · {target === "attacker" ? "Kali atacante" : workspaceName || "VM víctima"}</strong></div>
       <span className={`terminal-state ${state}`} role="status">{labels[state]}</span>
       {protocol && state === "connected" && <button type="button" className="secondary-action" onClick={reconnect}>Reconectar conexión</button>}
       <div className="terminal-zoom-controls">
-        <button type="button" aria-label={protocol === "rdp" ? "Reducir vista RDP" : "Reducir texto de terminal"} disabled={zoom <= ZOOM_STEPS[0]} onClick={() => changeZoom(-1)}>A−</button>
-        <span aria-live="polite">{protocol === "rdp" ? `Ajuste ${Math.round(zoom * 100)}%` : `${Math.round(zoom * 100)}%`}</span>
-        <button type="button" aria-label={protocol === "rdp" ? "Ampliar vista RDP" : "Ampliar texto de terminal"} disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]} onClick={() => changeZoom(1)}>A+</button>
-        {protocol === "rdp" && <button type="button" aria-label="Ajustar escritorio completo a la ventana" disabled={rdpZoom === 1} onClick={() => setRdpZoom(1)}>Ajustar</button>}
+        <button type="button" aria-label={protocol === "rdp" ? "Reducir vista RDP" : "Reducir texto de terminal"} disabled={zoom <= ZOOM_STEPS[0]} onClick={() => changeZoom(-1)}>{protocol === "rdp" ? "−" : "A−"}</button>
+        <span aria-live="polite">{protocol === "rdp" && zoom === 1 ? "Vista completa" : `${Math.round(zoom * 100)}%`}</span>
+        <button type="button" aria-label={protocol === "rdp" ? "Ampliar vista RDP" : "Ampliar texto de terminal"} disabled={zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]} onClick={() => changeZoom(1)}>{protocol === "rdp" ? "+" : "A+"}</button>
+        {protocol === "rdp" && <button type="button" aria-label="Ajustar escritorio completo a la ventana" disabled={state !== "connected"} onClick={fitDesktop}>Ajustar</button>}
       </div>
       <button type="button" className="secondary-action terminal-fullscreen-action" aria-pressed={fullscreen} onClick={() => void toggleFullscreen()}>{fullscreen ? "Salir de pantalla completa" : "Pantalla completa de conexión"}</button>
     </div>
@@ -305,16 +379,26 @@ export function GuacamoleTerminal({ runId, preferredProtocol, attackerOnly = fal
         : !(target === "attacker" ? attackerProtocols : protocols).includes("ssh") ? "SSH no está configurado para esta VM." : attackerOnly ? "Elige SSH o RDP para trabajar desde Kali; se abre una conexión a la vez." : attackerProtocols.length > 0 ? "Elige la máquina y SSH o RDP; se abre una conexión a la vez." : "Elige SSH o RDP; se abre una conexión a la vez."}</small>
     </div>
     <div className="terminal-stage">
-      <div className="guacamole-viewport guacamole-canvas" ref={viewport} tabIndex={state === "auth" || !protocol ? -1 : 0} role="region"
-        aria-label={target === "attacker" ? (protocol === "rdp" ? "Escritorio RDP de Kali atacante" : "Terminal SSH de Kali atacante") : (protocol === "rdp" ? "Escritorio RDP interactivo" : "Terminal SSH interactiva")}
+      <div className="guacamole-viewport guacamole-canvas" data-protocol={protocol ?? undefined} ref={viewport} tabIndex={state === "auth" || !protocol ? -1 : 0} role="region"
+        aria-label={target === "attacker" ? (protocol === "rdp" ? "Escritorio RDP de Kali atacante" : "Terminal SSH de Kali atacante") : workspaceName ? `${protocol === "rdp" ? "Escritorio RDP" : "Terminal SSH"} de ${workspaceName}` : (protocol === "rdp" ? "Escritorio RDP interactivo" : "Terminal SSH interactiva")}
         aria-hidden={state === "auth" || !protocol}
         onPointerDown={(event) => event.currentTarget.focus()} onBlur={() => keyboardRef.current?.reset()}
         onPaste={(event) => {
           const text = event.clipboardData.getData("text/plain"); const client = clientRef.current;
           if (!text || !client || !window.Guacamole) return;
           event.preventDefault();
+          if (protocol === "ssh") keyboardRef.current?.reset();
           const writer = new window.Guacamole.StringWriter(client.createClipboardStream("text/plain"));
           writer.sendText(text); writer.sendEnd();
+          if (protocol === "ssh") {
+            // guacd's SSH terminal pastes its clipboard on Ctrl+Shift+V (uppercase V).
+            client.sendKeyEvent(1, 0xFFE3);
+            client.sendKeyEvent(1, 0xFFE1);
+            client.sendKeyEvent(1, 0x56);
+            client.sendKeyEvent(0, 0x56);
+            client.sendKeyEvent(0, 0xFFE1);
+            client.sendKeyEvent(0, 0xFFE3);
+          }
         }} />
       {(state === "loading" && !optionsError) && <p className="terminal-stage-overlay" role="status">{protocol ? `Abriendo ${protocol.toUpperCase()}…` : "Comprobando conexiones disponibles…"}</p>}
       {state === "auth" && <form className="terminal-auth-form" onSubmit={authenticate}>

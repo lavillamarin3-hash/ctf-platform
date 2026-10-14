@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import type { Run } from "../../api";
 import { request } from "../../services/api/client";
+import { KaliPanel } from './KaliPanel';
 
 type Bundle = {
   title: string; brief: string; clock_notes: string;
   calibration: Array<{reference_utc: string; auth_clock: string; http_clock: string}>;
-  files: Record<string, string>; sha256: Record<string, string>;
+  files: Record<string, string>; sha256: Record<string, string>; kali_command?: string;
 };
 const fields = [
   ["session", "Sesión"], ["user", "Usuario"], ["request", "Solicitud HTTP"],
@@ -47,6 +48,7 @@ export function DfirWorkspace({ run, onClose, onSubmit }: {
     <p>Disponible hasta {new Date(run.expires_at).toLocaleString()}. {expired && "La corrida ha caducado; ciérrala para iniciar otra."}</p>
     {bundle && <>
       <p>{bundle.brief}</p><p>{bundle.clock_notes}</p>
+      {!expired && <KaliPanel run={run} command={bundle.kali_command} />}
       <details className="challenge-accordion"><summary>Calibración de relojes</summary>
         <pre style={{overflowX: "auto", padding: "1rem"}}>{JSON.stringify(bundle.calibration, null, 2)}</pre>
       </details>

@@ -17,7 +17,7 @@ def flag_for(run):
 
 async def start(session, challenge, user):
     flags = [flag for flag in challenge.flags if flag.is_active]
-    if len(flags) != 1 or flags[0].mode != "dynamic" or challenge.asset_references != ["DFIR-CASE"]:
+    if len(flags) != 1 or flags[0].mode != "dynamic" or set(challenge.asset_references) not in ({"DFIR-CASE"}, {"DFIR-CASE", "LAB-KALI"}):
         raise HTTPException(409, "DFIR-01 requiere una flag dinámica activa y solo el expediente DFIR-CASE como activo.")
     run = ChallengeRun(user_id=user.id, challenge_id=challenge.id, status="active",
                        expires_at=now_utc() + timedelta(hours=2), workspace_strategy="dfir_case")

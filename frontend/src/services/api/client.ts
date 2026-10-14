@@ -37,6 +37,11 @@ export async function request<T>(
   const body = await response.json().catch(() => ({}));
 
   if (!response.ok) {
+    if (response.status === 401 && token && path !== '/terminal/auth' && session.get() === token) {
+      session.clear();
+      window.dispatchEvent(new Event('ctf-session-expired'));
+      throw new ApiError('Tu sesión venció. Inicia sesión de nuevo para continuar.', 401);
+    }
     throw new ApiError(typeof body.detail === "string" ? body.detail : "Revisa los datos e intenta nuevamente", response.status);
   }
 

@@ -454,6 +454,43 @@ class WebSocketGateTests(unittest.IsolatedAsyncioTestCase):
             await terminal.terminal_websocket(101, socket)
         target.assert_awaited_once_with(socket.app, 101, 7, "ssh", "attacker")
 
+    async def test_upstream_failure_sends_visible_error_without_leaking_secret(self):
+        socket, sessions = self.make_socket("https://ctf.example.invalid")
+        sessions.consume.return_value = {"user_id": 7, "protocol": "ssh"}
+        sessions.get_user = AsyncMock(return_value={
+            "username": "student-fixture", "token": "private-fixture-token", "data_source": "fixture"
+        })
+        socket.scope = {"subprotocols": ["guacamole"]}
+        socket.accept = AsyncMock()
+        socket.send_text = AsyncMock()
+        socket.app.state.guacamole = SimpleNamespace(base_url="https://guacamole.example.invalid")
+        upstream = SimpleNamespace(
+            __aenter__=AsyncMock(side_effect=RuntimeError("connection URL contains private-fixture-token")),
+            __aexit__=AsyncMock(return_value=False),
+        )
+        # Special methods must live on the class for async-with.
+        class FailingConnection:
+            async def __aenter__(self):
+                return await upstream.__aenter__()
+            async def __aexit__(self, *args):
+                return await upstream.__aexit__(*args)
+        target = AsyncMock(return_value=("kali-fixture", now_utc(), "student-fixture"))
+        with patch.object(terminal, "get_settings", return_value=SimpleNamespace(public_origin="https://ctf.example.invalid")), \
+             patch.object(terminal, "authorized_target", target), \
+             patch.object(terminal, "connect", return_value=FailingConnection()), \
+             self.assertLogs(terminal.logger, level="WARNING") as logs:
+            await terminal.terminal_websocket(101, socket)
+        socket.accept.assert_awaited_once_with(subprotocol="guacamole")
+        socket.send_text.assert_awaited_once()
+        instruction = socket.send_text.await_args.args[0]
+        self.assertTrue(instruction.startswith("5.error,"))
+        self.assertTrue(instruction.endswith(",3.512;"))
+        self.assertIn("servidor de terminal", instruction)
+        self.assertNotIn("private-fixture-token", instruction)
+        self.assertNotIn("private-fixture-token", "".join(logs.output))
+        self.assertIn("RuntimeError", "".join(logs.output))
+        self.assertEqual(socket.close.await_args_list[0].kwargs["code"], 1011)
+
 
 if __name__ == "__main__":
     unittest.main()

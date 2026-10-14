@@ -63,6 +63,7 @@ async function run() {
   let activeFlag = fixtureFlag;
   let wsReceived = [];
   let terminalSockets = [];
+  let terminalFailureMode = false;
   let brokerRequests = 0;
   const selectedProtocols = [];
   let offerRdp = true;
@@ -151,6 +152,11 @@ async function run() {
     socketUrls.push(socket.url());
     terminalSockets.push(socket);
     socket.onMessage(message => wsReceived.push(String(message)));
+    if (terminalFailureMode) {
+      // The browser handshake succeeds, but Guacamole rejects upstream before sync.
+      setTimeout(() => socket.close({ code: 1011, reason: '512' }), 50);
+      return;
+    }
     // Minimal Guacamole protocol fixture: dimensions and synchronization.
     // No shell output or command execution is fabricated.
     setTimeout(() => socket.send(instruction('size', 0, 1000, 600) + instruction('sync', Date.now())), 50);
@@ -251,6 +257,55 @@ async function run() {
       await page.waitForTimeout(100);
       assert.ok(wsReceived.some(value => value.includes('key')), 'Keyboard input must reach fixture transport');
     });
+    await check('Native Ctrl+V sends clipboard before the SSH paste shortcut', async () => {
+      const pasteText = 'echo qa_ssh_clipboard';
+      await page.evaluate(text => navigator.clipboard.writeText(text), pasteText);
+      const messageStart = wsReceived.length;
+      await page.locator('.guacamole-viewport').click();
+      await page.keyboard.press('Control+v');
+      const pasteKeys = [
+        instruction('key', 0xFFE3, 1), instruction('key', 0xFFE1, 1),
+        instruction('key', 0x56, 1), instruction('key', 0x56, 0),
+        instruction('key', 0xFFE1, 0), instruction('key', 0xFFE3, 0),
+      ].join('');
+      const pasteDeadline = Date.now() + 5000;
+      while (!wsReceived.slice(messageStart).join('').includes(pasteKeys) && Date.now() < pasteDeadline) {
+        await page.waitForTimeout(25);
+      }
+      const messages = wsReceived.slice(messageStart).join('');
+      assert.ok(messages.includes(Buffer.from(pasteText).toString('base64')), 'DOM paste must send the actual clipboard text');
+      assert.ok(messages.includes(pasteKeys), 'SSH must receive the Ctrl+Shift+V sequence');
+      assert.ok(messages.indexOf('3.end,') < messages.indexOf(pasteKeys), 'The clipboard stream must finish before the paste shortcut');
+      assert.ok(!messages.includes(instruction('key', 0x76, 1)), 'Native Ctrl+V must not send a premature lowercase V to SSH');
+    });
+    await check('Upstream tunnel failures exit loading, preserve error and allow reconnection', async () => {
+      const panel = page.locator('.embedded-terminal-panel').first();
+      await terminalSockets.at(-1).close({ code: 1011, reason: '512' });
+      await panel.getByText('Error de conexión', { exact: true }).waitFor();
+      assert.equal(await panel.locator('.terminal-stage-overlay').count(), 0);
+      assert.equal(await panel.getByRole('button', { name: 'Reconectar terminal', exact: true }).isEnabled(), true);
+      // A Client.disconnect callback following Tunnel.onerror must not hide the error.
+      await page.waitForTimeout(100);
+      assert.equal(await panel.locator('.terminal-state').innerText(), 'Error de conexión');
+
+      terminalFailureMode = true;
+      const previousSocketCount = terminalSockets.length;
+      await panel.getByRole('button', { name: 'Reconectar terminal', exact: true }).click();
+      const openingDeadline = Date.now() + 5000;
+      while (terminalSockets.length === previousSocketCount && Date.now() < openingDeadline) {
+        await page.waitForTimeout(25);
+      }
+      assert.ok(terminalSockets.length > previousSocketCount, 'Reconnection must open a new transport');
+      await panel.getByText('Error de conexión', { exact: true }).waitFor();
+      assert.equal(await panel.locator('.terminal-stage-overlay').count(), 0,
+        'A close before the first sync must not leave Abriendo SSH visible');
+      assert.equal(await panel.getByRole('button', { name: 'Conectar mi cuenta', exact: true }).isEnabled(), true);
+
+      terminalFailureMode = false;
+      await panel.getByRole('button', { name: 'Reconectar terminal', exact: true }).click();
+      await page.waitForFunction(() => document.querySelector('.terminal-state')?.textContent === 'Conectada');
+      assert.equal(await panel.getByRole('button', { name: 'Reconectar conexión', exact: true }).isEnabled(), true);
+    });
     await check('SSH/RDP selector switches one client and terminal-only fullscreen', async () => {
       const panel = page.locator('.embedded-terminal-panel').first();
       const sshCanvas = await panel.locator('.guacamole-viewport').boundingBox();
@@ -260,6 +315,19 @@ async function run() {
       assert.ok(Math.abs(rdpCanvas.height - sshCanvas.height) <= 2, 'Protocol switching must keep the display frame stable');
       assert.equal(selectedProtocols.at(-1), 'rdp');
       assert.equal(await panel.getByRole('region', { name: 'Escritorio RDP interactivo' }).count(), 1);
+      const rdpPasteStart = wsReceived.length;
+      await panel.locator('.guacamole-viewport').evaluate(element => {
+        const clipboard = new DataTransfer();
+        clipboard.setData('text/plain', 'qa_rdp_clipboard');
+        element.dispatchEvent(new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: clipboard }));
+      });
+      const rdpPasteDeadline = Date.now() + 5000;
+      while (!wsReceived.slice(rdpPasteStart).join('').includes(Buffer.from('qa_rdp_clipboard').toString('base64')) && Date.now() < rdpPasteDeadline) {
+        await page.waitForTimeout(25);
+      }
+      const rdpPasteMessages = wsReceived.slice(rdpPasteStart).join('');
+      assert.ok(rdpPasteMessages.includes(Buffer.from('qa_rdp_clipboard').toString('base64')), 'RDP must still receive the clipboard stream');
+      assert.ok(!rdpPasteMessages.includes(instruction('key', 0x56, 1)), 'RDP must not receive the SSH paste shortcut');
       assert.equal(await panel.locator('.guacamole-canvas').count(), 1, 'Only one display mount is permitted');
       await panel.getByRole('button', { name: 'Pantalla completa de conexión' }).click();
       await page.waitForFunction(() => document.fullscreenElement?.classList.contains('embedded-terminal-panel'));

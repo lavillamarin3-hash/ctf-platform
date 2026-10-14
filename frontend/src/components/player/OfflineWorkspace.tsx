@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Run } from "../../api";
 import { request, session } from "../../services/api/client";
+import { KaliPanel } from './KaliPanel';
 
-type Bundle = { title: string; brief: string; files: Record<string, string>; sha256: Record<string, string> };
+type Bundle = { title: string; brief: string; files: Record<string, string>; sha256: Record<string, string>; kali_command?: string };
 
 export function OfflineWorkspace({ run, onClose, onSubmit }: {
   run: Run; onClose: (id: number) => Promise<void>;
@@ -64,6 +65,7 @@ export function OfflineWorkspace({ run, onClose, onSubmit }: {
         </label>
         <button className="primary-action" disabled={busy || expired}>Validar respuesta</button>
       </form>
+      {!expired && <KaliPanel run={run} command={bundle.kali_command} />}
       {flag && <div className="instruction-box"><p>El análisis es correcto. Registra el resultado para sumar los puntos.</p>
         <button className="primary-action" disabled={busy || expired} onClick={() => void perform(async () => {
           const result = await onSubmit(run.challenge_code, flag); setMessage(result.message);
