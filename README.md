@@ -63,6 +63,10 @@ Las instrucciones de cada reto delimitan el alcance de las actividades y los
 activos autorizados. Las flags concretas pertenecen a la configuración del
 reto y no se documentan en este archivo.
 
+## Laboratorio web Operación Cóndor
+
+[Operación Cóndor](labs/operacion-condor/README.md) es un portal ficticio independiente para practicar el acceso a un administrador mediante un diccionario de contraseñas del laboratorio. Incluye código MVC, instalación nativa en Ubuntu Server 26.04 y una [guía de montaje y resolución](labs/operacion-condor/GUIA_UBUNTU_26_04.md). Su inicio y puntuación todavía no están integrados automáticamente con Cociber CTF.
+
 ## Roles
 
 El control de acceso utiliza **RBAC (Role-Based Access Control)**.
