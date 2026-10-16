@@ -24,7 +24,7 @@ from .api.terminal import router as terminal_router
 from .api.vm_logic import router as vm_logic_router
 
 # Configuración central de la API. Los routers se registran abajo por contexto.
-app = FastAPI(title="Plataforma CTF del laboratorio", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Cociber CTF", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[get_settings().public_origin, "http://localhost:8080"],

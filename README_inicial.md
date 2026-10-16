@@ -1,4 +1,4 @@
-# Plataforma CTF del laboratorio
+# Cociber CTF
 
 Primera entrega funcional de una plataforma CTF interna para el laboratorio MITRE ATT&CK. Implementa FastAPI, React/TypeScript, PostgreSQL, Redis, Docker Compose, control de acceso por roles, retos iniciales, validación de flags, ranking en tiempo real y el ciclo de una conexión exclusiva a Guacamole.
 

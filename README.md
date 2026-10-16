@@ -1,8 +1,8 @@
-# Plataforma CTF de Entrenamiento en Ciberseguridad
+# Cociber CTF — Entrenamiento en Ciberseguridad
 
 ## Descripción
 
-Plataforma web de entrenamiento en ciberseguridad con experiencia estilo CTF
+Cociber CTF es una plataforma web de entrenamiento en ciberseguridad con experiencia estilo CTF
 (Capture The Flag), diseñada para un laboratorio académico. Permite que los
 estudiantes resuelvan retos asociados a escenarios de ataque, envíen flags y
 reciban una validación, puntuación y seguimiento de su progreso.

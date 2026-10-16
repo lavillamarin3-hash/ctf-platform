@@ -1,2 +1,2 @@
-"""Plataforma CTF del laboratorio."""
+"""Cociber CTF: plataforma de entrenamiento del laboratorio."""
 

@@ -120,7 +120,7 @@ export const DEMO_USERS: ManagedUser[] = [
     is_active: true, 
     full_name: "Administrador Demo", 
     user_function: "Administrador de laboratorio", 
-    organization: "Cyber Lab", 
+    organization: "Cociber CTF",
     demo: true, 
   }, 
   { 
@@ -131,7 +131,7 @@ export const DEMO_USERS: ManagedUser[] = [
     is_active: true, 
     full_name: "Instructor Demo", 
     user_function: "Instructor", 
-    organization: "Cyber Lab", 
+    organization: "Cociber CTF",
     demo: true, 
   }, 
   { 
@@ -153,7 +153,7 @@ export const DEMO_USERS: ManagedUser[] = [
     is_active: true, 
     full_name: "Red Team Demo", 
     user_function: "Red Team", 
-    organization: "Cyber Lab", 
+    organization: "Cociber CTF",
     demo: true, 
   }, 
   { 
@@ -164,7 +164,7 @@ export const DEMO_USERS: ManagedUser[] = [
     is_active: true, 
     full_name: "Blue Team Demo", 
     user_function: "Blue Team", 
-    organization: "Cyber Lab", 
+    organization: "Cociber CTF",
     demo: true, 
   }, 
   { 

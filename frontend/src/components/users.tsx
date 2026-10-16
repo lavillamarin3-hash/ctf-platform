@@ -141,7 +141,7 @@ export function UserForm({
             <small>
               {initial
                 ? "Actualiza los datos y permisos de la cuenta."
-                : "Registra un nuevo usuario en la plataforma CTF."}
+                : "Registra un nuevo usuario en Cociber CTF."}
             </small>
           </div>
 

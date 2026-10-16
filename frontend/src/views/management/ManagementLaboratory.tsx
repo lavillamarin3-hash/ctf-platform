@@ -51,7 +51,7 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
         <span className="eyebrow accent">INFRAESTRUCTURA</span>
         <h1>Laboratorios / VMs</h1>
         <p>
-          Administra los entornos del cyber range, sus máquinas virtuales, redes e IPs desde la plataforma CTF.
+          Administra los entornos del cyber range, sus máquinas virtuales, redes e IPs desde Cociber CTF.
         </p>
       </div>
 

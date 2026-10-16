@@ -264,7 +264,7 @@ export function useManagementController({
     if (!isAdmin) return;
     if (users.some((item) => item.username.toLowerCase() === target.username.toLowerCase())) {
       setView("users");
-      setMessage("Esta cuenta también existe en CTF. Gestiona su acceso desde Usuarios y roles; el historial de retos se conserva.");
+      setMessage("Esta cuenta también existe en Cociber CTF. Gestiona su acceso desde Usuarios y roles; el historial de retos se conserva.");
       return;
     }
     if (!window.confirm(`¿Eliminar ${target.username} de Guacamole?`)) return;
@@ -361,7 +361,7 @@ export function useManagementController({
         const normalized: ManagedUser[] = backendUsers.map((item) =>
           normalizeManagedUser(item, {
             full_name: item.username,
-            organization: "Cyber Lab",
+            organization: "Cociber CTF",
           })
         );
 
@@ -660,7 +660,7 @@ export function useManagementController({
         normalizeManagedUser(created, input),
         ...current.filter((item) => item.username.toLowerCase() !== created.username.toLowerCase()),
       ]);
-      setMessage("Usuario creado en CTF y sincronizado con Guacamole.");
+      setMessage("Usuario creado en Cociber CTF y sincronizado con Guacamole.");
       void loadGuacamole();
     } catch (err) {
       throw err;
@@ -669,7 +669,7 @@ export function useManagementController({
 
   const deleteManagedUser = async (target: ManagedUser) => {
     if (!isAdmin || target.id === user.id) return;
-    if (!window.confirm(`¿Eliminar el usuario ${target.username} del CTF y de Guacamole?`)) return;
+    if (!window.confirm(`¿Eliminar el usuario ${target.username} de Cociber CTF y de Guacamole?`)) return;
     if (target.demo) {
       setUsers((current) => current.filter((item) => item.id !== target.id));
       setMessage("Usuario de demostración eliminado de la vista.");
@@ -678,7 +678,7 @@ export function useManagementController({
     try {
       await api.deleteUser(target.id);
       setUsers((current) => current.filter((item) => item.id !== target.id));
-      setMessage("Usuario eliminado del CTF y de Guacamole.");
+      setMessage("Usuario eliminado de Cociber CTF y de Guacamole.");
       void loadGuacamole();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "No se pudo eliminar el usuario");

@@ -1,4 +1,4 @@
-# 🚀 Guía de Ejecución Local — CTF Platform
+# 🚀 Guía de Ejecución Local — Cociber CTF
 
 Guía paso a paso para clonar, configurar y ejecutar la plataforma CTF completamente en tu máquina local usando Docker Compose.
 

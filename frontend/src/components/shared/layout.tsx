@@ -74,7 +74,7 @@ export function Header({
       <header className="topbar">
         <div className="topbar-left">
           <button className="icon-btn mobile-only" onClick={onOpenMenu} aria-label="Abrir menú">☰</button>
-          <div className="topbar-title"><span>PLATAFORMA CTF</span><strong>Laboratorio de Ciberseguridad</strong></div>
+          <div className="topbar-title"><span>COCIBER CTF</span><strong>Laboratorio de Ciberseguridad</strong></div>
         </div>
         <div className="topbar-actions">
           <div className="notification-wrap">

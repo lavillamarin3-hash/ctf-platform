@@ -9,8 +9,6 @@ import { api, session, User } from "../api";
 import { Theme } from "../config";
 import { ThemeToggle, ErrorMessage, Icon } from "./common";
 import Logo from "../assets/images/Logo.png";
-import LogoDark from "../assets/images/LogoDark.jpg";
-import LogoWhite from "../assets/images/LogoWhite.jpg";
 
 export function Login({
   onLogin,
@@ -82,7 +80,7 @@ export function Login({
           {/* TOP — Mensaje de bienvenida */}
           <div className="login-visual-top">
             <h2 className="login-welcome-title">
-              Bienvenido a la plataforma CTF
+              Bienvenido a Cociber CTF
             </h2>
           </div>
 
@@ -90,7 +88,7 @@ export function Login({
           <div className="login-visual-center">
             <img
               src={Logo}
-              alt="COMCIBER CTF"
+              alt="Cociber CTF"
               className="login-logo-main"
             />
           </div>
@@ -126,7 +124,7 @@ export function Login({
           >
             <div className="login-form-head">
               <span className="eyebrow accent">
-                COMCIBER CTF
+                COCIBER CTF
               </span>
 
               <h2>

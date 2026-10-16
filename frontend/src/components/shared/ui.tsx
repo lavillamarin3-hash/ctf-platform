@@ -87,14 +87,14 @@ export function Logo() {
       <div className="brand-mark">
         <img
           src={LogoImg}
-          alt="COMCIBER CTF"
+          alt="Cociber CTF"
           style={{ width: "28px", height: "28px", objectFit: "contain", display: "block" }}
         />
       </div>
 
       <div>
-        <strong>COMCIBER CTF</strong>
-        <small>PLATFORM CTF</small>
+        <strong>COCIBER CTF</strong>
+        <small>LABORATORIO VIRTUAL</small>
       </div>
     </div>
   );

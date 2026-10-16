@@ -23,7 +23,7 @@ export function PlayerChallenges({ controller }: { controller: PlayerController 
     <section className="player-challenges">
       <div className="page-heading">
         <div>
-          <span className="eyebrow accent">TU ESPACIO CTF</span>
+          <span className="eyebrow accent">TU ESPACIO EN COCIBER CTF</span>
           <h1>Retos asignados</h1>
           <p>Selecciona un reto, investiga en su laboratorio y valida la flag en este mismo espacio.</p>
         </div>

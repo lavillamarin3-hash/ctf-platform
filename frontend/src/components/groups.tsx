@@ -85,7 +85,7 @@ export function GroupManagement({
       setGroups((current) => editingId ? current.map((item) => item.id === saved.id ? saved : item) : [saved, ...current]);
       setSelectedId(saved.id);
       resetForm();
-      onMessage(editingId ? "Grupo actualizado en CTF y sincronizado con Guacamole." : "Grupo creado en CTF y en Guacamole.");
+      onMessage(editingId ? "Grupo actualizado en Cociber CTF y sincronizado con Guacamole." : "Grupo creado en Cociber CTF y en Guacamole.");
     } catch (err) {
       onMessage(err instanceof Error ? err.message : "No se pudo guardar el grupo.");
     } finally {
@@ -96,7 +96,7 @@ export function GroupManagement({
   /** Elimina el grupo seleccionado después de confirmación. */
   const removeGroup = async () => {
     if (!selected || !isAdmin) return;
-    if (!window.confirm(`¿Eliminar ${selected.code} de CTF y Guacamole?`)) return;
+    if (!window.confirm(`¿Eliminar ${selected.code} de Cociber CTF y Guacamole?`)) return;
     setBusy(true);
     try {
       await api.deleteGroup(selected.id);
@@ -104,7 +104,7 @@ export function GroupManagement({
       setGroups(next);
       setSelectedId(next[0]?.id ?? null);
       resetForm();
-      onMessage("Grupo eliminado de CTF y Guacamole.");
+      onMessage("Grupo eliminado de Cociber CTF y Guacamole.");
     } catch (err) {
       onMessage(err instanceof Error ? err.message : "No se pudo eliminar el grupo.");
     } finally {
@@ -120,7 +120,7 @@ export function GroupManagement({
       const saved = await api.addGroupMember(selected.id, Number(memberId));
       setGroups((current) => current.map((item) => item.id === saved.id ? saved : item));
       setMemberId("");
-      onMessage("Estudiante agregado al grupo de CTF y al User Group de Guacamole.");
+      onMessage("Estudiante agregado al grupo de Cociber CTF y al User Group de Guacamole.");
     } catch (err) {
       onMessage(err instanceof Error ? err.message : "No se pudo agregar el estudiante.");
     } finally {
@@ -193,7 +193,7 @@ export function GroupManagement({
       </div>
 
       <div className="stats-grid">
-        <StatCard label="Grupos" value={groups.length} helper="CTF + Guacamole" icon="users" accent="purple" />
+        <StatCard label="Grupos" value={groups.length} helper="Cociber CTF + Guacamole" icon="users" accent="purple" />
         <StatCard label="Estudiantes" value={users.length} helper="Cuentas activas" icon="users" accent="green" />
         <StatCard label="Retos" value={challenges.length} helper="Catálogo disponible" icon="flag" accent="cyan" />
         <StatCard label="Grupo seleccionado" value={selected?.code ?? "—"} helper={selected ? `${selected.members.length} miembros · ${selected.challenges.length} retos` : "Selecciona un grupo"} icon="lab" accent="blue" />
