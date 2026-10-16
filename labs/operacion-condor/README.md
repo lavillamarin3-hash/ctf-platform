@@ -1,5 +1,7 @@
 # Operación Cóndor · Cociber CTF
 
+> El desarrollo y la guía actual se mantienen en el [repositorio independiente operacion-condor](https://github.com/lavillamarin3-hash/operacion-condor). Este directorio conserva la copia inicial del laboratorio.
+
 Un portal militar ficticio para resolver el reto **Fuerza bruta de credenciales web**. El estudiante descubre el servicio, encuentra el usuario, prueba un diccionario pequeño e ingresa al centro de mando. Publicar un comunicado confirma el logro y muestra la flag. La portada refleja el cambio.
 
 **Simulación académica:** la unidad, las personas, el escudo, las noticias y los datos son inventados. No representa un sistema real del Ejército ecuatoriano. El único objetivo permitido del ejercicio es la VM del laboratorio indicada por el instructor.
