@@ -1,5 +1,7 @@
 # Demostración con las máquinas existentes
 
+La aceptación registrada aquí corresponde al catálogo anterior. El lote de [investigación con Kali y LNX-VICT](RETOS_VM_LOGICA.md) incorpora WEB-02, WEB-06, FOR-05 y DFIR-01 como prácticas que requieren adquirir datos desde la víctima y refuerza ESC-07. Su guía detalla la publicación y las comprobaciones propias del nuevo lote.
+
 Kali: `192.168.146.134`. Linux víctima: `192.168.146.137`.
 
 ## Qué se demuestra

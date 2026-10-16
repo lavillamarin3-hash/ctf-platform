@@ -89,7 +89,7 @@ export function PlayerChallenges({ controller }: { controller: PlayerController 
         </div>
         <div className="challenge-detail-container" id="challenge-selected-detail" ref={detailRef}>
           <ChallengeDetail key={selected?.code ?? "empty"} challenge={selected} runs={runs}
-            onStart={start} onSubmit={submit} onClose={closeRun} />
+            onStart={start} onSubmit={submit} onClose={closeRun} onLearningComplete={controller.load} />
         </div>
       </div>
     </section>

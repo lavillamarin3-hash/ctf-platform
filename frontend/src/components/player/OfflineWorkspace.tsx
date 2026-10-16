@@ -37,13 +37,16 @@ export function OfflineWorkspace({ run, onClose, onSubmit }: {
     const anchor = document.createElement("a"); anchor.href = url; anchor.download = name; anchor.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
-  return <section className="glass-panel" style={{ padding: "1.25rem" }} aria-label="Ejercicio descargable">
-    <span className="eyebrow accent">PRÁCTICA LOCAL · CORRIDA {run.id}</span>
+  return <section className="glass-panel" style={{ padding: "1.25rem" }} aria-label="Ejercicio de análisis en Kali">
+    <span className="eyebrow accent">ANÁLISIS EN KALI · CORRIDA {run.id}</span>
     <h3>{bundle?.title ?? "Preparando archivos…"}</h3>
     <p>Disponible hasta {new Date(run.expires_at).toLocaleString()}. {expired && "La corrida caducó. Ciérrala para iniciar otra."}</p>
     {bundle && <>
       <p>{bundle.brief}</p>
-      <p>Descarga el ZIP, extrae los archivos y analiza la evidencia en tu equipo. El README incluye el objetivo y las herramientas sugeridas. Conserva los bytes originales para verificar los hashes.</p>
+      <p>Prepara las evidencias en Kali y utiliza su terminal o escritorio para analizarlas. El comando de transferencia solo coloca los archivos; debes investigar y construir tu respuesta.</p>
+      {!expired && <KaliPanel run={run} command={bundle.kali_command} />}
+      <details className="offline-download-options"><summary>Alternativa: archivos para trabajar localmente</summary>
+      <p>También puedes descargar este ejercicio de lógica. Conserva los bytes originales para verificar los hashes.</p>
       <button className="primary-action" disabled={busy || expired} onClick={() => void perform(async () => {
         const response = await fetch(`/api/v1/runs/${run.id}/offline/download`, { headers: { Authorization: `Bearer ${session.get() ?? ""}` } });
         if (!response.ok) { const body = await response.json().catch(() => ({})); throw new Error(body.detail || "No se pudo descargar el ZIP."); }
@@ -55,6 +58,7 @@ export function OfflineWorkspace({ run, onClose, onSubmit }: {
           <small style={{ display: "block" }}>{bundle.sha256[name]}</small>
         </div>)}
       </details>
+      </details>
       <form onSubmit={event => { event.preventDefault(); void perform(async () => {
         setFlag("");
         const result = await request<{flag: string | null; message: string}>(`/runs/${run.id}/offline/answer`, { method: "POST", body: JSON.stringify({ value: answer }) });
@@ -65,7 +69,6 @@ export function OfflineWorkspace({ run, onClose, onSubmit }: {
         </label>
         <button className="primary-action" disabled={busy || expired}>Validar respuesta</button>
       </form>
-      {!expired && <KaliPanel run={run} command={bundle.kali_command} />}
       {flag && <div className="instruction-box"><p>El análisis es correcto. Registra el resultado para sumar los puntos.</p>
         <button className="primary-action" disabled={busy || expired} onClick={() => void perform(async () => {
           const result = await onSubmit(run.challenge_code, flag); setMessage(result.message);

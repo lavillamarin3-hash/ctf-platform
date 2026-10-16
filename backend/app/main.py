@@ -21,6 +21,7 @@ from .api.challenges import router as challenges_router
 from .api.runs import router as runs_router
 from .api.reports import router as reports_router
 from .api.terminal import router as terminal_router
+from .api.vm_logic import router as vm_logic_router
 
 # Configuración central de la API. Los routers se registran abajo por contexto.
 app = FastAPI(title="Plataforma CTF del laboratorio", version="0.1.0", lifespan=lifespan)
@@ -42,6 +43,7 @@ app.include_router(challenges_router)
 app.include_router(runs_router)
 app.include_router(reports_router)
 app.include_router(terminal_router)
+app.include_router(vm_logic_router)
 
 
 @app.exception_handler(IntegrityError)

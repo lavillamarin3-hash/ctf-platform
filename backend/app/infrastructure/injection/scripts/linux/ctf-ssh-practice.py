@@ -4,6 +4,7 @@ import hashlib
 import hmac
 import json
 import logging
+import math
 from pathlib import Path
 import re
 import socket
@@ -113,6 +114,22 @@ def handle(client, key, directory):
         transport.close(); client.close()
 
 
+def has_active_records(directory, *, at=None):
+    """No apagar por inactividad mientras una práctica conserve su plazo real."""
+    at = time.time() if at is None else at
+    for path in Path(directory).glob('ctf*.json'):
+        if not re.fullmatch(r'ctf[1-9][0-9]{0,11}\.json', path.name):
+            continue
+        try:
+            expires = json.loads(path.read_text())['expires_at']
+            if (isinstance(expires, (int, float)) and not isinstance(expires, bool)
+                    and math.isfinite(expires) and expires > at):
+                return True
+        except (OSError, ValueError, KeyError, TypeError):
+            continue
+    return False
+
+
 def serve(directory, bind='192.168.146.137', port=2222, allowed=('192.168.146.134',)):
     directory = Path(directory)
     key_path = directory / 'host-key'
@@ -125,7 +142,7 @@ def serve(directory, bind='192.168.146.137', port=2222, allowed=('192.168.146.13
         listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         listener.bind((bind,port)); listener.listen(8); listener.settimeout(30)
         last = time.time()
-        while time.time()-last < 3600:
+        while time.time()-last < 3600 or has_active_records(directory):
             try: client, address = listener.accept()
             except socket.timeout: continue
             if address[0] not in allowed or not gate.acquire(blocking=False):

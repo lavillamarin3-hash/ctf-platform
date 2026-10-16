@@ -8,7 +8,7 @@ from sqlalchemy import select
 from ..models import VMAsset, Laboratory
 from .challenge_runtime import _unique_esc_kali_connections, ESC_ATTACKER_IP, ESC_ATTACKER_NAME
 
-STRATEGIES = ('offline_case','dfir_case','ssh_password_lab','http_password_lab','http_files_lab')
+STRATEGIES = ('offline_case','dfir_case','ssh_password_lab','http_password_lab','http_files_lab','vm_logic_lab')
 
 
 async def context(app, session, user):

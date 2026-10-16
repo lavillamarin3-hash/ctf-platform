@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 import re
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class LoginRequest(BaseModel):
@@ -138,6 +138,38 @@ class FlagView(BaseModel):
     template: str | None = None
 
 
+class LearningHintPolicy(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+    content: str = Field(min_length=1, max_length=4000)
+    penalty_percent: int = Field(default=10, ge=0, le=100)
+
+    @field_validator('title', 'content')
+    @classmethod
+    def trim_required_text(cls, value):
+        value = value.strip()
+        if not value:
+            raise ValueError('El texto de la pista no puede estar vacío.')
+        return value
+
+
+class LearningPolicy(BaseModel):
+    duration_minutes: int = Field(ge=1, le=1440)
+    expired_points_percent: int = Field(default=25, ge=0, le=100)
+    hints: list[LearningHintPolicy] = Field(min_length=1, max_length=3)
+    solution_text: str | None = Field(default=None, max_length=12000)
+
+    @field_validator('solution_text')
+    @classmethod
+    def trim_optional_solution(cls, value):
+        return value.strip() or None if value is not None else None
+
+    @model_validator(mode='after')
+    def validate_total_penalty(self):
+        if sum(hint.penalty_percent for hint in self.hints) > 100:
+            raise ValueError('La suma de descuentos de las pistas no puede superar el 100%.')
+        return self
+
+
 class ChallengeView(BaseModel):
     id: int
     code: str
@@ -154,6 +186,7 @@ class ChallengeView(BaseModel):
     flag_count: int = 0
     completed: bool = False
     flags: list[FlagView] | None = None
+    learning_policy: LearningPolicy | None = None
 
 
 class ChallengeCreate(BaseModel):
@@ -168,6 +201,7 @@ class ChallengeCreate(BaseModel):
     asset_references: list[str] = Field(min_length=1, max_length=8)
     points: int = Field(ge=1, le=10000)
     is_published: bool = True
+    learning_policy: LearningPolicy | None = None
 
     @field_validator("category")
     @classmethod

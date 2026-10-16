@@ -8,6 +8,14 @@ export type Flag = {
   template?: string | null;
 };
 
+/** Configuración privada, disponible únicamente para administración e instructores. */
+export type ChallengeLearningPolicy = {
+  duration_minutes: number;
+  expired_points_percent: number;
+  hints: Array<{ title: string; content: string; penalty_percent: number }>;
+  solution_text?: string | null;
+};
+
 /** Reto visible en la plataforma CTF. */
 export type Challenge = {
   id: number;
@@ -25,4 +33,5 @@ export type Challenge = {
   flag_count: number;
   completed: boolean;
   flags?: Flag[];
+  learning_policy?: ChallengeLearningPolicy | null;
 };

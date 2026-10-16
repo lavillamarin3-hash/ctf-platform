@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Index, Integer, JSON, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
@@ -51,6 +51,7 @@ class Challenge(Base):
     mitre_technique: Mapped[str] = mapped_column(String(64), index=True)
     asset_references: Mapped[list[str]] = mapped_column(JSON, default=list)
     points: Mapped[int] = mapped_column(Integer)
+    learning_policy: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     is_published: Mapped[bool] = mapped_column(Boolean, default=True)
     created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -150,6 +151,41 @@ class ChallengeRun(Base):
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
     closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     assignment: Mapped[Optional["RemoteAccessAssignment"]] = relationship(back_populates="run", cascade="all, delete-orphan", uselist=False)
+
+
+class ChallengeLearningProgress(Base):
+    """Política de ayudas estable entre corridas; no modifica puntos históricos."""
+    __tablename__ = "challenge_learning_progress"
+    __table_args__ = (
+        UniqueConstraint("user_id", "challenge_id", name="uq_learning_user_challenge"),
+        CheckConstraint("base_points >= 0", name="ck_learning_base_points"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    challenge_id: Mapped[int] = mapped_column(ForeignKey("challenges.id", ondelete="CASCADE"), index=True)
+    first_run_id: Mapped[int | None] = mapped_column(ForeignKey("challenge_runs.id", ondelete="SET NULL"), nullable=True)
+    policy_version: Mapped[int] = mapped_column(Integer, default=1)
+    policy_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    base_points: Mapped[int] = mapped_column(Integer)
+    deadline: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    solution_revealed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    is_assisted: Mapped[bool] = mapped_column(Boolean, default=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class ChallengeHintReveal(Base):
+    __tablename__ = "challenge_hint_reveals"
+    __table_args__ = (
+        UniqueConstraint("progress_id", "hint_id", name="uq_learning_hint_reveal"),
+        CheckConstraint("hint_id >= 1 AND hint_id <= 3", name="ck_learning_hint_id"),
+        CheckConstraint("penalty_percent >= 0 AND penalty_percent <= 100", name="ck_learning_hint_penalty"),
+    )
+    id: Mapped[int] = mapped_column(primary_key=True)
+    progress_id: Mapped[int] = mapped_column(ForeignKey("challenge_learning_progress.id", ondelete="CASCADE"), index=True)
+    run_id: Mapped[int | None] = mapped_column(ForeignKey("challenge_runs.id", ondelete="SET NULL"), nullable=True, index=True)
+    hint_id: Mapped[int] = mapped_column(Integer)
+    penalty_percent: Mapped[int] = mapped_column(Integer, default=10)
+    revealed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
 class RemoteAccessAssignment(Base):

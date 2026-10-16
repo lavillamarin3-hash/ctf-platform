@@ -24,6 +24,7 @@
 @import "./styles/16-ctf-ux-fixes.css";
 @import "./styles/17-final-laboratory-workspace.css";
 @import "./styles/18-notifications.css";
+@import "./styles/19-learning.css";
 
 /* Tailwind se procesa después de los módulos base. */
 @tailwind base;

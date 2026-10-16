@@ -111,7 +111,12 @@ async def update_challenge(code: str, payload: ChallengeCreate, request: Request
             if (challenge.code == "ESC-01-RECON" or payload.code == "ESC-01-RECON")
             and (code_changed or publication_changed or references_changed) else []
         )
-        for field, value in payload.model_dump().items():
+        changes = payload.model_dump()
+        # Los clientes anteriores no conocen este campo: omitirlo no borra
+        # una política ya configurada. Un null explícito restablece defaults.
+        if 'learning_policy' not in payload.model_fields_set:
+            changes.pop('learning_policy', None)
+        for field, value in changes.items():
             setattr(challenge, field, value)
         await write_audit(session, user.id, "challenge.update", "challenge", str(challenge.id), {"code": code})
         await session.commit()

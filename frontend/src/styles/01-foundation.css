@@ -21,14 +21,14 @@ button:focus-visible, input:focus-visible { outline: none; box-shadow: 0 0 0 3px
   .login-shell { min-height: 100vh; display: block; padding: 0; margin: 0; position: relative; overflow: hidden; }
   .login-grid { display: none; }
   .login-card { position: relative; z-index: 1; width: 100vw; min-height: 100vh; display: grid; grid-template-columns: 1fr 1fr; border: none; border-radius: 0; background: transparent; box-shadow: none; }
-  .login-visual { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 3rem 2.5rem; background: #27148d; }
+  .login-visual { position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: clamp(1.25rem, 4vh, 2rem); padding: 3rem 2.5rem; background: #27148d; }
   .login-visual::after { content: ''; position: absolute; right: 0; top: 8%; bottom: 8%; width: 1px; background: rgba(107,127,247,.4); box-shadow: 0 0 10px rgba(123,108,246,.3); pointer-events: none; }
-  .login-visual-top { position: relative; z-index: 5; text-align: center; width: 100%; padding-top: 0.5rem; }
+  .login-visual-top { position: relative; z-index: 5; text-align: center; width: 100%; }
   .login-welcome-title { margin: 0; font-size: clamp(18px, 2.2vw, 26px); font-weight: 700; letter-spacing: -0.02em; line-height: 1.35; color: #c8d4f7; }
-  .login-visual-center { position: relative; z-index: 5; display: flex; align-items: center; justify-content: center; flex: 1; padding: 1.5rem 0; }
+  .login-visual-center { position: relative; z-index: 5; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; width: 100%; }
   .login-logo-main { max-width: min(300px, 78%); width: 100%; height: auto; object-fit: contain; filter: drop-shadow(0 0 28px rgba(107,127,247,.4)); }
-  .login-visual-bottom { position: relative; z-index: 5; text-align: center; width: 100%; padding-bottom: 0.5rem; }
-  .login-tagline { text-align: center; margin: 0 auto; font-size: clamp(13px, 1.3vw, 15px); line-height: 2.0; color: rgba(180,196,240,.75); max-width: 400px; }
+  .login-visual-bottom { position: relative; z-index: 5; text-align: center; width: 100%; }
+  .login-visual .login-tagline { text-align: center; margin: 0 auto; font-size: clamp(13px, 1.3vw, 15px); line-height: 2.0; color: rgba(180,196,240,.75); max-width: 400px; }
   .login-deco { position: absolute; pointer-events: none; z-index: 1; }
   .deco-sq-1 { top: 18%; left: 8%; width: 44px; height: 44px; border: 3px solid rgba(107,127,247,.3); border-radius: 8px; transform: rotate(22deg); }
   .deco-sq-2 { bottom: 30%; right: 10%; width: 72px; height: 72px; border: 3.5px solid rgba(107,127,247,.18); border-radius: 14px; transform: rotate(-14deg); }
@@ -60,6 +60,7 @@ button:focus-visible, input:focus-visible { outline: none; box-shadow: 0 0 0 3px
   .glow-two { width: 260px; height: 260px; left: -160px; top: 180px; background: rgba(41,131,255,.08); filter: blur(50px); }
   .login-form { position: relative; z-index: 1; width: 100%; max-width: 440px; padding: 0 3rem; display: flex; flex-direction: column; justify-content: center; background: transparent; }
 
+  .login-form-head { text-align: center; }
   .login-form-head h2 { margin: 11px 0 9px; font-size: 30px; letter-spacing: -.03em; color: #e2ecff; }
   .login-form-head p { margin: 0 0 24px; color: #58718a; font-size: 13px; line-height: 1.5; }
   .input-label { display: block; margin-top: 18px; color: #a8bdd8; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; }

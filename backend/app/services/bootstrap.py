@@ -179,6 +179,21 @@ async def check_rate_limit(redis_client, key: str, maximum: int = 8, window_seco
 
 
 def challenge_view(challenge: Challenge, completed: bool = False, include_flags: bool = False) -> ChallengeView:
+    from . import learning
+    instructions = challenge.instructions
+    # Compatibilidad de lectura: corregir únicamente frases del catálogo
+    # automático conocido, sin actualizar la fila ni otros textos del instructor.
+    if challenge.scenario == 'OFFLINE-V1':
+        from ..domain.challenges.offline import CATALOG
+        if challenge.code in CATALOG:
+            instructions = instructions.replace(
+                'Dispones de cuatro horas; otra corrida genera nuevos datos.',
+                'Consulta el contador del reto para conocer el plazo configurado. '
+                'Otra corrida genera nuevos datos y conserva el plazo y las ayudas originales.')
+    elif challenge.code == 'ESC-06-WEBAUTH' and challenge.scenario == 'HTTP-PASSWORD-LAB':
+        instructions = instructions.replace(
+            'la cuenta caduca en una hora.',
+            'la cuenta caduca según el plazo configurado que muestra el contador del reto.')
     flags = None
     if include_flags:
         flags = []
@@ -191,7 +206,7 @@ def challenge_view(challenge: Challenge, completed: bool = False, include_flags:
         code=challenge.code,
         name=challenge.name,
         description=challenge.description,
-        instructions=challenge.instructions,
+        instructions=instructions,
         difficulty=challenge.difficulty,
         category=challenge.category,
         scenario=challenge.scenario,
@@ -202,6 +217,7 @@ def challenge_view(challenge: Challenge, completed: bool = False, include_flags:
         flag_count=len(challenge.flags),
         completed=completed,
         flags=flags,
+        learning_policy=learning.effective_policy(challenge) if include_flags else None,
     )
 
 

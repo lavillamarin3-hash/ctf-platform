@@ -5,6 +5,7 @@ Ejecutar en el contenedor API una vez desplegado el código HTTP nuevo.
 """
 import asyncio
 import base64
+import hashlib
 import json
 import re
 import shlex
@@ -18,7 +19,7 @@ from fastapi import HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
-from app.api import runs, terminal
+from app.api import runs, terminal, vm_logic as vm_logic_api
 from app.db import make_session_factory
 from app.guacamole import make_guacamole_admin
 from app.models import Challenge, ChallengeFlag, ChallengeGroupAssignment, GroupMembership, StudentGroup, User
@@ -222,7 +223,7 @@ async def main():
                 expected_flag = http_practice.flag_for(identity)
                 assert expected_flag not in json.dumps(info)
                 index = http_get(client, base_url)
-                assert index['status'] == 404 and expected_flag not in index['body']
+                assert index['status'] == 200 and expected_flag not in index['body']
                 robots_url = urljoin(base_url, 'robots.txt')
                 robots = http_get(client, robots_url)
                 assert robots['status'] == 200 and expected_flag not in robots['body']
@@ -231,17 +232,31 @@ async def main():
                 backup_url = urljoin(base_url, candidates[0])
                 backup = http_get(client, backup_url)
                 assert backup['status'] == 200 and expected_flag not in backup['body']
-                filenames = re.findall(r'href=[\"\']([^\"\']+\.txt)[\"\']', backup['body'], re.IGNORECASE)
-                assert filenames, 'El directorio descubierto no anuncia el archivo de evidencia'
-                evidence_url = urljoin(backup_url.rstrip('/') + '/', filenames[0])
-                evidence = http_get(client, evidence_url)
-                assert evidence['status'] == 200
-                await award_once(request, user, FILES_CODE, evidence['body'])
+                filenames = re.findall(r'href=[\"\'](backup-[^\"\']+\.json)[\"\']', backup['body'], re.IGNORECASE)
+                assert len(filenames) == 3, 'El directorio debe ofrecer respaldos y señuelos'
+                manifest = json.loads(http_get(client, urljoin(backup_url, 'manifest.json'))['body'])
+                answers = []
+                for filename in filenames:
+                    evidence_url = urljoin(backup_url, filename)
+                    evidence = http_get(client, evidence_url)
+                    assert evidence['status'] == 200 and expected_flag not in evidence['body']
+                    document = json.loads(evidence['body'])
+                    if (document['release'] == manifest['current_release']
+                            and hashlib.sha256(evidence['body'].encode()).hexdigest() == manifest['sha256']):
+                        encoded = bytes.fromhex(''.join(fragment['hex'] for fragment in sorted(document['fragments'], key=lambda row: row['seq'])))
+                        answers.append({'backup': filename, 'release': document['release'],
+                                        'evidence': bytes(value ^ manifest['key'] for value in encoded).decode()})
+                assert len(answers) == 1
+                rejected = json.loads((await vm_logic_api.answer(run.id, {**answers[0], 'evidence': 'wrong'}, request, user)).body)
+                assert not rejected['correct'] and rejected['flag'] is None
+                validated = json.loads((await vm_logic_api.answer(run.id, answers[0], request, user)).body)
+                assert validated['correct'] and validated['flag'] == expected_flag
+                await award_once(request, user, FILES_CODE, validated['flag'])
                 await runs.close_run(run.id, request, user)
                 await assert_http_error(runs.http_practice_info(run.id, request, user), 409)
                 assert http_get(client, evidence_url)['status'] in (404, 410)
                 assert http_get(client, robots_url)['status'] in (404, 410)
-                print('PASS archivos: robots, directorio, evidencia, flag, puntos únicos y revocación', flush=True)
+                print('PASS archivos: descubrimiento, señuelos, integridad, reconstrucción, puntos únicos y revocación', flush=True)
             finally:
                 await transaction.rollback()
     finally:

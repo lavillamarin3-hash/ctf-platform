@@ -131,6 +131,18 @@ class EscPermissionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(_guacamole_access_references(lab), ["LAB-LNXVICT"])
         self.assertEqual(_guacamole_access_references(self.challenge), ["LAB-KALI"])
 
+    async def test_vm_logic_group_sync_keeps_victim_out_of_remote_desktops(self):
+        self.challenge.code = 'WEB-02'
+        self.challenge.scenario = 'VM-LOGIC-AUTH'
+        await _sync_player_guacamole_permissions(
+            self.request(Session(self.challenge, self.vms, self.labs)), 7)
+        self.assertEqual(self.guac.patch_user_permissions.await_args.kwargs['connection_permissions'],
+                         {'kali-ssh': ['READ']})
+        await _sync_guacamole_group_permissions(
+            self.request(Session(self.challenge, self.vms, self.labs)), 3)
+        self.assertEqual(self.guac.patch_user_group_permissions.await_args.kwargs['connection_permissions'],
+                         {'kali-ssh': ['READ']})
+
 
 class EscAssignmentSyncTests(unittest.IsolatedAsyncioTestCase):
     async def test_non_esc_assignment_keeps_group_only_sync(self):

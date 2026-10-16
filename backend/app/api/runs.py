@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from datetime import timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select
@@ -11,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from ..core import get_current_user, get_settings, now_utc, require_roles, submission_fingerprint, verify_password
 from ..models import (
-    Challenge, ChallengeCompletion, ChallengeGroupAssignment, ChallengeInstance, ChallengeRun, ChallengeRunFlag,
+    Challenge, ChallengeCompletion, ChallengeGroupAssignment, ChallengeHintReveal, ChallengeInstance, ChallengeRun, ChallengeRunFlag,
     GroupMembership, Laboratory, RemoteAccessAssignment, StudentGroup, Submission, User, VMAsset,
 )
 
@@ -28,7 +27,7 @@ from ..services.lab_lock import (
 )
 from ..services.runtime_flags import effective_mode_template, is_effectively_dynamic
 from ..domain.instances.states import InstanceState
-from ..services import dfir_runtime, offline_runtime, ssh_practice, http_practice, kali_workspace
+from ..services import dfir_runtime, offline_runtime, ssh_practice, http_practice, kali_workspace, learning, vm_logic
 from ..domain.challenges import offline
 from ..domain.challenges.dfir import CODE as DFIR_CODE, matches_answer
 from pydantic import BaseModel, Field
@@ -168,6 +167,9 @@ async def _cleanup_run(request: Request, session, run: ChallengeRun, challenge: 
         elif run.workspace_strategy in ('http_password_lab', 'http_files_lab'):
             try: await http_practice.cleanup(run)
             except Exception as exc: raise HTTPException(503,'No se pudo invalidar la práctica web. Reintenta el cierre; el acceso también caduca automáticamente.') from exc
+        elif run.workspace_strategy == vm_logic.STRATEGY:
+            try: await vm_logic.cleanup(run)
+            except Exception as exc: raise HTTPException(503,'No se pudo invalidar el ejercicio VM. Reintenta el cierre; el acceso también caduca automáticamente.') from exc
         terminal_sessions = getattr(request.app.state, 'terminal_sessions', None)
         if terminal_sessions is not None: await terminal_sessions.close_run(run.id)
         run.status = status
@@ -354,9 +356,42 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             await _cleanup_run(request, session, active_run, challenge, status="expired")
 
         now = now_utc()
+        planned_expires_at, planned_policy = await learning.plan_run(session, challenge, user, at=now)
+
+        if challenge.code in vm_logic.CODES and challenge.scenario == vm_logic.EXPECTED_SCENARIOS[challenge.code]:
+            if set(challenge.asset_references or []) != {'LAB-KALI', 'LAB-LNXVICT'}:
+                raise HTTPException(409, 'Este ejercicio requiere Kali y LNX-VICT como activos.')
+            await kali_workspace.context(request.app, session, user)
+            flags = [flag for flag in challenge.flags if flag.is_active]
+            if len(flags) != 1 or flags[0].mode != 'dynamic' or not flags[0].template:
+                raise HTTPException(409, 'El ejercicio VM requiere una flag dinámica activa.')
+            run = ChallengeRun(user_id=user.id, challenge_id=challenge.id, status='active',
+                               expires_at=planned_expires_at, workspace_strategy=vm_logic.STRATEGY)
+            session.add(run)
+            await session.flush()
+            prepared_run_id = run.id
+            from ..core import hash_password
+            value = vm_logic.flag_for(run)
+            session.add(ChallengeRunFlag(run_id=run.id, flag_id=flags[0].id,
+                                        flag_hash=hash_password(value), fingerprint=submission_fingerprint(value)))
+            try:
+                await vm_logic.prepare(run, challenge.code)
+                await learning.lock_progress(session, run, challenge, create=True, policy=planned_policy)
+                await write_audit(session, user.id, 'challenge_run.start', 'challenge_run', str(run.id),
+                                  {'challenge': challenge.code, 'workspace_strategy': vm_logic.STRATEGY})
+                await session.commit()
+            except Exception as exc:
+                await session.rollback()
+                try:
+                    from types import SimpleNamespace
+                    await vm_logic.cleanup(SimpleNamespace(id=prepared_run_id))
+                except Exception:
+                    pass
+                raise HTTPException(503, 'No se pudo preparar el ejercicio en LNX-VICT. Comprueba las VMs.') from exc
+            return _view_from_run(run, challenge, None)
 
         if challenge.code == DFIR_CODE:
-            run = await dfir_runtime.start(session, challenge, user)
+            run = await dfir_runtime.start(session, challenge, user, expires_at=planned_expires_at, policy=planned_policy)
             return _view_from_run(run, challenge, None)
 
         if challenge.code == ssh_practice.CODE and challenge.scenario == 'SSH-PASSWORD-LAB':
@@ -364,7 +399,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             flags = [flag for flag in challenge.flags if flag.is_active]
             if len(flags)!=1 or flags[0].mode!='dynamic' or not flags[0].template:
                 raise HTTPException(409,'La práctica SSH requiere una flag dinámica activa.')
-            run = ChallengeRun(user_id=user.id,challenge_id=challenge.id,status='active',expires_at=now_utc()+timedelta(hours=1),workspace_strategy='ssh_password_lab')
+            run = ChallengeRun(user_id=user.id,challenge_id=challenge.id,status='active',expires_at=planned_expires_at,workspace_strategy='ssh_password_lab')
             session.add(run); await session.flush()
             prepared_run_id = run.id
             from ..core import hash_password
@@ -372,6 +407,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             session.add(ChallengeRunFlag(run_id=run.id,flag_id=flags[0].id,flag_hash=hash_password(value),fingerprint=submission_fingerprint(value)))
             try:
                 await ssh_practice.prepare(run)
+                await learning.lock_progress(session, run, challenge, create=True, policy=planned_policy)
                 await write_audit(session,user.id,'challenge_run.start','challenge_run',str(run.id),{'challenge':challenge.code,'workspace_strategy':run.workspace_strategy})
                 await session.commit()
             except Exception as exc:
@@ -392,7 +428,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             if len(flags) != 1 or flags[0].mode != 'dynamic' or not flags[0].template:
                 raise HTTPException(409, 'La práctica web requiere una flag dinámica activa.')
             run = ChallengeRun(user_id=user.id, challenge_id=challenge.id, status='active',
-                               expires_at=now_utc() + timedelta(hours=1), workspace_strategy=strategy)
+                               expires_at=planned_expires_at, workspace_strategy=strategy)
             session.add(run)
             await session.flush()
             prepared_run_id = run.id
@@ -402,6 +438,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
                                         flag_hash=hash_password(value), fingerprint=submission_fingerprint(value)))
             try:
                 await http_practice.prepare(run)
+                await learning.lock_progress(session, run, challenge, create=True, policy=planned_policy)
                 await write_audit(session, user.id, 'challenge_run.start', 'challenge_run', str(run.id),
                                   {'challenge': challenge.code, 'workspace_strategy': strategy, 'run_id': run.id})
                 await session.commit()
@@ -416,7 +453,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             return _view_from_run(run, challenge, None)
 
         if "OFFLINE-CASE" in (challenge.asset_references or []):
-            run = await offline_runtime.start(session, challenge, user)
+            run = await offline_runtime.start(session, challenge, user, expires_at=planned_expires_at, policy=planned_policy)
             return _view_from_run(run, challenge, None)
 
         dynamic_flags = [flag for flag in challenge.flags if is_effectively_dynamic(challenge.code, flag)]
@@ -471,7 +508,8 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
         # Esto evita que Guacamole abra otra conexión previamente asignada al usuario.
         guacamole_access_preexisting = False
 
-        expires_at = now + timedelta(seconds=settings.flag_injector_lock_ttl_seconds)
+        expires_at = planned_expires_at
+        lease_ttl_seconds = max(1, int((expires_at - now_utc()).total_seconds()))
         run = ChallengeRun(
             user_id=user.id,
             challenge_id=challenge.id,
@@ -501,7 +539,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
                     request.app.state.redis,
                     target_vm.ip_address,
                     run.id,
-                    ttl_seconds=settings.flag_injector_lock_ttl_seconds,
+                    ttl_seconds=lease_ttl_seconds,
                 )
 
             stage = "remote_access"
@@ -617,6 +655,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
                 await injector.prepare(session, challenge, run, username, target_vm)
 
             stage = "database_commit"
+            await learning.lock_progress(session, run, challenge, create=True, policy=planned_policy)
             await write_audit(session, user.id, "challenge_run.start", "challenge_run", str(run.id), {
                 "challenge": code,
                 "remote_reference": external_reference,
@@ -778,6 +817,7 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
         run = await session.scalar(select(ChallengeRun).where(ChallengeRun.user_id == user.id, ChallengeRun.challenge_id == challenge.id, ChallengeRun.status == "active").order_by(ChallengeRun.id.desc()).with_for_update())
         if run is None or run.expires_at < now_utc():
             raise HTTPException(status_code=409, detail="Debes iniciar el reto antes de enviar la flag")
+        effective_points = await learning.awarded_value(session, run, challenge)
 
         matched = None
         for flag in flags:
@@ -798,7 +838,7 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
             is_correct=matched is not None,
         )
         session.add(submission)
-        awarded_points, complete = 0, False
+        awarded_points, complete, newly_completed = 0, False, False
         if matched:
             correct_ids = set((await session.scalars(select(Submission.flag_id).where(Submission.user_id == user.id, Submission.challenge_id == challenge.id, Submission.is_correct.is_(True)))).all())
             correct_ids.add(matched.id)
@@ -806,25 +846,19 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
                 completion = await session.scalar(select(ChallengeCompletion).where(ChallengeCompletion.user_id == user.id, ChallengeCompletion.challenge_id == challenge.id))
                 complete = True
                 if completion is None:
-                    completion = ChallengeCompletion(user_id=user.id, challenge_id=challenge.id, awarded_points=challenge.points)
+                    completion = ChallengeCompletion(user_id=user.id, challenge_id=challenge.id, awarded_points=effective_points)
                     session.add(completion)
-                    awarded_points, complete = challenge.points, True
-                    await write_audit(session, user.id, "challenge.complete", "challenge", str(challenge.id), {"code": code, "points": challenge.points})
+                    awarded_points, complete, newly_completed = effective_points, True, True
+                    await write_audit(session, user.id, "challenge.complete", "challenge", str(challenge.id), {"code": code, "points": effective_points})
         await session.commit()
 
     if complete:
-        if awarded_points:
-            rows = await ranking_rows(request.app.state.session_factory)
-            payload_event = {"type": "ranking.updated", "rows": rows}
-            await request.app.state.sockets.broadcast(payload_event)
-            try:
-                await request.app.state.redis.publish("ctf:ranking", __import__("json").dumps(payload_event))
-            except Exception:
-                pass
+        if newly_completed:
+            await _broadcast_ranking(request)
         message = ("Flag correcta. Reto completado; cierra la sesión del laboratorio para limpiar la VM."
-                   if awarded_points else "Flag correcta. Este reto ya estaba completado; puedes cerrar el laboratorio para limpiar la VM.")
+                   if newly_completed else "Flag correcta. Este reto ya estaba completado; puedes cerrar el laboratorio para limpiar la VM.")
         if run.workspace_strategy in kali_workspace.STRATEGIES:
-            message = "Flag correcta. Puntos registrados; puedes cerrar el ejercicio." if awarded_points else "Flag correcta. Este reto ya estaba completado; no se duplican los puntos."
+            message = "Flag correcta. Puntos registrados; puedes cerrar el ejercicio." if newly_completed else "Flag correcta. Este reto ya estaba completado; no se duplican los puntos."
         return SubmissionResponse(correct=True, challenge_completed=True, awarded_points=awarded_points, message=message)
     if matched:
         return SubmissionResponse(correct=True, challenge_completed=False, awarded_points=0, message="Flag correcta. Continúa con las flags restantes.")
@@ -842,7 +876,9 @@ async def ssh_practice_info(run_id: int, request: Request, user=Depends(require_
         if run.workspace_strategy!='ssh_password_lab' or run.status!='active' or run.expires_at<=now_utc():
             raise HTTPException(409,'Inicia una práctica vigente')
         from fastapi.responses import JSONResponse
-        return JSONResponse(ssh_practice.instructions(run),headers={'Cache-Control':'no-store'})
+        info = ssh_practice.instructions(run)
+        info['commands'] = []
+        return JSONResponse(info,headers={'Cache-Control':'no-store'})
 
 
 @router.get('/api/v1/runs/{run_id}/http-practice')
@@ -965,3 +1001,112 @@ async def answer_dfir_case(run_id: int, payload: DfirAnswer, request: Request, u
         return JSONResponse({"correct": correct, "flag": dfir_runtime.flag_for(run) if correct else None,
                              "message": "Correlación correcta. Envía la flag para registrar tus puntos." if correct else "La correlación no coincide. Revisa las fuentes y los relojes."},
                             headers={"Cache-Control": "no-store"})
+
+
+async def _broadcast_ranking(request):
+    rows = await ranking_rows(request.app.state.session_factory)
+    payload_event = {"type": "ranking.updated", "rows": rows}
+    await request.app.state.sockets.broadcast(payload_event)
+    try:
+        await request.app.state.redis.publish('ctf:ranking', __import__('json').dumps(payload_event))
+    except Exception:
+        pass
+
+
+async def _learning_context(session, run_id, user):
+    run = await session.scalar(select(ChallengeRun).where(
+        ChallengeRun.id == run_id, ChallengeRun.user_id == user.id,
+    ).with_for_update())
+    if run is None:
+        raise HTTPException(404, 'Aprendizaje no disponible', headers={'Cache-Control': 'no-store'})
+    challenge = await session.get(Challenge, run.challenge_id)
+    if (challenge is None or not challenge.is_published
+            or not await _assigned(session, challenge.id, user.id)):
+        raise HTTPException(404, 'Aprendizaje no disponible', headers={'Cache-Control': 'no-store'})
+    progress = await learning.lock_progress(session, run, challenge, required=True)
+    return run, challenge, progress
+
+
+def _learning_response(payload):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(payload, headers={'Cache-Control': 'no-store'})
+
+
+@router.get('/api/v1/runs/{run_id}/learning')
+async def learning_info(run_id: int, request: Request, user=Depends(require_roles('player'))):
+    async with request.app.state.session_factory() as session:
+        run, challenge, progress = await _learning_context(session, run_id, user)
+        return _learning_response(await learning.metadata(session, run, challenge, progress))
+
+
+@router.post('/api/v1/runs/{run_id}/learning/hints/{hint_id}')
+async def learning_hint(run_id: int, hint_id: int, request: Request, user=Depends(require_roles('player'))):
+    if hint_id not in (1, 2, 3):
+        raise HTTPException(404, 'Pista no disponible', headers={'Cache-Control': 'no-store'})
+    await check_rate_limit(request.app.state.redis, f'rate:learning:{user.id}:{run_id}', maximum=20)
+    async with request.app.state.session_factory() as session:
+        run, challenge, progress = await _learning_context(session, run_id, user)
+        hints = learning.hints_for(run, challenge, progress)
+        if hint_id > len(hints):
+            raise HTTPException(404, 'Pista no disponible', headers={'Cache-Control': 'no-store'})
+        if run.status != 'active' or learning.utc(run.expires_at) <= now_utc() or learning.expired(progress):
+            raise HTTPException(409, 'Las pistas requieren una corrida activa antes del plazo; después puedes abrir la solución.', headers={'Cache-Control': 'no-store'})
+        used = await learning.reveal_ids(session, progress)
+        if any(previous not in used for previous in range(1, hint_id)):
+            raise HTTPException(409, 'Abre primero las pistas anteriores; se aplica el descuento configurado de cada pista.', headers={'Cache-Control': 'no-store'})
+        if hint_id not in used:
+            penalty = hints[hint_id - 1]['penalty_percent']
+            session.add(ChallengeHintReveal(progress_id=progress.id, run_id=run.id,
+                                            hint_id=hint_id, penalty_percent=penalty))
+            await session.flush()
+            await write_audit(session, user.id, 'challenge.hint.reveal', 'challenge_run', str(run.id),
+                              {'challenge': challenge.code, 'hint': hint_id, 'penalty_percent': penalty})
+        result = await learning.metadata(session, run, challenge, progress)
+        await session.commit()
+        return _learning_response(result)
+
+
+@router.post('/api/v1/runs/{run_id}/learning/solution')
+async def learning_solution(run_id: int, request: Request, user=Depends(require_roles('player'))):
+    await check_rate_limit(request.app.state.redis, f'rate:learning:{user.id}:{run_id}', maximum=20)
+    async with request.app.state.session_factory() as session:
+        run, challenge, progress = await _learning_context(session, run_id, user)
+        if not learning.expired(progress):
+            raise HTTPException(409, 'La solución estará disponible cuando venza el plazo del reto.', headers={'Cache-Control': 'no-store'})
+        solution = await learning.solution_for_run(session, run, challenge, progress=progress)
+        if not isinstance(solution.get('answer'), (str, type(None))):
+            solution['answer'] = __import__('json').dumps(solution['answer'], ensure_ascii=False, sort_keys=True, indent=2)
+        if progress.solution_revealed_at is None:
+            progress.solution_revealed_at = now_utc()
+            await write_audit(session, user.id, 'challenge.solution.reveal', 'challenge_run', str(run.id),
+                              {'challenge': challenge.code, 'available_points': learning.expired_points(progress)})
+        result = await learning.metadata(session, run, challenge, progress)
+        result['solution'] = solution
+        await session.commit()
+        return _learning_response(result)
+
+
+@router.post('/api/v1/runs/{run_id}/learning/complete', response_model=SubmissionResponse)
+async def learning_complete(run_id: int, request: Request, user=Depends(require_roles('player'))):
+    await check_rate_limit(request.app.state.redis, f'rate:learning:{user.id}:{run_id}', maximum=20)
+    async with request.app.state.session_factory() as session:
+        run, challenge, progress = await _learning_context(session, run_id, user)
+        if not learning.expired(progress) or progress.solution_revealed_at is None:
+            raise HTTPException(409, 'Espera a que venza el plazo y revisa la solución antes de registrar el aprendizaje.', headers={'Cache-Control': 'no-store'})
+        existing = await session.scalar(select(ChallengeCompletion).where(
+            ChallengeCompletion.user_id == user.id, ChallengeCompletion.challenge_id == challenge.id))
+        newly_completed = existing is None
+        points = learning.expired_points(progress) if newly_completed else 0
+        if newly_completed:
+            session.add(ChallengeCompletion(user_id=user.id, challenge_id=challenge.id, awarded_points=points))
+            progress.is_assisted = True
+            await write_audit(session, user.id, 'challenge.complete.assisted', 'challenge', str(challenge.id),
+                              {'code': challenge.code, 'run_id': run.id, 'points': points,
+                               'base_points': progress.base_points, 'policy_version': progress.policy_version})
+        await session.commit()
+    if newly_completed:
+        await _broadcast_ranking(request)
+    result = SubmissionResponse(correct=True, challenge_completed=True, awarded_points=points,
+        message=(f'Aprendizaje asistido registrado con el {learning.expired_percent(progress)}% del puntaje base.' if newly_completed
+                 else 'Este reto ya estaba completado; tus puntos originales se conservan y no se duplican.'))
+    return _learning_response(result.model_dump())

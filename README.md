@@ -165,11 +165,13 @@ deben limitarse a los escenarios y activos autorizados por el instructor.
 - [Configuración de entorno](./.env.example)
 - [Backend](./backend/)
 - [Frontend](./frontend/)
+- [Configurar tiempo, pistas y descuentos por reto](./Docs/CONFIGURAR_TIEMPO_Y_PISTAS.md)
+- [Retos de investigación con Kali y LNX-VICT](./Docs/RETOS_VM_LOGICA.md)
 - Documentación interactiva de la API: `/docs` con la aplicación ejecutándose
 
 
 ## Fase A — banderas dinámicas
 
-La base de implementación se documenta en `docs/FASE_A_BANDERAS_DINAMICAS.md`.
+La base de implementación se documenta en [Fase A](./Docs/FASE_A_BANDERAS_DINAMICAS.md).
 El inyector SSH está deshabilitado por defecto y requiere configuración por
 variables de entorno.

@@ -12,6 +12,7 @@ async def configure(session):
     challenges=(await session.scalars(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code.in_([*CATALOG,'DFIR-01'])).order_by(Challenge.id).with_for_update())).all()
     if len(challenges)!=36: raise ValueError('No se encontró el catálogo completo de 36 casos')
     for c in challenges:
+        if (c.scenario or '').startswith('VM-LOGIC-'): continue
         desired=['LAB-KALI','LAB-LNXVICT'] if c.code==CODE else (['DFIR-CASE','LAB-KALI'] if c.code=='DFIR-01' else ['OFFLINE-CASE','LAB-KALI'])
         if c.asset_references==desired and (c.code!=CODE or c.scenario=='SSH-PASSWORD-LAB'): continue
         await require_idle_challenge(session,c.id)

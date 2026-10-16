@@ -20,7 +20,7 @@ async def configure(session, group_code):
         raise ValueError('Faltan retos del catálogo: ' + ', '.join(sorted(missing)))
     # Validar todos antes de modificar cualquiera. No convertir una corrida en uso.
     for code in CATALOG:
-        if by_code[code].scenario == 'SSH-PASSWORD-LAB': continue
+        if by_code[code].scenario == 'SSH-PASSWORD-LAB' or (by_code[code].scenario or '').startswith('VM-LOGIC-'): continue
         if by_code[code].scenario != VERSION:
             await require_idle_challenge(session, by_code[code].id)
     report = []
@@ -28,6 +28,9 @@ async def configure(session, group_code):
         challenge = by_code[code]
         if challenge.scenario == 'SSH-PASSWORD-LAB':
             report.append({'code':code,'name':challenge.name,'mode':'ssh_password_lab'})
+            continue
+        if (challenge.scenario or '').startswith('VM-LOGIC-'):
+            report.append({'code': code, 'name': challenge.name, 'mode': 'vm_logic_lab'})
             continue
         if challenge.scenario != VERSION:
             before = {key: getattr(challenge, key) for key in ('name', 'description', 'instructions', 'scenario', 'asset_references', 'difficulty', 'is_published')}
@@ -39,7 +42,7 @@ async def configure(session, group_code):
             challenge.name = title
             challenge.description = 'Ejercicio descargable con datos sintéticos. ' + objective
             challenge.instructions = ('Inicia una corrida y descarga el ZIP. Extrae los archivos y lee README.txt. ' + objective
-                + ' Usa herramientas locales; no necesitas una VM ni contactar hosts. Valida la respuesta en el formulario, pulsa Registrar puntos y cierra el ejercicio. Dispones de cuatro horas; otra corrida genera nuevos datos. Los puntos se conceden una sola vez por reto.')
+                + ' Usa herramientas locales; no necesitas una VM ni contactar hosts. Valida la respuesta en el formulario, pulsa Registrar puntos y cierra el ejercicio. Consulta el contador del reto para conocer el plazo configurado. Otra corrida genera nuevos datos y conserva el plazo y las ayudas originales. Los puntos se conceden una sola vez por reto.')
             challenge.asset_references = ['OFFLINE-CASE']
             challenge.scenario = VERSION
             challenge.difficulty = 'Medio' if kind in ('rsa', 'stego', 'validator', 'join', 'lateral', 'pcap', 'stack') else 'Básico'

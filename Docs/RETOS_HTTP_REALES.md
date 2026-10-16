@@ -1,5 +1,7 @@
 # Prácticas HTTP entre Kali y LNX-VICT
 
+Este documento conserva la aceptación de la primera versión de ESC-06/ESC-07. El lote posterior refuerza ESC-07 con versiones, integridad, fragmentos y validación analítica, y añade cuatro casos con adquisición remota. Consultar [Investigación con Kali y LNX-VICT](RETOS_VM_LOGICA.md) para ese contrato y su publicación; las cifras y la lectura directa de flag de ESC-07 descritas abajo corresponden a la versión anterior.
+
 ESC-06-WEBAUTH y ESC-07-EXPOSED están preparados para las máquinas existentes: Kali `192.168.146.134` y LNX-VICT `192.168.146.137`. Cada corrida prepara una evidencia dinámica válida durante una hora. Ambos ejercicios abren la terminal Kali integrada y usan el servicio de práctica HTTP en el puerto 18082 de la víctima.
 
 ESC-06 prueba doce candidatos contra una cuenta HTTP Basic temporal con Hydra, recupera la flag con curl y registra 250 puntos una sola vez. Su clasificación es [T1110.001 — Password Guessing](https://attack.mitre.org/techniques/T1110/001/), que incluye servicios HTTP.
@@ -24,3 +26,11 @@ Validación: 190 pruebas de backend aprobadas y compilación TypeScript/Vite cor
 Los dos nuevos ejercicios quedan publicados para verde. El catálogo pasa de 38 a 40: cinco ejercicios con víctima real y 35 casos de análisis en Kali.
 
 Aceptación visual con el alumno: ambos escenarios mostraron sus comandos y la terminal Kali conectada. La sesión de ESC-06 se cerró sin enviar flag. ESC-07 realizó desde la terminal integrada una petición HTTP a `/practice/416/robots.txt` y recibió la ruta del respaldo. Se dejó abierto para practicar y se guardó una captura del resultado. No se otorgaron puntos durante esta aceptación.
+
+## Aceptación técnica de la versión reforzada · 15 de octubre de 2026
+
+Después del despliegue y aplicación de los catálogos, la integración real de ESC-06 comprobó Hydra desde Kali contra HTTP Basic en LNX-VICT, validación, puntos una sola vez y revocación al cerrar. ESC-07 completó el descubrimiento de rutas variables, la comparación de respaldos señuelo con el manifiesto, la verificación SHA-256, la reconstrucción de fragmentos y la validación analítica. También completó puntuación única y revocación.
+
+La integración confirmó idempotencia del catálogo y rollback de PostgreSQL, sin usuarios ni puntos QA persistidos. El lote de WEB-02, WEB-06, FOR-05 y DFIR-01 completó asimismo adquisición HTTP desde Kali, resolución, validación, puntos únicos, cierre y revocación sobre las VMs reales; su alcance se describe en [Investigación con Kali y LNX-VICT](RETOS_VM_LOGICA.md).
+
+Este registro corresponde a aceptación técnica de servicios y ciclo de ejecución. No atribuye aceptación visual en el navegador a la versión reforzada.

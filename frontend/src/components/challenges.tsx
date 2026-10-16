@@ -12,12 +12,16 @@ import { DfirWorkspace } from "./player/DfirWorkspace";
 import { OfflineWorkspace } from "./player/OfflineWorkspace";
 import { SshPracticeWorkspace } from './player/SshPracticeWorkspace';
 import { HttpPracticeWorkspace } from './player/HttpPracticeWorkspace';
+import { LearningPanel } from './player/LearningPanel';
+import { VmLogicWorkspace } from './player/VmLogicWorkspace';
 import { LaboratoryRunWorkspace } from "./player/LaboratoryRunWorkspace";
 import { needsLaboratoryCleanup } from "../lib/laboratoryRunState";
 import { ChallengeLearningResources } from "./ChallengeLearningResources";
 import { ChallengeResource, MAX_CHALLENGE_RESOURCES, parseChallengeResources, serializeChallengeResources } from "../lib/challengeResources";
 import { initialFlagTemplate } from "../lib/challengeFlagChanges";
 import { challengeCategoryOptions, isValidChallengeCategory, normalizeChallengeCategory } from "../lib/challengeCategories";
+import { learningPolicyDraft, serializeLearningPolicy } from '../lib/learningPolicy';
+import { LearningPolicyEditor } from './LearningPolicyEditor';
 
 export function challengeInternalLevel(
   difficulty: Challenge["difficulty"]
@@ -103,6 +107,7 @@ export function ChallengeDetail({
   onStart,
   onSubmit,
   onClose,
+  onLearningComplete,
 }: {
   challenge: Challenge | null;
   runs: Run[];
@@ -114,6 +119,7 @@ export function ChallengeDetail({
     message: string;
   }>;
   onClose: (runId: number) => Promise<void>;
+  onLearningComplete?: () => Promise<void>;
 }) {
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
@@ -133,7 +139,8 @@ export function ChallengeDetail({
   }
 
   const activeRun = runs.find((run) => run.challenge_code === challenge.code && needsLaboratoryCleanup(run));
-  const httpPractice = ['ESC-06-WEBAUTH', 'ESC-07-EXPOSED'].includes(challenge.code);
+  const learningRun = [...runs].filter(run => run.challenge_code === challenge.code).sort((a, b) => b.id - a.id)[0];
+  const httpPractice = ['ESC-06-WEBAUTH', 'ESC-07-EXPOSED', 'WEB-02', 'WEB-06', 'FOR-05', 'DFIR-01'].includes(challenge.code);
   const otherVmRun = ['LAB-01','ESC-01-RECON'].includes(challenge.code) ? runs.find(run => run.challenge_code !== challenge.code && run.workspace_strategy === 'shared_lab_vm' && needsLaboratoryCleanup(run)) : null;
   const startLaboratory = async () => {
     setStarting(true);
@@ -170,7 +177,10 @@ export function ChallengeDetail({
 
       <ChallengeLearningResources resources={learning.resources} topic={challenge.category} />
 
+      <LearningPanel run={learningRun} completed={challenge.completed} onComplete={onLearningComplete} />
+
       {activeRun ? (
+        activeRun.workspace_strategy === 'vm_logic_lab' || (challenge.code === 'ESC-07-EXPOSED' && activeRun.workspace_strategy === 'http_files_lab') ? <VmLogicWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
         activeRun.workspace_strategy === 'ssh_password_lab' ? <SshPracticeWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
         ['http_password_lab', 'http_files_lab'].includes(activeRun.workspace_strategy) ? <HttpPracticeWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
         activeRun.workspace_strategy === "offline_case" ? <OfflineWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
@@ -184,10 +194,10 @@ export function ChallengeDetail({
           </div>
           <ol className="laboratory-flow" aria-label="Pasos del laboratorio">
             <li><span>1</span>Inicia tu instancia</li>
-            <li><span>2</span>{httpPractice ? "Investiga el servicio web desde Kali" : challenge.asset_references.includes("OFFLINE-CASE") ? "Descarga y resuelve el ejercicio" : challenge.code === "DFIR-01" ? "Correlaciona las evidencias" : "Investiga en la terminal"}</li>
-            <li><span>3</span>{challenge.asset_references.includes("OFFLINE-CASE") ? "Valida y registra tus puntos" : "Pega y valida la flag"}</li>
+            <li><span>2</span>{httpPractice ? "Investiga el objetivo desde Kali" : challenge.asset_references.includes("OFFLINE-CASE") ? "Analiza las evidencias en Kali" : challenge.code === "DFIR-01" ? "Correlaciona las evidencias" : "Investiga en la terminal"}</li>
+            <li><span>3</span>Valida tus resultados</li>
           </ol>
-          <p>{httpPractice ? "Al iniciar se prepara tu ejercicio HTTP en LNX-VICT y se abre la terminal Kali. Tendrás la dirección del objetivo y comandos para probar contraseñas o descubrir archivos expuestos; encuentra la flag y valídala aquí." : challenge.asset_references.includes("OFFLINE-CASE") ? "Al iniciar tendrás evidencias, instrucciones y acceso a la terminal Kali. Prepara los archivos con el comando de la pantalla, resuelve, valida tu respuesta y registra los puntos. También puedes descargar el ZIP." : challenge.code === "DFIR-01" ? "El expediente, la terminal Kali y el formulario de análisis aparecerán aquí al iniciar." : "La terminal, el bloc de notas y el envío de flag aparecerán aquí cuando tu entorno esté listo."}</p>
+          <p>{httpPractice ? "El ejercicio se prepara en LNX-VICT y se investiga desde Kali. Adquiere las evidencias, comprueba tus hipótesis y valida tu análisis. Las pistas son opcionales y descuentan puntos." : challenge.asset_references.includes("OFFLINE-CASE") ? "Prepara las evidencias en Kali con el comando de transferencia y resuelve con sus herramientas. El ZIP queda disponible como alternativa para ejercicios de lógica y análisis." : challenge.code === "DFIR-01" ? "El expediente, la terminal Kali y el formulario de análisis aparecerán aquí al iniciar." : "La terminal, el bloc de notas y el envío de flag aparecerán aquí cuando tu entorno esté listo."}</p>
           {challenge.completed && <p className="practice-note">Puedes practicar de nuevo. Los puntos de este reto se otorgan una sola vez.</p>}
           <ErrorMessage message={startError} />
           {otherVmRun && <div role="status" className="instruction-box"><p>La VM está reservada por tu reto {otherVmRun.challenge_code}. Ciérralo antes de abrir este laboratorio.</p>
@@ -208,21 +218,6 @@ export function ChallengeDetail({
         </div>
       </details>
 
-      <div className="hint-panel challenge-hints">
-        <div className="hint-panel-head">
-          <div><span className="eyebrow accent">AYUDAS DEL INSTRUCTOR</span><h3>Pistas y sugerencias</h3></div>
-          <span className="hint-badge">sin revelar la flag</span>
-        </div>
-        {challenge.code === "LAB-01" ? (
-          <div className="hint-list">
-            <details><summary>Pista 1 · reconocimiento</summary><p>Identifica los servicios del objetivo asignado. Usa únicamente los activos indicados en las instrucciones de este reto.</p></details>
-            <details><summary>Pista 2 · acceso</summary><p>Utiliza la terminal del laboratorio y las indicaciones del instructor para investigar el sistema.</p></details>
-            <details><summary>Pista 3 · localización</summary><p>Busca los archivos destinados al ejercicio CTF. La ruta preparada para este laboratorio es <code>/opt/ctf/flag.txt</code>.</p></details>
-          </div>
-        ) : (
-          <div className="hint-list"><details><summary>Sugerencia</summary><p>Lee el objetivo y divide el reto en pequeñas comprobaciones antes de enviar tu respuesta.</p></details></div>
-        )}
-      </div>
     </section>
   );
 }
@@ -294,6 +289,7 @@ export function ChallengeForm({
   const [assets, setAssets] = useState(initial?.asset_references?.join(", ") ?? firstAsset);
   const [primaryAsset, setPrimaryAsset] = useState(firstAsset);
   const [points, setPoints] = useState(String(initial?.points ?? 100));
+  const [learningPolicy, setLearningPolicy] = useState(() => learningPolicyDraft(initial?.learning_policy));
   const [description, setDescription] = useState(initial?.description ?? "");
   const initialLearning = useMemo(() => parseChallengeResources(initial?.instructions ?? ""), [initial?.instructions]);
   const [instructions, setInstructions] = useState(initialLearning.instructions);
@@ -389,6 +385,7 @@ export function ChallengeForm({
       const references = [primaryAsset, ...assets.split(",").map((value) => value.trim()).filter(Boolean)];
       const uniqueReferences = [...new Set(references.filter(Boolean))];
       if (!uniqueReferences.length) throw new Error("Selecciona al menos un laboratorio o una VM.");
+      const serializedLearningPolicy = serializeLearningPolicy(learningPolicy);
       await onSave(
         {
           code: code.trim().toUpperCase(),
@@ -399,6 +396,7 @@ export function ChallengeForm({
           mitre_technique: mitre || "—",
           asset_references: uniqueReferences,
           points: Number(points),
+          learning_policy: serializedLearningPolicy,
           description: description.trim(),
           instructions: serializeChallengeResources(instructions, resources),
           is_published: published,
@@ -470,6 +468,8 @@ export function ChallengeForm({
         </label>
         <label className="form-full">Descripción<textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} required /></label>
         <label className="form-full">Instrucciones del reto<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={4} /></label>
+
+        <LearningPolicyEditor value={learningPolicy} points={Number(points)} onChange={setLearningPolicy} />
 
         <section className="learning-resource-editor">
           <div className="panel-head">

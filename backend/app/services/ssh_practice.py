@@ -62,12 +62,35 @@ def provision(run_id, username, password, flag, expires):
         sftp.chmod(directory,0o700)
         script = Path(__file__).parents[1]/'infrastructure/injection/scripts/linux/ctf-ssh-practice.py'
         remote = directory+'/server.py'
-        with sftp.open(remote,'w') as file: file.write(script.read_bytes())
-        sftp.chmod(remote,0o600)
+        source = script.read_bytes()
+        try:
+            with sftp.open(remote, 'rb') as old:
+                source_changed = old.read() != source
+        except FileNotFoundError:
+            source_changed = False
+        script_temp = remote + '.' + str(int(run_id)) + '.tmp'
+        with sftp.open(script_temp, 'w') as file: file.write(source)
+        sftp.chmod(script_temp, 0o600)
+        sftp.posix_rename(script_temp, remote)
         config = {'password_sha256':hashlib.sha256(password.encode()).hexdigest(),'flag':flag,'expires_at':expires}
         path = directory+'/'+username+'.json'; temp=path+'.tmp'
         with sftp.open(temp,'w') as file: file.write(json.dumps(config))
         sftp.chmod(temp,0o600); sftp.posix_rename(temp,path)
+        if source_changed:
+            # Solo recargar nuestro proceso de práctica, con UID y argv exactos.
+            # Los registros y la clave de host permanecen en su directorio.
+            restart = ("import os,pathlib,signal,time; "
+                       f"expected=[b'python3',{remote.encode()!r},b'--directory',{directory.encode()!r}]; "
+                       "pids=[]; "
+                       "\nfor p in pathlib.Path('/proc').glob('[0-9]*'):"
+                       "\n try:"
+                       "\n  if p.stat().st_uid==os.getuid() and (p/'cmdline').read_bytes().rstrip(b'\\0').split(b'\\0')==expected: pids.append(int(p.name))"
+                       "\n except (OSError,ValueError): pass"
+                       "\nfor pid in pids:"
+                       "\n try: os.kill(pid,signal.SIGTERM)"
+                       "\n except ProcessLookupError: pass"
+                       "\nif pids: time.sleep(0.5)")
+            _command(client, 'python3 -c ' + shlex.quote(restart))
         # Un lock de archivo evita duplicar servidores al iniciar corridas concurrentes.
         command = ('nohup flock -n '+shlex.quote(directory+'/server.lock')+' python3 '+shlex.quote(remote)
                    +' --directory '+shlex.quote(directory)+' </dev/null >'+shlex.quote(directory+'/server.log')+' 2>&1 &')

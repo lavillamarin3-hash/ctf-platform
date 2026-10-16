@@ -11,7 +11,7 @@ from fastapi import HTTPException
 from app.api import runs
 from app.core import now_utc, verify_password
 from app.domain.instances.states import InstanceState
-from app.models import Challenge, ChallengeCompletion, ChallengeFlag, ChallengeInstance, ChallengeRun, ChallengeRunFlag, RemoteAccessAssignment, User, VMAsset, Laboratory
+from app.models import Challenge, ChallengeCompletion, ChallengeFlag, ChallengeHintReveal, ChallengeLearningProgress, ChallengeInstance, ChallengeRun, ChallengeRunFlag, RemoteAccessAssignment, User, VMAsset, Laboratory
 from app.schemas import SubmissionRequest
 from app.services.dynamic_flags import DynamicFlagRuntime
 from app.services.lab_lock import (
@@ -109,11 +109,18 @@ class MemorySession:
         return False
 
     async def scalar(self, statement):
+        entity = statement.column_descriptions[0].get('entity')
+        if entity is User:
+            return next((obj.id for (model, identifier), obj in self.objects.items() if model is User), None)
+        if entity is ChallengeLearningProgress:
+            return next((obj for obj in self.added if isinstance(obj, ChallengeLearningProgress)), None)
         if not self.scalar_results:
             raise AssertionError("Consulta inesperada en el doble de sesión")
         return self.scalar_results.pop(0)
 
     async def scalars(self, statement):
+        if statement.column_descriptions[0].get('entity') is ChallengeHintReveal:
+            return SimpleNamespace(all=lambda: [obj.hint_id for obj in self.added if isinstance(obj, ChallengeHintReveal)])
         values = self.scalar_lists.pop(0)
         return SimpleNamespace(all=lambda: list(values))
 
@@ -205,6 +212,51 @@ class RunLifecycleTests(unittest.IsolatedAsyncioTestCase):
         if kali_read:
             self.guacamole.permissions["connectionPermissions"]["kali-ssh"] = ["READ"]
         return MemorySession([self.challenge, None, None], objects=self.objects, scalar_lists=[[kali]])
+
+    async def test_custom_duration_aligns_run_assignment_pool_ledger_and_redis_reservation(self):
+        from app.services import learning
+        at = now_utc()
+        self.challenge.learning_policy = {'duration_minutes': 120, 'expired_points_percent': 40,
+            'hints': [{'title': 'Observa', 'content': 'Comprueba las fuentes', 'penalty_percent': 15}]}
+        session = MemorySession([self.challenge, None, None], objects=self.objects)
+        with patch.object(runs, 'now_utc', return_value=at), \
+             patch.object(learning, 'now_utc', return_value=at), \
+             patch.object(runs, 'acquire', new=AsyncMock(wraps=acquire)) as reservation:
+            started = await runs.start_challenge('LAB-01', self.request(session), self.user)
+        expected = at + timedelta(minutes=120)
+        self.assertEqual(started.expires_at, expected)
+        for model, field in ((ChallengeRun, 'expires_at'), (RemoteAccessAssignment, 'expires_at'),
+                             (ChallengeInstance, 'expires_at'), (ChallengeLearningProgress, 'deadline')):
+            row = next(value for value in session.added if isinstance(value, model))
+            self.assertEqual(getattr(row, field), expected)
+        progress = next(value for value in session.added if isinstance(value, ChallengeLearningProgress))
+        self.assertEqual(progress.policy_snapshot['duration_minutes'], 120)
+        self.assertEqual(progress.policy_version, 2)
+        self.assertEqual(reservation.await_args.kwargs['ttl_seconds'], 7200)
+
+    async def test_ssh_http_and_vm_provision_use_actual_configured_expiry(self):
+        from app.services import http_practice, kali_workspace, learning, ssh_practice, vm_logic
+        at = now_utc()
+        cases = [(ssh_practice.CODE, 'SSH-PASSWORD-LAB', 'ssh_password_lab', ssh_practice, 4),
+                 (http_practice.PASSWORD_CODE, 'HTTP-PASSWORD-LAB', 'http_password_lab', http_practice, 4),
+                 (http_practice.FILES_CODE, 'HTTP-EXPOSED-FILES-LAB', 'http_files_lab', http_practice, 4),
+                 ('WEB-02', vm_logic.EXPECTED_SCENARIOS['WEB-02'], vm_logic.STRATEGY, http_practice, 4)]
+        for code, scenario, strategy, provisioner, expiry_index in cases:
+            with self.subTest(strategy=strategy):
+                self.challenge.code, self.challenge.scenario = code, scenario
+                self.challenge.asset_references = ['LAB-KALI', 'LAB-LNXVICT']
+                self.challenge.learning_policy = {'duration_minutes': 120, 'expired_points_percent': 25,
+                    'hints': [{'title': 'Observa', 'content': 'Comprueba las fuentes', 'penalty_percent': 10}]}
+                session = MemorySession([self.challenge, None], objects=self.objects)
+                with patch.object(runs, 'now_utc', return_value=at), \
+                     patch.object(learning, 'now_utc', return_value=at), \
+                     patch.object(kali_workspace, 'context', new=AsyncMock()), \
+                     patch.object(provisioner, 'provision') as provision:
+                    started = await runs.start_challenge(code, self.request(session), self.user)
+                self.assertEqual(started.workspace_strategy, strategy)
+                self.assertEqual(started.expires_at, at + timedelta(minutes=120))
+                provision.assert_called_once()
+                self.assertEqual(provision.call_args.args[expiry_index], started.expires_at.timestamp())
 
     async def test_rejected_reservation_never_clears_other_run_flag_or_grants_read(self):
         path = (self.vm.ip_address, "/opt/ctf/flag.txt")
@@ -390,8 +442,10 @@ class RunLifecycleTests(unittest.IsolatedAsyncioTestCase):
         lab_path = (self.vm.ip_address, "/opt/ctf/flag.txt")
         esc_path = (self.vm.ip_address, "/opt/ctf/ESC-01-RECON/flag.txt")
 
-        await runtime.prepare(session, self.challenge, SimpleNamespace(id=101), self.user.username, self.vm)
-        await runtime.prepare(session, esc, SimpleNamespace(id=102), self.user.username, self.vm)
+        await runtime.prepare(session, self.challenge, SimpleNamespace(id=101, user_id=self.user.id,
+                              challenge_id=self.challenge.id), self.user.username, self.vm)
+        await runtime.prepare(session, esc, SimpleNamespace(id=102, user_id=self.user.id,
+                              challenge_id=esc.id), self.user.username, self.vm)
         self.assertEqual(set(self.injector.files), {lab_path, esc_path})
 
         await runtime.cleanup(session, 102, esc, self.vm)

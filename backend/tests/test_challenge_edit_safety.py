@@ -45,7 +45,7 @@ class ChallengeEditSafetyTests(unittest.IsolatedAsyncioTestCase):
         session.scalars.return_value = SimpleNamespace(all=lambda: [3])
         payload = SimpleNamespace(code=challenge.code, is_published=True,
                                   asset_references=challenge.asset_references,
-                                  model_dump=lambda: {"is_published": True})
+                                  model_dump=lambda: {"is_published": True}, model_fields_set={"is_published"})
         with patch("app.api.challenges.write_audit", new_callable=AsyncMock), \
              patch("app.api.challenges.challenge_view", return_value={"ok": True}), \
              patch("app.api.challenges._reconcile_esc_guacamole_access", new_callable=AsyncMock) as reconcile:
@@ -71,7 +71,7 @@ class ChallengeEditSafetyTests(unittest.IsolatedAsyncioTestCase):
         session.scalars.return_value = SimpleNamespace(all=lambda: [3])
         payload = SimpleNamespace(code=challenge.code, is_published=True,
                                   asset_references=challenge.asset_references,
-                                  model_dump=lambda: {"is_published": True})
+                                  model_dump=lambda: {"is_published": True}, model_fields_set={"is_published"})
         with patch("app.api.challenges.write_audit", new_callable=AsyncMock), \
              patch("app.api.challenges.challenge_view", return_value={"ok": True}), \
              patch("app.api.challenges._reconcile_esc_guacamole_access", new_callable=AsyncMock,
