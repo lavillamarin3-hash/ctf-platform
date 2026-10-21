@@ -18,6 +18,7 @@ import { mapBackendLaboratory, mapBackendVM } from "../components/laboratory";
 import { FlagDraft, hasFlagDraftChanges } from "../lib/challengeFlagChanges";
 import { useRankingLive } from "../lib/useRankingLive";
 import { BEGINNER_CHALLENGE_DRAFTS, isLegacyReconDraft, legacyPublishedCodes } from "../lib/pilotChallenges";
+import { useChallengeDeletion } from "./useChallengeDeletion";
 
 const defaultUserFunction = (role: User["role"]): UserFunction =>
   role === "admin"
@@ -490,6 +491,16 @@ export function useManagementController({
     }
   };
 
+  const challengeDeletion = useChallengeDeletion(isAdmin && user.role === "admin", async (result) => {
+    setChallenges((current) => current.filter((challenge) => challenge.code !== result.code));
+    if (editing?.code === result.code) {
+      setEditing(null);
+      setCreating(false);
+    }
+    setMessage(`Reto ${result.code} eliminado definitivamente con sus datos asociados. Se retiraron ${result.counts.awarded_points ?? 0} puntos del ranking.${result.warning ? ` ${result.warning}` : ""}`);
+    await load();
+  });
+
   const archiveLegacyChallenges = async () => {
     if (!isAdmin || catalogActionBusy) return;
     const codes = legacyPublishedCodes(challenges);
@@ -850,7 +861,7 @@ export function useManagementController({
     saveGuacamoleUser, deleteGuacamoleManagedUser,
     saveGuacamoleConnection, deleteGuacamoleManagedConnection,
     openGuacamolePermissions, saveGuacamolePermissions,
-    saveChallenge, archive, archiveLegacyChallenges, createBeginnerChallengeDrafts,
+    saveChallenge, archive, challengeDeletion, archiveLegacyChallenges, createBeginnerChallengeDrafts,
     changeUser, saveManagedUser, deleteManagedUser,
     saveLaboratory, removeLaboratory, saveVM, removeVM,
   };

@@ -46,6 +46,8 @@ def points_for(progress, hints_used=0, at=None):
 
 
 def _strategy_for(challenge):
+    if challenge.code == 'WEB-CONDOR' and getattr(challenge, 'scenario', None) == 'CONDOR-WEB-LAB':
+        return 'external_web_lab'
     if challenge.code == 'ESC-02-BRUTEFORCE' and getattr(challenge, 'scenario', None) == 'SSH-PASSWORD-LAB':
         return 'ssh_password_lab'
     if challenge.code == 'ESC-06-WEBAUTH':
@@ -132,6 +134,15 @@ async def reveal_ids(session, progress):
     return set((await session.scalars(select(ChallengeHintReveal.hint_id).where(
         ChallengeHintReveal.progress_id == progress.id,
     ))).all())
+
+
+def solution_access(progress, hints, used):
+    """Only the configured hints count; an empty list never unlocks answers."""
+    if expired(progress):
+        return 'expired'
+    if hints and {hint['id'] for hint in hints}.issubset(used):
+        return 'all_hints'
+    return None
 
 
 async def awarded_value(session, run, challenge):
@@ -235,6 +246,10 @@ FAMILY_HINTS = {
 
 
 def _default_hints_for(run, challenge):
+    from .guided_hints import hints_for as guided_hints
+    guided = guided_hints(run, challenge)
+    if guided is not None and run.workspace_strategy not in ('offline_case', 'dfir_case'):
+        return guided
     if challenge.code == 'DFIR-01':
         texts = ('Adquiere las fuentes y verifica los hashes antes de correlacionar; una IP o un volumen aislado no basta.',
                  'Calcula los desfases constantes de auth y HTTP con ambas balizas; conviértelos a UTC real.',
@@ -282,7 +297,10 @@ async def metadata(session, run, challenge, progress):
     completion = await session.scalar(select(ChallengeCompletion).where(
         ChallengeCompletion.user_id == run.user_id, ChallengeCompletion.challenge_id == challenge.id))
     hints = hints_for(run, challenge, progress)
+    access = solution_access(progress, hints, used)
     result = {'base_points': progress.base_points, 'expired_points_percent': expired_percent(progress), 'hint_count': len(hints),
+              'duration_minutes': policy_for_progress(progress, run, challenge)['duration_minutes'],
+              'solution_available': access is not None, 'solution_reason': access,
               'available_points': completion.awarded_points if completion is not None else points_for(progress, len(used)),
               'deadline': utc(progress.deadline).isoformat(), 'expired': expired(progress), 'hints_used': len(used),
               'hints': [{'id': hint['id'], 'title': hint['title'], 'unlocked': hint['id'] in used,
@@ -296,6 +314,15 @@ async def metadata(session, run, challenge, progress):
 
 def solution_for(run, challenge):
     """Generar el material solo después de que el endpoint autorice el plazo."""
+    if run.workspace_strategy == 'external_web_lab':
+        return {'steps': [
+            'Desde Kali, reconoce los servicios HTTP de la víctima dentro del rango autorizado.',
+            'Consulta robots.txt, sigue el manifiesto y correlaciona las cuentas con su último estado para identificar al editor activo.',
+            'Descarga el diccionario indicado por el manifiesto y prueba el formulario /login con Hydra, un solo hilo y esa cuenta.',
+            'Entra al centro de mando, publica un comunicado y copia la flag que muestra el portal.',
+            'Registra la flag en Cociber CTF o completa el repaso asistido con el puntaje indicado.',
+        ], 'answer': None,
+            'note': 'El portal local es compartido. La flag pertenece a esa instalación y solo se muestra después de publicar.'}
     if run.workspace_strategy == 'vm_logic_lab':
         from . import vm_logic
         if hasattr(vm_logic, 'solution_for'):
@@ -317,7 +344,7 @@ def solution_for(run, challenge):
         return {'steps': ssh_practice.instructions(run)['commands'],
                 'answer': json.dumps({'username': f'ctf{run.id}', 'password': ssh_practice.password_for(run),
                                      'flag': ssh_practice.flag_for(run)}, ensure_ascii=False),
-                'note': 'La cuenta de práctica caducó; esta explicación no reactiva la conexión.'}
+                'note': 'Usa la cuenta mientras la corrida siga activa. Mostrar la explicación no amplía el plazo ni reactiva una cuenta caducada.'}
     if run.workspace_strategy in ('http_password_lab', 'http_files_lab'):
         from . import http_practice
         if run.workspace_strategy == 'http_password_lab':

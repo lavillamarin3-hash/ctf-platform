@@ -453,7 +453,7 @@ class LearningTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsInstance(revealed['solution']['answer'], str)
         completed = self.data(await runs.learning_complete(run.id, self.request, self.user))
         self.assertEqual(completed['awarded_points'], 100)
-        self.assertIn('40%', completed['message'])
+        self.assertIn('100 puntos', completed['message'])
 
     async def test_editing_policy_during_active_run_does_not_change_snapshot_or_reopen_deadline(self):
         from app.api.challenges import update_challenge

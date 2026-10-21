@@ -2,7 +2,7 @@
 // API DE RETOS, RUNS Y BANDERAS
 // ============================================================
 import { request } from "./client";
-import type { Challenge, RankingRow, Run } from "../../models";
+import type { Challenge, ChallengeDeletionPreview, ChallengeDeletionResult, RankingRow, Run } from "../../models";
 
 export const challengesApi = {
   challenges: (params: { category?: string; difficulty?: string } = {}) => {
@@ -45,6 +45,15 @@ export const challengesApi = {
 
   archiveChallenge: (code: string) =>
     request<void>(`/challenges/${encodeURIComponent(code)}`, { method: "DELETE" }),
+
+  challengeDeletionPreview: (code: string) =>
+    request<ChallengeDeletionPreview>(`/challenges/${encodeURIComponent(code)}/deletion-preview`),
+
+  permanentlyDeleteChallenge: (code: string, confirmCode: string) =>
+    request<ChallengeDeletionResult>(`/challenges/${encodeURIComponent(code)}/permanent`, {
+      method: "DELETE",
+      body: JSON.stringify({ confirm_code: confirmCode }),
+    }),
 
   submit: (code: string, value: string) =>
     request<{

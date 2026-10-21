@@ -27,7 +27,7 @@ from ..services.lab_lock import (
 )
 from ..services.runtime_flags import effective_mode_template, is_effectively_dynamic
 from ..domain.instances.states import InstanceState
-from ..services import dfir_runtime, offline_runtime, ssh_practice, http_practice, kali_workspace, learning, vm_logic
+from ..services import dfir_runtime, offline_runtime, ssh_practice, http_practice, kali_workspace, learning, vm_logic, external_web
 from ..domain.challenges import offline
 from ..domain.challenges.dfir import CODE as DFIR_CODE, matches_answer
 from pydantic import BaseModel, Field
@@ -160,6 +160,20 @@ def _return_instance_to_pool(instance: ChallengeInstance | None) -> None:
 
 async def _cleanup_run(request: Request, session, run: ChallengeRun, challenge: Challenge | None, *, status: str):
     """Cierra una ejecución bajo lock de fila y protege la VM original de la reserva."""
+    if run.workspace_strategy == external_web.STRATEGY:
+        # El portal compartido es independiente: cerrar esta sesión no apaga
+        # la página ni altera las sesiones o los comunicados de otros alumnos.
+        if challenge is not None and 'LAB-KALI' in (challenge.asset_references or []):
+            terminal_sessions = getattr(request.app.state, 'terminal_sessions', None)
+            if terminal_sessions is not None:
+                await terminal_sessions.close_run(run.id)
+        run.status = status
+        run.closed_at = now_utc()
+        await write_audit(session, run.user_id,
+                          'challenge_run.expire' if status == 'expired' else 'challenge_run.close',
+                          'challenge_run', str(run.id), {'workspace_strategy': run.workspace_strategy})
+        await session.commit()
+        return None, None
     if run.workspace_strategy in kali_workspace.STRATEGIES:
         if run.workspace_strategy == 'ssh_password_lab':
             try: await ssh_practice.cleanup(run)
@@ -341,7 +355,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             .with_for_update()
         )
         if active_run and active_run.expires_at >= now:
-            if active_run.workspace_strategy in kali_workspace.STRATEGIES:
+            if active_run.workspace_strategy in (*kali_workspace.STRATEGIES, external_web.STRATEGY):
                 return _view_from_run(active_run, challenge, None)
             instance = await session.scalar(select(ChallengeInstance).where(ChallengeInstance.run_id == active_run.id))
             if instance:
@@ -354,9 +368,39 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             return _view_from_run(active_run, challenge, active_run.assignment, target_vm, protocol)
         if active_run and active_run.expires_at < now:
             await _cleanup_run(request, session, active_run, challenge, status="expired")
+            # La limpieza confirma su propia transacción y libera el lock del
+            # reto. Recuperarlo evita iniciar recursos para un reto que otro
+            # administrador haya eliminado o archivado durante ese intervalo.
+            challenge = await session.scalar(select(Challenge).options(selectinload(Challenge.flags))
+                .where(Challenge.code == code, Challenge.is_published.is_(True))
+                .with_for_update().execution_options(populate_existing=True))
+            if challenge is None:
+                raise HTTPException(404, 'Reto no disponible')
+            if not await _assigned(session, challenge.id, user.id):
+                raise HTTPException(403, 'Este reto no está asignado a tu grupo')
 
         now = now_utc()
         planned_expires_at, planned_policy = await learning.plan_run(session, challenge, user, at=now)
+
+        if external_web.supports(challenge):
+            try:
+                external_web.portal_url(challenge)
+            except ValueError as exc:
+                raise HTTPException(409, str(exc)) from exc
+            if 'LAB-KALI' in (challenge.asset_references or []):
+                await kali_workspace.context(request.app, session, user)
+            flags = [flag for flag in challenge.flags if flag.is_active]
+            if len(flags) != 1 or is_effectively_dynamic(challenge.code, flags[0]) or not flags[0].flag_hash:
+                raise HTTPException(409, 'Operación Cóndor requiere la flag estática de su instalación.')
+            run = ChallengeRun(user_id=user.id, challenge_id=challenge.id, status='active',
+                               expires_at=planned_expires_at, workspace_strategy=external_web.STRATEGY)
+            session.add(run)
+            await session.flush()
+            await learning.lock_progress(session, run, challenge, create=True, policy=planned_policy)
+            await write_audit(session, user.id, 'challenge_run.start', 'challenge_run', str(run.id),
+                              {'challenge': challenge.code, 'workspace_strategy': external_web.STRATEGY})
+            await session.commit()
+            return _view_from_run(run, challenge, None)
 
         if challenge.code in vm_logic.CODES and challenge.scenario == vm_logic.EXPECTED_SCENARIOS[challenge.code]:
             if set(challenge.asset_references or []) != {'LAB-KALI', 'LAB-LNXVICT'}:
@@ -756,7 +800,7 @@ async def list_runs(request: Request, user=Depends(get_current_user)):
             # de forma no mutante cuando el registro de instancia todavía no existe.
             display_vm = vm
             display_protocol = None
-            if display_vm is None and challenge and state == "active" and run.workspace_strategy not in kali_workspace.STRATEGIES:
+            if display_vm is None and challenge and state == "active" and run.workspace_strategy not in (*kali_workspace.STRATEGIES, external_web.STRATEGY):
                 _, display_vm = await _find_challenge_vm(session, challenge)
 
             if instance and instance.guacamole_connection_id:
@@ -857,7 +901,7 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
             await _broadcast_ranking(request)
         message = ("Flag correcta. Reto completado; cierra la sesión del laboratorio para limpiar la VM."
                    if newly_completed else "Flag correcta. Este reto ya estaba completado; puedes cerrar el laboratorio para limpiar la VM.")
-        if run.workspace_strategy in kali_workspace.STRATEGIES:
+        if run.workspace_strategy in (*kali_workspace.STRATEGIES, external_web.STRATEGY):
             message = "Flag correcta. Puntos registrados; puedes cerrar el ejercicio." if newly_completed else "Flag correcta. Este reto ya estaba completado; no se duplican los puntos."
         return SubmissionResponse(correct=True, challenge_completed=True, awarded_points=awarded_points, message=message)
     if matched:
@@ -1013,6 +1057,28 @@ async def _broadcast_ranking(request):
         pass
 
 
+@router.get('/api/v1/runs/{run_id}/external-web')
+async def external_web_info(run_id: int, request: Request, user=Depends(require_roles('player'))):
+    async with request.app.state.session_factory() as session:
+        run = await session.scalar(select(ChallengeRun).where(
+            ChallengeRun.id == run_id, ChallengeRun.user_id == user.id))
+        if run is None:
+            raise HTTPException(404, 'Ejercicio no disponible')
+        challenge = await session.get(Challenge, run.challenge_id)
+        if (challenge is None or not challenge.is_published or not external_web.supports(challenge)
+                or not await _assigned(session, challenge.id, user.id)):
+            raise HTTPException(404, 'Ejercicio no disponible')
+        if (run.workspace_strategy != external_web.STRATEGY or run.status != 'active'
+                or run.expires_at <= now_utc()):
+            raise HTTPException(410, 'La sesión del ejercicio ha finalizado')
+        from fastapi.responses import JSONResponse
+        try:
+            portal_info = external_web.info(run, challenge)
+        except ValueError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        return JSONResponse(portal_info, headers={'Cache-Control': 'no-store'})
+
+
 async def _learning_context(session, run_id, user):
     run = await session.scalar(select(ChallengeRun).where(
         ChallengeRun.id == run_id, ChallengeRun.user_id == user.id,
@@ -1071,15 +1137,17 @@ async def learning_solution(run_id: int, request: Request, user=Depends(require_
     await check_rate_limit(request.app.state.redis, f'rate:learning:{user.id}:{run_id}', maximum=20)
     async with request.app.state.session_factory() as session:
         run, challenge, progress = await _learning_context(session, run_id, user)
-        if not learning.expired(progress):
-            raise HTTPException(409, 'La solución estará disponible cuando venza el plazo del reto.', headers={'Cache-Control': 'no-store'})
+        used = await learning.reveal_ids(session, progress)
+        reason = learning.solution_access(progress, learning.hints_for(run, challenge, progress), used)
+        if reason is None:
+            raise HTTPException(409, 'La solución estará disponible al vencer el plazo o al consultar todas las pistas.', headers={'Cache-Control': 'no-store'})
         solution = await learning.solution_for_run(session, run, challenge, progress=progress)
         if not isinstance(solution.get('answer'), (str, type(None))):
             solution['answer'] = __import__('json').dumps(solution['answer'], ensure_ascii=False, sort_keys=True, indent=2)
         if progress.solution_revealed_at is None:
             progress.solution_revealed_at = now_utc()
             await write_audit(session, user.id, 'challenge.solution.reveal', 'challenge_run', str(run.id),
-                              {'challenge': challenge.code, 'available_points': learning.expired_points(progress)})
+                              {'challenge': challenge.code, 'available_points': learning.points_for(progress, len(used)), 'reason': reason})
         result = await learning.metadata(session, run, challenge, progress)
         result['solution'] = solution
         await session.commit()
@@ -1091,12 +1159,14 @@ async def learning_complete(run_id: int, request: Request, user=Depends(require_
     await check_rate_limit(request.app.state.redis, f'rate:learning:{user.id}:{run_id}', maximum=20)
     async with request.app.state.session_factory() as session:
         run, challenge, progress = await _learning_context(session, run_id, user)
-        if not learning.expired(progress) or progress.solution_revealed_at is None:
-            raise HTTPException(409, 'Espera a que venza el plazo y revisa la solución antes de registrar el aprendizaje.', headers={'Cache-Control': 'no-store'})
+        used = await learning.reveal_ids(session, progress)
+        if (learning.solution_access(progress, learning.hints_for(run, challenge, progress), used) is None
+                or progress.solution_revealed_at is None):
+            raise HTTPException(409, 'Consulta todas las pistas o espera al vencimiento y revisa la solución antes de registrar el aprendizaje.', headers={'Cache-Control': 'no-store'})
         existing = await session.scalar(select(ChallengeCompletion).where(
             ChallengeCompletion.user_id == user.id, ChallengeCompletion.challenge_id == challenge.id))
         newly_completed = existing is None
-        points = learning.expired_points(progress) if newly_completed else 0
+        points = learning.points_for(progress, len(used)) if newly_completed else 0
         if newly_completed:
             session.add(ChallengeCompletion(user_id=user.id, challenge_id=challenge.id, awarded_points=points))
             progress.is_assisted = True
@@ -1107,6 +1177,6 @@ async def learning_complete(run_id: int, request: Request, user=Depends(require_
     if newly_completed:
         await _broadcast_ranking(request)
     result = SubmissionResponse(correct=True, challenge_completed=True, awarded_points=points,
-        message=(f'Aprendizaje asistido registrado con el {learning.expired_percent(progress)}% del puntaje base.' if newly_completed
+        message=(f'Aprendizaje asistido registrado con {points} puntos.' if newly_completed
                  else 'Este reto ya estaba completado; tus puntos originales se conservan y no se duplican.'))
     return _learning_response(result.model_dump())

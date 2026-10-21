@@ -5,6 +5,7 @@ from ..models import Challenge, ChallengeGroupAssignment, StudentGroup
 from ..api.challenges import require_idle_challenge
 from .bootstrap import write_audit
 from .vm_logic import CODES, EXPECTED_SCENARIOS
+from .challenge_deletion import deleted_codes
 
 SPECS = {
     'WEB-02': {'name': 'Autenticación web · fallo lógico en vivo', 'difficulty': 'Medio',
@@ -23,13 +24,16 @@ SPECS = {
 
 
 async def configure(session, group_code='45HY'):
+    permanently_deleted = await deleted_codes(session)
+    expected = set(CODES) - permanently_deleted
     group = await session.scalar(select(StudentGroup).where(StudentGroup.code == group_code,
         StudentGroup.is_active.is_(True)).with_for_update())
     if group is None:
         raise ValueError('El grupo activo solicitado no existe')
     challenges = (await session.scalars(select(Challenge).options(selectinload(Challenge.flags))
         .where(Challenge.code.in_(CODES)).order_by(Challenge.id).with_for_update())).all()
-    if {challenge.code for challenge in challenges} != set(CODES):
+    challenges = [challenge for challenge in challenges if challenge.code in expected]
+    if {challenge.code for challenge in challenges} != expected:
         raise ValueError('Faltan retos existentes del lote VM')
     changed = []
     for challenge in challenges:
@@ -54,4 +58,4 @@ async def configure(session, group_code='45HY'):
             await write_audit(session, None, 'challenge.group.assign', 'challenge', str(challenge.id),
                               {'code': challenge.code, 'group_id': group.id})
     await session.flush()
-    return {'group': group.code, 'changed': changed, 'vm_logic': list(CODES)}
+    return {'group': group.code, 'changed': changed, 'vm_logic': [code for code in CODES if code in expected]}

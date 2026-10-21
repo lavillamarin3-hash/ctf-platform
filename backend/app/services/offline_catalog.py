@@ -5,26 +5,29 @@ from ..api.challenges import require_idle_challenge
 from ..domain.challenges.offline import CATALOG
 from ..models import Challenge, ChallengeFlag, ChallengeGroupAssignment, StudentGroup
 from .bootstrap import write_audit
+from .challenge_deletion import deleted_codes
 
 VERSION = 'OFFLINE-V1'
 
 
 async def configure(session, group_code):
+    permanently_deleted = await deleted_codes(session)
+    catalog = {code: spec for code, spec in CATALOG.items() if code not in permanently_deleted}
     group = await session.scalar(select(StudentGroup).where(StudentGroup.code == group_code, StudentGroup.is_active.is_(True)).with_for_update())
     if group is None:
         raise ValueError('El grupo activo solicitado no existe')
     challenges = (await session.scalars(select(Challenge).options(selectinload(Challenge.flags)).order_by(Challenge.id).with_for_update())).all()
     by_code = {c.code: c for c in challenges}
-    missing = set(CATALOG) - set(by_code)
+    missing = set(catalog) - set(by_code)
     if missing:
         raise ValueError('Faltan retos del catálogo: ' + ', '.join(sorted(missing)))
     # Validar todos antes de modificar cualquiera. No convertir una corrida en uso.
-    for code in CATALOG:
+    for code in catalog:
         if by_code[code].scenario == 'SSH-PASSWORD-LAB' or (by_code[code].scenario or '').startswith('VM-LOGIC-'): continue
         if by_code[code].scenario != VERSION:
             await require_idle_challenge(session, by_code[code].id)
     report = []
-    for code, (title, kind, objective) in CATALOG.items():
+    for code, (title, kind, objective) in catalog.items():
         challenge = by_code[code]
         if challenge.scenario == 'SSH-PASSWORD-LAB':
             report.append({'code':code,'name':challenge.name,'mode':'ssh_password_lab'})
@@ -48,7 +51,9 @@ async def configure(session, group_code):
             challenge.difficulty = 'Medio' if kind in ('rsa', 'stego', 'validator', 'join', 'lateral', 'pcap', 'stack') else 'Básico'
         report.append({'code': code, 'name': challenge.name, 'mode': 'offline_case'})
     # Solo los 38 conocidos: no publicar accidentalmente borradores nuevos.
-    for code in [*CATALOG, 'LAB-01', 'ESC-01-RECON', 'DFIR-01']:
+    publication_codes = [code for code in [*catalog, 'LAB-01', 'ESC-01-RECON', 'DFIR-01']
+                         if code not in permanently_deleted]
+    for code in publication_codes:
         challenge = by_code.get(code)
         if challenge is None:
             raise ValueError('Falta el reto protegido ' + code)
@@ -60,4 +65,4 @@ async def configure(session, group_code):
             session.add(ChallengeGroupAssignment(challenge_id=challenge.id, group_id=group.id))
             await write_audit(session, None, 'challenge.group.assign', 'challenge', str(challenge.id), {'group_id': group.id, 'code': code})
     await session.flush()
-    return {'group': group.code, 'converted': report, 'published_assigned': len(CATALOG)+3}
+    return {'group': group.code, 'converted': report, 'published_assigned': len(publication_codes)}

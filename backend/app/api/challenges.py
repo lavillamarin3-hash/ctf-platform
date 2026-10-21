@@ -2,21 +2,28 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.responses import Response
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 from ..core import get_current_user, hash_password, require_roles
 from ..models import Challenge, ChallengeCompletion, ChallengeFlag, ChallengeGroupAssignment, ChallengeRun, GroupMembership, StudentGroup, User
-from ..schemas import ChallengeCreate, ChallengeView, FlagCreate, FlagUpdate
+from ..schemas import (ChallengeCreate, ChallengeView, FlagCreate, FlagUpdate,
+                       ChallengeDeletionPreview, ChallengePermanentDeleteRequest,
+                       ChallengePermanentDeleteResult)
 from ..services.bootstrap import challenge_view, write_audit
 from ..services.challenge_runtime import _reconcile_esc_guacamole_access
 from ..services.runtime_flags import EXPLICIT_STATIC_VALIDATOR, is_effectively_dynamic
+from ..services.challenge_deletion import delete_graph, deletion_preview
 
 
 from fastapi import APIRouter
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 
 async def require_idle_challenge(session, challenge_id: int) -> None:
@@ -147,6 +154,68 @@ async def archive_challenge(code: str, request: Request, user=Depends(require_ro
     if sync_group_ids:
         await _reconcile_esc_guacamole_access(request, sync_group_ids)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get('/api/v1/challenges/{code}/deletion-preview', response_model=ChallengeDeletionPreview)
+async def preview_challenge_deletion(code: str, request: Request, user=Depends(require_roles('admin'))):
+    async with request.app.state.session_factory() as session:
+        challenge = await session.scalar(select(Challenge).where(Challenge.code == code))
+        if challenge is None:
+            raise HTTPException(404, 'Reto no encontrado')
+        return await deletion_preview(session, challenge)
+
+
+@router.delete('/api/v1/challenges/{code}/permanent', response_model=ChallengePermanentDeleteResult)
+async def permanently_delete_challenge(code: str, payload: ChallengePermanentDeleteRequest,
+                                       request: Request, user=Depends(require_roles('admin'))):
+    if payload.confirm_code != code:
+        raise HTTPException(422, 'Escribe exactamente el código del reto para confirmar su eliminación definitiva.')
+    async with request.app.state.session_factory() as session:
+        # NO KEY UPDATE excluye el FOR UPDATE de start_challenge y evita un
+        # ciclo con corridas históricas que ya estaban registrando su resultado
+        # (sus FKs toman KEY SHARE). El DELETE final conserva las comprobaciones
+        # de PostgreSQL; una nueva referencia concurrente revierte todo con 409.
+        # La vista previa es informativa; volvemos a contar y comprobar aquí.
+        challenge = await session.scalar(select(Challenge).where(Challenge.code == code)
+                                         .with_for_update(key_share=True))
+        if challenge is None:
+            raise HTTPException(404, 'Reto no encontrado')
+        preview = await deletion_preview(session, challenge)
+        if not preview['can_delete']:
+            raise HTTPException(409, ' '.join(item['message'] for item in preview['blockers']))
+        sync_group_ids = list((await session.scalars(select(ChallengeGroupAssignment.group_id).where(
+            ChallengeGroupAssignment.challenge_id == challenge.id))).all()) if code == 'ESC-01-RECON' else []
+        try:
+            await delete_graph(session, challenge.id)
+            await write_audit(session, user.id, 'challenge.delete', 'challenge', str(challenge.id), {
+                'code': preview['code'], 'name': preview['name'], 'counts': preview['counts'],
+            })
+            await session.commit()
+        except IntegrityError as exc:
+            await session.rollback()
+            raise HTTPException(409, 'El reto tiene cambios o dependencias pendientes. Actualiza la vista previa y vuelve a intentarlo.') from exc
+        except Exception:
+            await session.rollback()
+            raise
+    warning = None
+    if sync_group_ids:
+        try:
+            await _reconcile_esc_guacamole_access(request, sync_group_ids)
+        except Exception:
+            # La eliminación ya se confirmó. Un fallo remoto no convierte ese
+            # resultado en un error de borrado ni invita a repetir la operación.
+            warning = ('Reto eliminado. La sincronización de permisos del laboratorio quedó pendiente; '
+                       'revisa Guacamole.')
+            logger.warning('Reto eliminado con sincronización Guacamole pendiente: %s', code)
+            try:
+                async with request.app.state.session_factory() as audit_session:
+                    await write_audit(audit_session, user.id, 'challenge.delete.sync_pending',
+                                      'challenge', code, {'code': code, 'group_ids': sync_group_ids})
+                    await audit_session.commit()
+            except Exception:
+                logger.warning('No se pudo registrar la sincronización pendiente del reto: %s', code)
+    return {'code': preview['code'], 'name': preview['name'], 'counts': preview['counts'],
+            'deleted': True, 'warning': warning}
 
 
 @router.post("/api/v1/challenges/{code}/flags", response_model=ChallengeView)

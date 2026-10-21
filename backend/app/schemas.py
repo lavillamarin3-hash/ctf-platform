@@ -216,6 +216,34 @@ class ChallengeCreate(BaseModel):
         return normalized
 
 
+class ChallengePermanentDeleteRequest(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    # No se normaliza ni recorta: la confirmación debe coincidir exactamente.
+    confirm_code: str = Field(min_length=3, max_length=64)
+
+
+class ChallengeDeletionBlocker(BaseModel):
+    type: str
+    message: str
+    count: int
+
+
+class ChallengeDeletionPreview(BaseModel):
+    code: str
+    name: str
+    counts: dict[str, int]
+    blockers: list[ChallengeDeletionBlocker]
+    can_delete: bool
+
+
+class ChallengePermanentDeleteResult(BaseModel):
+    code: str
+    name: str
+    counts: dict[str, int]
+    deleted: bool
+    warning: str | None = None
+
+
 class FlagCreate(BaseModel):
     label: str = Field(min_length=2, max_length=120)
     value: str | None = Field(default=None, min_length=4, max_length=512)

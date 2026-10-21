@@ -108,7 +108,11 @@ async def seed_data(session_factory) -> None:
                     session.add(VMAsset(laboratory_id=lab.id, name=vm_name, os=os_name, ip_address=ip, vlan=vlan, role=net_role, network_role=net_role, subnet=subnet, profile=profile, status="ready"))
 
         await session.flush()
+        from .challenge_deletion import deleted_codes
+        permanently_deleted = await deleted_codes(session)
         for item in SEED_CHALLENGES:
+            if item['code'] in permanently_deleted:
+                continue
             challenge = await session.scalar(select(Challenge).where(Challenge.code == item["code"]))
             if challenge is not None:
                 # El catálogo no sobrescribe retos existentes. Esto evita alterar

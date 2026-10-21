@@ -649,7 +649,10 @@ class RunLifecycleTests(unittest.IsolatedAsyncioTestCase):
         expired = self.active_run(100)
         expired.expires_at = now_utc() - timedelta(seconds=1)
         instance = self.instance(100)
-        session = MemorySession([self.challenge, expired, instance, instance], objects=self.objects, run_id=101)
+        # El cierre confirma y libera el lock; el inicio vuelve a consultar el
+        # reto bajo lock antes de reutilizar la instancia recién limpiada.
+        session = MemorySession([self.challenge, expired, instance, self.challenge, instance],
+                                objects=self.objects, run_id=101)
         self.redis.values[reservation_key(self.vm.ip_address)] = "100"
         self.injector.files[(self.vm.ip_address, "/opt/ctf/flag.txt")] = "FLAG{previous-run}"
         result = await runs.start_challenge("LAB-01", self.request(session), self.user)

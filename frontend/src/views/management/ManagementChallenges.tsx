@@ -4,13 +4,15 @@
 // ============================================================
 
 import { request } from "../../services/api/client";
-import { createElement, useState } from "react";
+import { useRef, useState } from "react";
 import { difficultyStyle } from "../../config";
 import { inferCategory } from "../../components/challenges";
 import { legacyPublishedCodes } from "../../lib/pilotChallenges";
 import type { ManagementController } from "../../controllers/useManagementController";
+import { ChallengeDeletionDialog } from "../../components/ChallengeDeletionDialog";
 
 export function ManagementChallenges({ controller }: { controller: ManagementController }) {
+  const catalogHeading = useRef<HTMLHeadingElement>(null);
   const [dfirBusy, setDfirBusy] = useState(false);
   const [dfirMessage, setDfirMessage] = useState("");
   async function createDfir() {
@@ -40,7 +42,7 @@ export function ManagementChallenges({ controller }: { controller: ManagementCon
           GESTIÓN DE CONTENIDO
         </span>
 
-        <h1>
+        <h1 ref={catalogHeading} tabIndex={-1}>
           Retos
         </h1>
 
@@ -215,6 +217,15 @@ export function ManagementChallenges({ controller }: { controller: ManagementCon
                     >
                       Desactivar
                     </button>
+                    {isAdmin && controller.user.role === "admin" && <button
+                      type="button"
+                      className="table-action danger"
+                      onClick={() => controller.challengeDeletion.open(c)}
+                      disabled={controller.challengeDeletion.busy}
+                      aria-label={`Eliminar definitivamente ${c.code}`}
+                    >
+                      Eliminar definitivamente
+                    </button>}
                   </div>
                 </td>
               </tr>
@@ -232,6 +243,7 @@ export function ManagementChallenges({ controller }: { controller: ManagementCon
         </div>
       )}
     </div>
+    {isAdmin && controller.user.role === "admin" && <ChallengeDeletionDialog controller={controller.challengeDeletion} fallbackFocus={catalogHeading} />}
   </section>
   );
 }

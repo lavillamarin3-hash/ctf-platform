@@ -1,0 +1,20 @@
+.external-web-workspace { padding: 1.25rem; }
+.external-web-heading { display: flex; align-items: start; justify-content: space-between; gap: 1rem; }
+.external-web-workspace h3 { margin: .5rem 0; }
+.external-web-workspace > .primary-action { display: inline-flex; margin: .75rem 0; text-decoration: none; }
+.external-web-address { overflow-wrap: anywhere; }
+.external-web-steps { padding-left: 1.5rem; line-height: 1.7; }
+.external-web-workspace > form { display: grid; gap: .75rem; margin-top: 1.25rem; }
+.external-web-workspace input { width: 100%; }
+.external-web-ssh-layout { display: grid; gap: 1rem; }
+.external-web-mission { min-width: 0; }
+.external-web-target { display: flex; flex-wrap: wrap; gap: .75rem 2rem; padding: .85rem; border: 1px solid var(--ui-border); border-radius: .6rem; background: var(--ui-surface-2); }
+.external-web-target dt { color: var(--ui-muted); font-size: .85rem; }
+.external-web-target dd { margin: .2rem 0 0; font-weight: 700; }
+.external-web-discovery { margin: 1rem 0; padding: .85rem; border: 1px solid var(--ui-border); border-radius: .6rem; }
+.external-web-discovery summary { cursor: pointer; font-weight: 700; }
+.external-web-discovery pre { overflow-x: auto; padding: .75rem; background: var(--ui-surface-2); border-radius: .4rem; }
+.external-web-note { color: var(--ui-muted); font-size: .85rem; line-height: 1.6; }
+.external-web-terminal-choice { align-items: flex-start; margin: 1rem 0; }
+.external-web-terminal-choice .field-help { display: block; }
+@media (max-width: 640px) { .external-web-heading { flex-direction: column; } }

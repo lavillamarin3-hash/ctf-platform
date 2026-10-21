@@ -14,6 +14,7 @@ import { SshPracticeWorkspace } from './player/SshPracticeWorkspace';
 import { HttpPracticeWorkspace } from './player/HttpPracticeWorkspace';
 import { LearningPanel } from './player/LearningPanel';
 import { VmLogicWorkspace } from './player/VmLogicWorkspace';
+import { ExternalWebWorkspace } from './player/ExternalWebWorkspace';
 import { LaboratoryRunWorkspace } from "./player/LaboratoryRunWorkspace";
 import { needsLaboratoryCleanup } from "../lib/laboratoryRunState";
 import { ChallengeLearningResources } from "./ChallengeLearningResources";
@@ -141,6 +142,8 @@ export function ChallengeDetail({
   const activeRun = runs.find((run) => run.challenge_code === challenge.code && needsLaboratoryCleanup(run));
   const learningRun = [...runs].filter(run => run.challenge_code === challenge.code).sort((a, b) => b.id - a.id)[0];
   const httpPractice = ['ESC-06-WEBAUTH', 'ESC-07-EXPOSED', 'WEB-02', 'WEB-06', 'FOR-05', 'DFIR-01'].includes(challenge.code);
+  const externalWeb = challenge.code === 'WEB-CONDOR' && challenge.scenario === 'CONDOR-WEB-LAB';
+  const externalWebTerminal = externalWeb && challenge.asset_references.includes('LAB-KALI');
   const otherVmRun = ['LAB-01','ESC-01-RECON'].includes(challenge.code) ? runs.find(run => run.challenge_code !== challenge.code && run.workspace_strategy === 'shared_lab_vm' && needsLaboratoryCleanup(run)) : null;
   const startLaboratory = async () => {
     setStarting(true);
@@ -180,6 +183,7 @@ export function ChallengeDetail({
       <LearningPanel run={learningRun} completed={challenge.completed} onComplete={onLearningComplete} />
 
       {activeRun ? (
+        activeRun.workspace_strategy === 'external_web_lab' ? <ExternalWebWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
         activeRun.workspace_strategy === 'vm_logic_lab' || (challenge.code === 'ESC-07-EXPOSED' && activeRun.workspace_strategy === 'http_files_lab') ? <VmLogicWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
         activeRun.workspace_strategy === 'ssh_password_lab' ? <SshPracticeWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
         ['http_password_lab', 'http_files_lab'].includes(activeRun.workspace_strategy) ? <HttpPracticeWorkspace key={activeRun.id} run={activeRun} onClose={onClose} onSubmit={onSubmit} /> :
@@ -193,17 +197,17 @@ export function ChallengeDetail({
             <span className="muted-chip">{starting ? "Preparando" : "Sin sesión activa"}</span>
           </div>
           <ol className="laboratory-flow" aria-label="Pasos del laboratorio">
-            <li><span>1</span>Inicia tu instancia</li>
-            <li><span>2</span>{httpPractice ? "Investiga el objetivo desde Kali" : challenge.asset_references.includes("OFFLINE-CASE") ? "Analiza las evidencias en Kali" : challenge.code === "DFIR-01" ? "Correlaciona las evidencias" : "Investiga en la terminal"}</li>
+            <li><span>1</span>{externalWebTerminal ? "Inicia y abre SSH de Kali" : externalWeb ? "Inicia el ejercicio" : "Inicia tu instancia"}</li>
+            <li><span>2</span>{externalWebTerminal ? "Descubre el servicio HTTP de la víctima" : externalWeb ? "Abre el portal de Operación Cóndor" : httpPractice ? "Investiga el objetivo desde Kali" : challenge.asset_references.includes("OFFLINE-CASE") ? "Analiza las evidencias en Kali" : challenge.code === "DFIR-01" ? "Correlaciona las evidencias" : "Investiga en la terminal"}</li>
             <li><span>3</span>Valida tus resultados</li>
           </ol>
-          <p>{httpPractice ? "El ejercicio se prepara en LNX-VICT y se investiga desde Kali. Adquiere las evidencias, comprueba tus hipótesis y valida tu análisis. Las pistas son opcionales y descuentan puntos." : challenge.asset_references.includes("OFFLINE-CASE") ? "Prepara las evidencias en Kali con el comando de transferencia y resuelve con sus herramientas. El ZIP queda disponible como alternativa para ejercicios de lógica y análisis." : challenge.code === "DFIR-01" ? "El expediente, la terminal Kali y el formulario de análisis aparecerán aquí al iniciar." : "La terminal, el bloc de notas y el envío de flag aparecerán aquí cuando tu entorno esté listo."}</p>
+          <p>{externalWebTerminal ? "El contador empieza al iniciar. Trabajarás desde SSH de Kali para identificar el servicio HTTP en la IP y el rango de puertos autorizados. Investiga el portal, consigue acceso y publica un comunicado; después valida la flag en el laboratorio. Las pistas son opcionales y descuentan puntos." : externalWeb ? "El contador empieza al iniciar. Abrirás el portal local en otra pestaña, resolverás el acceso y publicarás un comunicado. Después registra aquí la flag. Las pistas son opcionales y descuentan puntos." : httpPractice ? "El ejercicio se prepara en LNX-VICT y se investiga desde Kali. Adquiere las evidencias, comprueba tus hipótesis y valida tu análisis. Las pistas son opcionales y descuentan puntos." : challenge.asset_references.includes("OFFLINE-CASE") ? "Prepara las evidencias en Kali y utiliza sus herramientas para analizarlas. El ZIP queda disponible como alternativa para ejercicios de lógica y análisis." : challenge.code === "DFIR-01" ? "El expediente, la terminal Kali y el formulario de análisis aparecerán aquí al iniciar." : "La terminal, el bloc de notas y el envío de flag aparecerán aquí cuando tu entorno esté listo."}</p>
           {challenge.completed && <p className="practice-note">Puedes practicar de nuevo. Los puntos de este reto se otorgan una sola vez.</p>}
           <ErrorMessage message={startError} />
           {otherVmRun && <div role="status" className="instruction-box"><p>La VM está reservada por tu reto {otherVmRun.challenge_code}. Ciérralo antes de abrir este laboratorio.</p>
             <button className="secondary-action" disabled={starting} onClick={() => {setStarting(true); void onClose(otherVmRun.id).catch(error=>setStartError(error instanceof Error ? error.message : 'No se pudo cerrar la sesión anterior.')).finally(()=>setStarting(false));}}>Cerrar {otherVmRun.challenge_code} y liberar la VM</button></div>}
           <button type="button" className="primary-action" onClick={() => void startLaboratory()} disabled={starting}>
-            <Icon name="play" />{starting ? "Preparando laboratorio…" : challenge.completed ? "Reabrir entorno de práctica" : "Iniciar laboratorio"}
+            <Icon name="play" />{starting ? "Preparando laboratorio…" : challenge.completed ? "Reabrir entorno de práctica" : externalWeb ? "Iniciar ejercicio" : "Iniciar laboratorio"}
           </button>
         </section>
       )}
@@ -214,7 +218,7 @@ export function ChallengeDetail({
           <div><span>CATEGORÍA</span><strong>{challenge.category}</strong></div>
           <div><span>DIFICULTAD</span><strong>{challenge.difficulty}</strong></div>
           <div><span>ESCENARIO</span><strong>{challenge.scenario || "CTF general"}</strong></div>
-          <div><span>ACTIVOS ASIGNADOS</span><strong>{challenge.asset_references.join(" · ") || "Definidos al iniciar"}</strong></div>
+          <div><span>ACTIVOS ASIGNADOS</span><strong>{challenge.asset_references.filter((reference) => !externalWebTerminal || !reference.startsWith("CONDOR-PORTAL:")).join(" · ") || "Definidos al iniciar"}</strong></div>
         </div>
       </details>
 
@@ -285,6 +289,11 @@ export function ChallengeForm({
   );
   const [difficulty, setDifficulty] = useState<Challenge["difficulty"]>(initial?.difficulty ?? "Básico");
   const [scenario, setScenario] = useState(initial?.scenario ?? "");
+  const externalWeb = code.trim().toUpperCase() === "WEB-CONDOR" && scenario === "CONDOR-WEB-LAB";
+  const [portalUrl, setPortalUrl] = useState(() =>
+    initial?.asset_references?.find((reference) => reference.startsWith("CONDOR-PORTAL:"))?.slice("CONDOR-PORTAL:".length) ?? ""
+  );
+  const [useKaliTerminal, setUseKaliTerminal] = useState(initial?.asset_references.includes("LAB-KALI") ?? false);
   const [mitre, setMitre] = useState(initial?.mitre_technique ?? "—");
   const [assets, setAssets] = useState(initial?.asset_references?.join(", ") ?? firstAsset);
   const [primaryAsset, setPrimaryAsset] = useState(firstAsset);
@@ -334,11 +343,11 @@ export function ChallengeForm({
   }, [existingGroupIds]);
 
   useEffect(() => {
-    if (!primaryAsset && laboratories[0]) {
+    if (!externalWeb && !primaryAsset && laboratories[0]) {
       const fallback = laboratories[0].vms?.[0]?.name ?? laboratories[0].code ?? laboratories[0].name;
       setPrimaryAsset(fallback);
     }
-  }, [laboratories, primaryAsset]);
+  }, [laboratories, primaryAsset, externalWeb]);
 
   const assetOptions = useMemo(() => {
     const options: Array<{ value: string; label: string }> = [];
@@ -382,7 +391,20 @@ export function ChallengeForm({
       if (!isValidChallengeCategory(selectedCategory)) {
         throw new Error("La categoría debe tener entre 2 y 48 caracteres: letras, números, espacios, /, _ o -.");
       }
-      const references = [primaryAsset, ...assets.split(",").map((value) => value.trim()).filter(Boolean)];
+      let references: string[];
+      if (externalWeb) {
+        let destination: URL;
+        try { destination = new URL(portalUrl.trim()); }
+        catch { throw new Error("Escribe la URL completa del portal, por ejemplo http://localhost:8094/."); }
+        if (!["http:", "https:"].includes(destination.protocol) || destination.username || destination.password || destination.search || destination.hash) {
+          throw new Error("Usa HTTP o HTTPS sin credenciales, parámetros ni fragmentos para el portal.");
+        }
+        // Este escenario abre un portal independiente: una URL sustituye las
+        // referencias anteriores y nunca añade automáticamente una VM.
+        references = [`CONDOR-PORTAL:${destination.href}`, ...(useKaliTerminal ? ["LAB-KALI"] : [])];
+      } else {
+        references = [primaryAsset, ...assets.split(",").map((value) => value.trim()).filter(Boolean)];
+      }
       const uniqueReferences = [...new Set(references.filter(Boolean))];
       if (!uniqueReferences.length) throw new Error("Selecciona al menos un laboratorio o una VM.");
       const serializedLearningPolicy = serializeLearningPolicy(learningPolicy);
@@ -419,7 +441,7 @@ export function ChallengeForm({
           <div>
             <span className="eyebrow accent">GESTIÓN DE RETO</span>
             <h2>{initial ? `Editar ${initial.code}` : "Nuevo reto"}</h2>
-            <small>Relaciona el reto con un laboratorio real, grupos de estudiantes y sus flags.</small>
+            <small>{externalWeb ? "Configura el portal independiente, los grupos, el tiempo y las pistas del ejercicio." : "Relaciona el reto con un laboratorio real, grupos de estudiantes y sus flags."}</small>
           </div>
           <button type="button" className="icon-btn" onClick={onClose}>×</button>
         </div>
@@ -450,7 +472,10 @@ export function ChallengeForm({
           <label>Dificultad<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as Challenge["difficulty"])}><option>Básico</option><option>Medio</option><option>Avanzado</option></select></label>
           <label>Escenario<input value={scenario} onChange={(event) => setScenario(event.target.value)} /></label>
           <label>MITRE<input value={mitre} onChange={(event) => setMitre(event.target.value)} /></label>
-          <label>Laboratorio / VM
+          {externalWeb ? <label>URL del portal Operación Cóndor
+            <input type="url" value={portalUrl} onChange={(event) => setPortalUrl(event.target.value)} maxLength={1024} placeholder="http://localhost:8094/" required />
+            <small className="field-help">Portal independiente: usa localhost, condor.lab o una IP privada del laboratorio. Cociber CTF administra tiempo, pistas y puntaje. Activa la terminal de Kali para investigar el servicio desde la VM del laboratorio.</small>
+          </label> : <label>Laboratorio / VM
             <select value={primaryAsset} onChange={(event) => setPrimaryAsset(event.target.value)} required>
               <option value="">Selecciona un activo…</option>
               {code === "DFIR-01" && <option value="DFIR-CASE">DFIR-CASE · Expediente forense virtual</option>}
@@ -458,14 +483,20 @@ export function ChallengeForm({
               {assetOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
             <small className="field-help">La VM seleccionada determina IP, protocolo y conexión Guacamole cuando el jugador inicia el reto.</small>
-          </label>
+          </label>}
           <label>Puntos<input type="number" min="1" max="10000" value={points} onChange={(event) => setPoints(event.target.value)} required /></label>
         </div>
 
-        <label className="form-full">Activos adicionales
+        {externalWeb && <label className="switch-row external-web-terminal-choice">
+          <input type="checkbox" checked={useKaliTerminal} onChange={(event) => setUseKaliTerminal(event.target.checked)} />
+          <span>Usar terminal de Kali para descubrir el servicio web
+            <small className="field-help">Al iniciar se habilita el acceso SSH a Kali. Usa en la URL la IP privada de la víctima, accesible desde Kali. El estudiante recibe la IP y el rango autorizado; debe identificar el puerto del portal. El servidor web sigue siendo independiente y compartido.</small>
+          </span>
+        </label>}
+        {!externalWeb && <label className="form-full">Activos adicionales
           <input value={assets} onChange={(event) => setAssets(event.target.value)} placeholder="LAB-LNXVICT, otra-vm" />
           <small className="field-help">Opcional. Usa nombres exactos separados por comas.</small>
-        </label>
+        </label>}
         <label className="form-full">Descripción<textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} required /></label>
         <label className="form-full">Instrucciones del reto<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={4} /></label>
 

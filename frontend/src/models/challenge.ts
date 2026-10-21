@@ -35,3 +35,17 @@ export type Challenge = {
   flags?: Flag[];
   learning_policy?: ChallengeLearningPolicy | null;
 };
+
+/** Impacto de eliminar un reto. No contiene flags ni información privada. */
+export type ChallengeDeletionPreview = {
+  code: string;
+  name: string;
+  counts: Record<string, number>;
+  blockers: Array<{ type: string; message: string; count: number }>;
+  can_delete: boolean;
+};
+
+export type ChallengeDeletionResult = Pick<ChallengeDeletionPreview, "code" | "name" | "counts"> & {
+  deleted: true;
+  warning?: string | null;
+};

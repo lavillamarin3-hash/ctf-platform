@@ -25,6 +25,8 @@
 @import "./styles/17-final-laboratory-workspace.css";
 @import "./styles/18-notifications.css";
 @import "./styles/19-learning.css";
+@import "./styles/20-challenge-deletion.css";
+@import "./styles/21-external-web.css";
 
 /* Tailwind se procesa después de los módulos base. */
 @tailwind base;

@@ -6,11 +6,15 @@ from ..api.challenges import require_idle_challenge
 from ..domain.challenges.offline import CATALOG
 from .bootstrap import write_audit
 from .ssh_practice import CODE
+from .challenge_deletion import deleted_codes
 
 
 async def configure(session):
+    permanently_deleted = await deleted_codes(session)
+    expected = set([*CATALOG, 'DFIR-01']) - permanently_deleted
     challenges=(await session.scalars(select(Challenge).options(selectinload(Challenge.flags)).where(Challenge.code.in_([*CATALOG,'DFIR-01'])).order_by(Challenge.id).with_for_update())).all()
-    if len(challenges)!=36: raise ValueError('No se encontró el catálogo completo de 36 casos')
+    challenges = [challenge for challenge in challenges if challenge.code in expected]
+    if {challenge.code for challenge in challenges} != expected: raise ValueError('No se encontró el catálogo completo de casos no eliminados')
     for c in challenges:
         if (c.scenario or '').startswith('VM-LOGIC-'): continue
         desired=['LAB-KALI','LAB-LNXVICT'] if c.code==CODE else (['DFIR-CASE','LAB-KALI'] if c.code=='DFIR-01' else ['OFFLINE-CASE','LAB-KALI'])
@@ -33,4 +37,5 @@ async def configure(session):
         else:
             c.instructions+=' También puedes resolverlo dentro de la VM Kali: usa Copiar comando para preparar archivos y pégalo en la terminal integrada. Trabaja en ~/ctf/corrida-ID con el ID mostrado en pantalla.'
     await session.flush()
-    return {'kali_analysis':35,'ssh_practice':1,'existing_vm_labs':2}
+    return {'kali_analysis': len(expected - {CODE}), 'ssh_practice': int(CODE in expected),
+            'existing_vm_labs': len({'LAB-01', 'ESC-01-RECON'} - permanently_deleted)}

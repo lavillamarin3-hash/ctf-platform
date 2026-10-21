@@ -6,6 +6,7 @@ from sqlalchemy.orm import selectinload
 from ..models import Challenge, ChallengeFlag, ChallengeGroupAssignment, StudentGroup
 from ..api.challenges import require_idle_challenge
 from .bootstrap import write_audit
+from .challenge_deletion import deleted_codes
 
 
 SPECS = {
@@ -29,6 +30,7 @@ SPECS = {
 
 
 async def configure(session, group_code='45HY'):
+    permanently_deleted = await deleted_codes(session)
     group = await session.scalar(select(StudentGroup).where(
         StudentGroup.code == group_code, StudentGroup.is_active.is_(True)).with_for_update())
     if group is None:
@@ -39,6 +41,8 @@ async def configure(session, group_code='45HY'):
     created = []
     changed = []
     for code, spec in SPECS.items():
+        if code in permanently_deleted:
+            continue
         challenge = by_code.get(code)
         if challenge is None:
             challenge = Challenge(code=code, category='WEB', asset_references=['LAB-KALI', 'LAB-LNXVICT'],
@@ -76,4 +80,5 @@ async def configure(session, group_code='45HY'):
             await write_audit(session, None, 'challenge.group.assign', 'challenge', str(challenge.id),
                               {'code': code, 'group_id': group.id})
     await session.flush()
-    return {'group': group.code, 'created': created, 'changed': changed, 'published_assigned': list(SPECS)}
+    return {'group': group.code, 'created': created, 'changed': changed,
+            'published_assigned': [code for code in SPECS if code not in permanently_deleted]}

@@ -65,7 +65,7 @@ reto y no se documentan en este archivo.
 
 ## Laboratorio web Operación Cóndor
 
-[Operación Cóndor tiene su propio repositorio](https://github.com/lavillamarin3-hash/operacion-condor). Es un portal ficticio para practicar el acceso a un administrador mediante un diccionario de contraseñas del laboratorio. Incluye código MVC, instalación nativa en Ubuntu Server 26.04 y una [guía de montaje y resolución](https://github.com/lavillamarin3-hash/operacion-condor/blob/main/GUIA_UBUNTU_26_04.md). Su inicio y puntuación todavía no están integrados automáticamente con Cociber CTF.
+[Operación Cóndor tiene su propio repositorio](https://github.com/lavillamarin3-hash/operacion-condor). Es un portal ficticio para practicar reconocimiento web, correlación de cuentas y comprobación de credenciales con un diccionario acotado. En la modalidad SSH, el reto `WEB-CONDOR` integra la terminal de Kali, el tiempo, las pistas y la validación de la flag en Cociber CTF. El estudiante investiga la IP y los puertos asignados, encuentra el usuario y la contraseña del laboratorio y publica un comunicado con título libre para obtener la flag. Debe conservar evidencias y explicar sus hallazgos al tutor. La web es independiente y compartida: iniciar o cerrar el reto no aprovisiona VMs ni reinicia sus datos. Consulta la [guía del estudiante](./Docs/GUIA_OPERACION_CONDOR.md).
 
 ## Roles
 
@@ -171,6 +171,8 @@ deben limitarse a los escenarios y activos autorizados por el instructor.
 - [Frontend](./frontend/)
 - [Configurar tiempo, pistas y descuentos por reto](./Docs/CONFIGURAR_TIEMPO_Y_PISTAS.md)
 - [Retos de investigación con Kali y LNX-VICT](./Docs/RETOS_VM_LOGICA.md)
+- [Resolver Operación Cóndor en la demostración local](./Docs/GUIA_OPERACION_CONDOR.md)
+- [Eliminar un reto definitivamente](./Docs/ELIMINAR_RETOS.md)
 - Documentación interactiva de la API: `/docs` con la aplicación ejecutándose
 
 
