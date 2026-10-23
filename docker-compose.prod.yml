@@ -1,0 +1,33 @@
+# Producción: frontend y API solamente.
+# PostgreSQL y Redis son servicios NATIVOS en LAB-DB-POSTGRES 10.10.10.14.
+# Usar exclusivamente: docker compose -f docker-compose.prod.yml ...
+# NO combinar -f docker-compose.yml ni ejecutar "down -v".
+name: cociber-ctf-prod
+
+services:
+  api:
+    build:
+      context: ./backend
+    env_file:
+      - .env
+    restart: unless-stopped
+    expose:
+      - "8000"
+    networks:
+      - ctf_internal
+
+  web:
+    build:
+      context: ./frontend
+    depends_on:
+      - api
+    restart: unless-stopped
+    ports:
+      # Publica Nginx solo en la IP privada de la VM de aplicación.
+      - "${WEB_BIND_IP:-10.10.10.13}:${WEB_PORT:-8081}:80"
+    networks:
+      - ctf_internal
+
+networks:
+  ctf_internal:
+    driver: bridge
