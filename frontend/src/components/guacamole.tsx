@@ -194,7 +194,7 @@ export function GuacamoleConnectionForm({
 
   const [name, setName] = useState(initial?.name ?? "");
   const [protocol, setProtocol] = useState<"ssh" | "rdp" | "vnc">(initial?.protocol ?? "ssh");
-  const [hostname, setHostname] = useState(initial?.hostname ?? "192.168.146.137");
+  const [hostname, setHostname] = useState(initial?.hostname ?? "10.10.30.12");
   const [port, setPort] = useState(initial?.port ? Number(initial.port) : 22);
   const [username, setUsername] = useState(getParameter("username"));
   const [password, setPassword] = useState("");
@@ -280,7 +280,7 @@ export function GuacamoleConnectionForm({
             <input
               value={hostname}
               onChange={(event) => setHostname(event.target.value)}
-              placeholder="192.168.146.137"
+              placeholder="10.10.30.12"
               disabled={saving}
               required
             />
@@ -343,7 +343,7 @@ export function GuacamoleConnectionForm({
 
         <div className="form-full">
           <small className="form-help">
-            Para tu laboratorio actual, la víctima SSH es <strong>192.168.146.137:22</strong>.
+            Para tu laboratorio actual, la víctima SSH es <strong>10.10.30.12:22</strong>.
           </small>
         </div>
 
