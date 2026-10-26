@@ -29,7 +29,7 @@ async def configure(session):
             c.name='Fuerza bruta de credenciales · SSH de práctica'
             c.description='Desde Kali encuentra la contraseña de una cuenta temporal en el servicio SSH de práctica de LNX-VICT y recupera su flag.'
             c.instructions=('Inicia la corrida y abre Kali. La pantalla muestra un usuario temporal y un diccionario de 12 contraseñas. '
-                'Ejecuta el comando de Hydra indicado contra 192.168.146.137:2222, con un solo intento simultáneo. '
+                'Ejecuta el comando de Hydra indicado contra 10.10.30.12:2222, con un solo intento simultáneo. '
                 'Con la contraseña encontrada entra por SSH al mismo puerto y ejecuta cat flag.txt. Envía la flag y cierra el ejercicio. '
                 'El servicio es SSH real con shell didáctica restringida; no otorga una cuenta del sistema ni usa el puerto SSH administrativo. '
                 'La cuenta caduca en una hora y también se invalida al cerrar. Técnica T1110.001.')
