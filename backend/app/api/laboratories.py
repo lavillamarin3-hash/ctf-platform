@@ -182,7 +182,7 @@ async def verify_ssh_lab(request: Request, _=Depends(require_roles("admin"))):
 
     No crea ni modifica laboratorios, VMs, retos, flags ni asignaciones.
     """
-    target_ip = "192.168.146.137"
+    target_ip = "10.10.30.12"
     vm_name = "LAB-LNXVICT"
     challenge_code = "LAB-01"
     settings = get_settings()
