@@ -152,7 +152,7 @@ async def main():
     tag = uuid.uuid4().hex[:8]
     guac = make_guacamole_admin()
     connections = await guac.list_connections()
-    kali = next(item for item in connections if item.hostname == '192.168.146.134' and item.protocol == 'ssh')
+    kali = next(item for item in connections if item.hostname == '10.10.20.10' and item.protocol == 'ssh')
     async with factory() as session:
         group = await session.scalar(select(StudentGroup).where(StudentGroup.code == '45HY'))
         assert group is not None
@@ -164,7 +164,7 @@ async def main():
     parameters = kali.parameters
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect('192.168.146.134', port=int(parameters.get('port') or 22),
+    client.connect('10.10.20.10', port=int(parameters.get('port') or 22),
         username=parameters['username'], password=parameters['password'], timeout=8, allow_agent=False, look_for_keys=False)
     created_ids = []
     try:
@@ -210,7 +210,7 @@ async def main():
                     info = json.loads((await vm_logic_api.info(view.id, request, user)).body)
                     assert not {'files', 'case', 'expected', 'flag', 'commands'} & set(info)
                     parsed = urlsplit(info['base_url'])
-                    assert parsed.hostname == '192.168.146.137' and parsed.port == 18082
+                    assert parsed.hostname == '10.10.30.12' and parsed.port == 18082
                     answer = solve(client, info['base_url'], code)
                     incorrect = dict(answer)
                     incorrect[next(iter(incorrect))] = 'wrong'
