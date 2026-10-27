@@ -3,6 +3,7 @@ import { Icon } from "../common";
 import type { Run } from "../../models";
 import { prepareFlagCandidate } from "../../lib/prepareFlagCandidate";
 import { GuacamoleTerminal } from "./GuacamoleTerminal";
+import { request } from "../../services/api/client";
 
 type SubmissionResult = { correct: boolean; challenge_completed: boolean; awarded_points: number; message: string };
 type Notice = { kind: "success" | "error"; message: string } | null;
@@ -17,6 +18,7 @@ export function LaboratoryRunWorkspace({ run, onClose, onSubmit }: {
   const [fullscreen, setFullscreen] = useState(false);
   const [notes, setNotes] = useState("");
   const [candidate, setCandidate] = useState("");
+  const [dvwaInfo, setDvwaInfo] = useState<{ target: string; port: number; path: string; row_id: number } | null>(null);
   const [selection, setSelection] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
   const [result, setResult] = useState<SubmissionResult | null>(null);
@@ -24,6 +26,15 @@ export function LaboratoryRunWorkspace({ run, onClose, onSubmit }: {
   const [closing, setClosing] = useState(false);
   const [expired, setExpired] = useState(Date.parse(run.expires_at) <= Date.now());
 
+  useEffect(() => {
+    setDvwaInfo(null);
+    if (run.workspace_strategy !== "dvwa_sql_lab") return;
+    let active = true;
+    void request<{ target: string; port: number; path: string; row_id: number }>(
+      `/runs/${run.id}/dvwa-sql`,
+    ).then(info => { if (active) setDvwaInfo(info); }).catch(() => { /* El servidor decide si hay una corrida válida. */ });
+    return () => { active = false; };
+  }, [run.id, run.workspace_strategy]);
   // Recargar el mismo run tras validar conserva el candidato y el resultado.
   useEffect(() => {
     setCandidate(""); setSelection(""); setResult(null); setNotice(null);
@@ -99,6 +110,10 @@ export function LaboratoryRunWorkspace({ run, onClose, onSubmit }: {
         <button type="button" className="secondary-action lab-fullscreen-action" aria-pressed={fullscreen} onClick={() => void toggleFullscreen()}>{fullscreen ? "Salir de pantalla completa" : "Pantalla completa"}</button>
       </div>
     </header>
+    {run.workspace_strategy === "dvwa_sql_lab" && <section className="glass-panel" role="status">
+      <h3>Objetivo DVWA de tu corrida</h3>
+      {dvwaInfo ? <p>Abre desde Kali http://{dvwaInfo.target}:{dvwaInfo.port}{dvwaInfo.path} · Consulta en SQL Injection únicamente la fila ID <strong>{dvwaInfo.row_id}</strong> de <code>ctf_app_db.secrets</code>. Envía la bandera obtenida y cierra el ejercicio.</p> : <p>Consultando datos de la corrida. Si no aparecen, pide ayuda al instructor.</p>}
+    </section>}
     <div className="laboratory-workspace-grid">
       {expired ? <section className="embedded-terminal-panel terminal-integration-notice"><h3>El laboratorio ha expirado</h3><p>La conexión remota se desconectó. La evidencia dinámica se limpia cuando corresponde; puedes reintentar el cierre si aparece un error.</p></section>
         : <GuacamoleTerminal key={run.id} runId={run.id} preferredProtocol={run.target_protocol} attackerOnly={run.challenge_code === "ESC-01-RECON"} workspaceName={run.target_vm_name === "LAB-KALI" ? "Kali" : undefined} onClipboard={(text) => { setSelection(text); setNotice({ kind: "success", message: "Selección recibida de la conexión. Pulsa Usar selección para preparar el envío." }); }} />}
