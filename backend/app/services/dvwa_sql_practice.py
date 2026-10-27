@@ -38,8 +38,8 @@ def instructions(run) -> dict:
     return {
         "target": TARGET, "port": PORT, "path": "/dvwa/",
         "run_id": run.id, "row_id": row_id(run.id),
-        "mission": "Desde Kali, inicia sesión en DVWA, selecciona el nivel Low y "
-                   "encuentra la fila de tu corrida en ctf_app_db.secrets con SQL Injection.",
+        ""mission": "Desde Kali, inicia sesión en DVWA, selecciona el nivel Low y "
+                   "encuentra la flag de tu fila de corrida en ctf_app_db.secrets con SQL Injection.",
         "note": "Solo LAB-SRVWEB, sin atacar SSH ni otras VMs. El servidor conserva "
                 "la fila 1 de comprobación y las filas de otras corridas. "
                 "Cierra el reto para eliminar solo tu fila.",
