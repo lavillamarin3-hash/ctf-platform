@@ -289,7 +289,7 @@ export function useManagementController({
         // Abrir Guacamole en una ventana nueva para autenticar y probar la sesión real.
         // La ventana no certifica éxito por sí misma; debe comprobarla el administrador.
         const base = guacamoleStatus?.base_url;
-        if (base && /^https?:\\/\\//i.test(base)) window.open(base, "_blank", "noopener,noreferrer");
+        if (base && (base.startsWith("https://") || base.startsWith("http://"))) window.open(base, "_blank", "noopener,noreferrer");
       }
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "No se pudo comprobar la conexión.");
