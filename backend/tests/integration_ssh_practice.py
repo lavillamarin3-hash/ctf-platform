@@ -29,7 +29,7 @@ from app.schemas import SubmissionRequest
 from app.services import ssh_practice
 
 
-KALI_HOST = '192.168.146.134'
+KALI_HOST = '10.10.20.10'
 
 
 def remote(client, script, *, timeout=120):

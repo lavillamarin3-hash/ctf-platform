@@ -10,7 +10,7 @@ import paramiko
 from ..core import get_settings, submission_fingerprint
 
 CODE = 'ESC-02-BRUTEFORCE'
-HOST = '192.168.146.137'
+HOST = '10.10.30.12'
 PORT = 2222
 WORDS = ['Verde2026!', 'Aula2026!', 'Practica01!', 'Kali2026!', 'Laboratorio7!', 'Alumno123!',
          'CTF2026!', 'Acceso2026!', 'Entrena01!', 'Linux2026!', 'ClaveLocal9!', 'Demo2026!']

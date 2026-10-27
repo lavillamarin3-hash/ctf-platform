@@ -5,14 +5,15 @@ nuevas. No se usa como fuente de verdad de la base existente.
 """
 
 DEMO_VM_IPS = {
-    # Solo las dos direcciones confirmadas en el laboratorio actual.
-    "Atacantes": {"192.168.146.134"},
-    "Víctimas": {"192.168.146.137"},
+    "Atacantes": {"10.10.20.10", "10.10.20.11", "10.10.20.12"},
+    "Víctimas": {"10.10.30.10", "10.10.30.11", "10.10.30.12", "10.10.30.20", "10.10.30.21"},
 }
 
 OPERATIONAL_VM_TARGETS = {
-    "LAB-KALI": "192.168.146.134",
-    "LAB-LNXVICT": "192.168.146.137",
+    "LAB-KALI": "10.10.20.10", "LAB-KALI-PURPLE": "10.10.20.11",
+    "LAB-KALI-BLUE": "10.10.20.12", "LAB-WINVICT-A": "10.10.30.10",
+    "LAB-WINVICT-B": "10.10.30.11", "LAB-LNXVICT": "10.10.30.12",
+    "LAB-SRVWEB": "10.10.30.20", "LAB-SRVFSAD": "10.10.30.21",
 }
 
 SEED_CHALLENGES = [
@@ -22,14 +23,14 @@ SEED_CHALLENGES = [
         "description": "Identifica el servicio SSH de la máquina víctima del laboratorio y localiza la evidencia del ejercicio.",
         "instructions": (
             "Trabaja únicamente dentro del laboratorio autorizado. Desde la máquina atacante identifica "
-            "el servicio SSH en 192.168.146.137, conéctate con las credenciales proporcionadas por el instructor "
+            "el servicio SSH en 10.10.30.12, conéctate con las credenciales proporcionadas por el instructor "
             "y localiza /opt/ctf/flag.txt. No realices acciones fuera del entorno."
         ),
         "difficulty": "Básico",
         "category": "MISC",
         "scenario": "LAB-SSH-REAL",
         "mitre_technique": "T1046 — Network Service Scanning",
-        "asset_references": ["LAB-LNXVICT", "LAB-VICTIMAS", "192.168.146.137"],
+        "asset_references": ["LAB-LNXVICT", "LAB-VICTIMAS", "10.10.30.12"],
         "points": 100,
         "is_published": True,
         "flag_specs": [
@@ -49,9 +50,9 @@ SEED_CHALLENGES = [
         "name": "Descubre el servicio de evidencia",
         "description": "Desde Kali identifica un servicio de práctica en la VM Linux víctima y recupera su evidencia dinámica.",
         "instructions": (
-            "Desde la conexión Kali atacante (192.168.146.134), examina únicamente el servicio "
-            "didáctico de 192.168.146.137 en el puerto 18081. Escanea solo 22 y 18081 y solicita "
-            "http://192.168.146.137:18081/evidence. Copia la evidencia dinámica, envíala y cierra "
+            "Desde la conexión Kali atacante (10.10.20.10), examina únicamente el servicio "
+            "didáctico de 10.10.30.12 en el puerto 18081. Escanea solo 22 y 18081 y solicita "
+            "http://10.10.30.12:18081/evidence. Copia la evidencia dinámica, envíala y cierra "
             "el laboratorio. El instructor debe verificar el servicio antes de publicar."
         ),
         "difficulty": "Básico",

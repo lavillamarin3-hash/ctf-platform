@@ -281,6 +281,21 @@ export function useManagementController({
       setMessage(identifier ? "Conexión de Guacamole actualizada correctamente." : "Conexión de Guacamole creada correctamente.");
     } catch (err) { setMessage(err instanceof Error ? err.message : "No se pudo guardar la conexión."); }
   };
+  const checkGuacamoleManagedConnection = async (connection: import("../api").GuacamoleConnection) => {
+    try {
+      const result = await api.checkGuacamoleConnection(connection.identifier);
+      setMessage(`${result.vm_name}: ${result.message}`);
+      if (result.reachable) {
+        // Abrir Guacamole en una ventana nueva para autenticar y probar la sesión real.
+        // La ventana no certifica éxito por sí misma; debe comprobarla el administrador.
+        const base = guacamoleStatus?.base_url;
+        if (base && /^https?:\\/\\//i.test(base)) window.open(base, "_blank", "noopener,noreferrer");
+      }
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "No se pudo comprobar la conexión.");
+    }
+  };
+
   const deleteGuacamoleManagedConnection = async (connection: import("../api").GuacamoleConnection) => {
     if (!isAdmin) return;
     if (!window.confirm(`¿Eliminar la conexión ${connection.name}?`)) return;
@@ -859,7 +874,7 @@ export function useManagementController({
     isAdmin, published, draft, points, activeUsers, roleLabel, visibleUsers,
     load, loadGuacamole, loadStudentConnection, saveStudentConnection,
     saveGuacamoleUser, deleteGuacamoleManagedUser,
-    saveGuacamoleConnection, deleteGuacamoleManagedConnection,
+    saveGuacamoleConnection, deleteGuacamoleManagedConnection, checkGuacamoleManagedConnection,
     openGuacamolePermissions, saveGuacamolePermissions,
     saveChallenge, archive, challengeDeletion, archiveLegacyChallenges, createBeginnerChallengeDrafts,
     changeUser, saveManagedUser, deleteManagedUser,

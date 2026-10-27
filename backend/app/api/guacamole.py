@@ -144,6 +144,27 @@ async def guacamole_delete_connection(identifier: str, request: Request, actor=D
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
+@router.post("/api/v1/admin/guacamole/connections/{identifier}/check")
+async def guacamole_check_connection(identifier: str, request: Request, actor=Depends(require_roles("admin"))):
+    """Comprobar conectividad TCP, sin prometer autenticación remota."""
+    from ..services.guacamole_preflight import check_connection
+    try:
+        matches = await request.app.state.guacamole_admin.list_connections()
+        connection = next((c for c in matches if c.identifier == identifier), None)
+        if connection is None:
+            raise HTTPException(status_code=404, detail="Conexión no encontrada")
+        result = await check_connection(connection)
+        async with request.app.state.session_factory() as session:
+            await write_audit(session, actor.id, "guacamole.connection.preflight", "guacamole_connection", identifier,
+                              {"reachable": result["reachable"], "host": result["hostname"], "port": result["port"]})
+            await session.commit()
+        return result
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except GuacamoleApiError as exc:
+        raise HTTPException(status_code=502, detail="No fue posible consultar Guacamole") from exc
+
+
 @router.get("/api/v1/admin/guacamole/users/{username}/permissions", response_model=GuacamolePermissionSet)
 async def guacamole_get_permissions(username: str, request: Request, _=Depends(require_roles("admin"))):
     if username == get_settings().guacamole_service_account:

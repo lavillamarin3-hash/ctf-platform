@@ -53,15 +53,15 @@ class EscPermissionsTests(unittest.IsolatedAsyncioTestCase):
             asset_references=["LAB-LNXVICT", "LAB-KALI"],
         )
         self.vms = [
-            SimpleNamespace(name="LAB-LNXVICT", ip_address="192.168.146.137",
+            SimpleNamespace(name="LAB-LNXVICT", ip_address="10.10.30.12",
                             guacamole_connection_id="victim-ssh", laboratory_id=2, status="ready"),
-            SimpleNamespace(name="LAB-KALI", ip_address="192.168.146.134",
+            SimpleNamespace(name="LAB-KALI", ip_address="10.10.20.10",
                             guacamole_connection_id="kali-ssh", laboratory_id=1, status="ready"),
         ]
         self.connections = [
-            SimpleNamespace(identifier="victim-ssh", hostname="192.168.146.137", protocol="ssh"),
-            SimpleNamespace(identifier="kali-ssh", hostname="192.168.146.134", protocol="ssh"),
-            SimpleNamespace(identifier="kali-rdp", hostname="192.168.146.134", protocol="rdp"),
+            SimpleNamespace(identifier="victim-ssh", hostname="10.10.30.12", protocol="ssh"),
+            SimpleNamespace(identifier="kali-ssh", hostname="10.10.20.10", protocol="ssh"),
+            SimpleNamespace(identifier="kali-rdp", hostname="10.10.20.10", protocol="rdp"),
         ]
         self.labs = [SimpleNamespace(id=1, code="LAB-ATACANTES", name="Atacantes", status="ready"),
                      SimpleNamespace(id=2, code="LAB-VICTIMAS", name="Víctimas", status="ready")]
@@ -92,7 +92,7 @@ class EscPermissionsTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("is_published IS true", str(session.queries[0]))
 
     async def test_duplicate_kali_ip_does_not_grant_attacker_or_victim_access(self):
-        self.vms.append(SimpleNamespace(name="legacy-duplicate", ip_address="192.168.146.134",
+        self.vms.append(SimpleNamespace(name="legacy-duplicate", ip_address="10.10.20.10",
                                          guacamole_connection_id=None, laboratory_id=1, status="ready"))
         session = Session(self.challenge, self.vms, self.labs)
         await _sync_player_guacamole_permissions(self.request(session), 7)
@@ -118,7 +118,7 @@ class EscPermissionsTests(unittest.IsolatedAsyncioTestCase):
         victim = self.vms.pop(0)
         await self.assert_esc_not_granted()
         self.vms.insert(0, victim)
-        self.vms.append(SimpleNamespace(name="legacy-duplicate", ip_address="192.168.146.137",
+        self.vms.append(SimpleNamespace(name="legacy-duplicate", ip_address="10.10.30.12",
                                          guacamole_connection_id=None, laboratory_id=2, status="ready"))
         await self.assert_esc_not_granted()
 

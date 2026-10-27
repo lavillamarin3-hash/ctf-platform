@@ -37,6 +37,10 @@ export const guacamoleApi = {
   deleteGuacamoleUser: (username: string) =>
     request<void>(`/admin/guacamole/users/${encodeURIComponent(username)}`, { method: "DELETE" }),
 
+  checkGuacamoleConnection: (identifier: string) =>
+    request<{ reachable: boolean; hostname: string; port: number; protocol: string; vm_name: string; message: string }>(
+      `/admin/guacamole/connections/${encodeURIComponent(identifier)}/check`, { method: "POST" }),
+
   guacamoleConnections: () => request<GuacamoleConnection[]>("/admin/guacamole/connections"),
 
   createGuacamoleConnection: (input: {

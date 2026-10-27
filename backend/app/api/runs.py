@@ -27,7 +27,7 @@ from ..services.lab_lock import (
 )
 from ..services.runtime_flags import effective_mode_template, is_effectively_dynamic
 from ..domain.instances.states import InstanceState
-from ..services import dfir_runtime, offline_runtime, ssh_practice, http_practice, kali_workspace, learning, vm_logic, external_web
+from ..services import dfir_runtime, offline_runtime, ssh_practice, http_practice, kali_workspace, learning, vm_logic, external_web, dvwa_sql_practice
 from ..domain.challenges import offline
 from ..domain.challenges.dfir import CODE as DFIR_CODE, matches_answer
 from pydantic import BaseModel, Field
@@ -60,7 +60,7 @@ def _view_from_run(run: ChallengeRun, challenge: Challenge, assignment: RemoteAc
         connection_state=assignment.status if assignment else None,
         workspace_strategy=run.workspace_strategy,
         target_vm_name=vm.name if vm else ('LAB-KALI' if kali else None),
-        target_vm_ip=vm.ip_address if vm else ('192.168.146.134' if kali else None),
+        target_vm_ip=vm.ip_address if vm else ('10.10.20.10' if kali else None),
         target_protocol=protocol,
         laboratory_code=None,
     )
@@ -178,6 +178,9 @@ async def _cleanup_run(request: Request, session, run: ChallengeRun, challenge: 
         if run.workspace_strategy == 'ssh_password_lab':
             try: await ssh_practice.cleanup(run)
             except Exception as exc: raise HTTPException(503,'No se pudo invalidar la práctica SSH. Reintenta el cierre; el acceso también caduca automáticamente.') from exc
+        elif run.workspace_strategy == dvwa_sql_practice.STRATEGY:
+            try: await dvwa_sql_practice.cleanup(run)
+            except Exception as exc: raise HTTPException(503, 'No se pudo limpiar la evidencia DVWA. Reintenta el cierre.') from exc
         elif run.workspace_strategy in ('http_password_lab', 'http_files_lab'):
             try: await http_practice.cleanup(run)
             except Exception as exc: raise HTTPException(503,'No se pudo invalidar la práctica web. Reintenta el cierre; el acceso también caduca automáticamente.') from exc
@@ -400,6 +403,36 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             await write_audit(session, user.id, 'challenge_run.start', 'challenge_run', str(run.id),
                               {'challenge': challenge.code, 'workspace_strategy': external_web.STRATEGY})
             await session.commit()
+            return _view_from_run(run, challenge, None)
+
+        if dvwa_sql_practice.supports(challenge):
+            if challenge.asset_references != ['LAB-KALI', 'LAB-SRVWEB']:
+                raise HTTPException(409, 'DVWA requiere Kali y LAB-SRVWEB.')
+            await kali_workspace.context(request.app, session, user)
+            flags = [flag for flag in challenge.flags if flag.is_active]
+            if len(flags) != 1 or flags[0].mode != 'dynamic' or not flags[0].template:
+                raise HTTPException(409, 'DVWA requiere una bandera dinámica activa.')
+            if not get_settings().dvwa_lab_enabled:
+                raise HTTPException(409, 'DVWA está deshabilitado hasta validarlo en Nutanix.')
+            run = ChallengeRun(user_id=user.id, challenge_id=challenge.id, status='active',
+                               expires_at=planned_expires_at, workspace_strategy=dvwa_sql_practice.STRATEGY)
+            session.add(run)
+            await session.flush()
+            from ..core import hash_password
+            value = dvwa_sql_practice.flag_for(run)
+            session.add(ChallengeRunFlag(run_id=run.id, flag_id=flags[0].id,
+                                        flag_hash=hash_password(value), fingerprint=submission_fingerprint(value)))
+            try:
+                await dvwa_sql_practice.prepare(run)
+                await learning.lock_progress(session, run, challenge, create=True, policy=planned_policy)
+                await write_audit(session, user.id, 'challenge_run.start', 'challenge_run', str(run.id),
+                                  {'challenge': challenge.code, 'workspace_strategy': run.workspace_strategy})
+                await session.commit()
+            except Exception as exc:
+                await session.rollback()
+                try: await dvwa_sql_practice.cleanup(run)
+                except Exception: pass
+                raise HTTPException(503, 'No se pudo preparar la bandera SQL en LAB-SRVWEB.') from exc
             return _view_from_run(run, challenge, None)
 
         if challenge.code in vm_logic.CODES and challenge.scenario == vm_logic.EXPECTED_SCENARIOS[challenge.code]:
@@ -907,6 +940,21 @@ async def submit_flag(code: str, payload: SubmissionRequest, request: Request, u
     if matched:
         return SubmissionResponse(correct=True, challenge_completed=False, awarded_points=0, message="Flag correcta. Continúa con las flags restantes.")
     return SubmissionResponse(correct=False, challenge_completed=False, awarded_points=0, message="Flag incorrecta. Revisa el escenario e inténtalo de nuevo.")
+
+
+@router.get('/api/v1/runs/{run_id}/dvwa-sql')
+async def dvwa_sql_info(run_id: int, request: Request, user=Depends(require_roles('player'))):
+    async with request.app.state.session_factory() as session:
+        run = await session.scalar(select(ChallengeRun).where(
+            ChallengeRun.id == run_id, ChallengeRun.user_id == user.id))
+        if run is None: raise HTTPException(404, 'Práctica no disponible')
+        challenge = await session.get(Challenge, run.challenge_id)
+        if not challenge or not dvwa_sql_practice.supports(challenge) or not challenge.is_published or not await _assigned(session, challenge.id, user.id):
+            raise HTTPException(404, 'Práctica no disponible')
+        if run.workspace_strategy != dvwa_sql_practice.STRATEGY or run.status != 'active' or run.expires_at <= now_utc():
+            raise HTTPException(409, 'Inicia una práctica vigente')
+        from fastapi.responses import JSONResponse
+        return JSONResponse(dvwa_sql_practice.instructions(run), headers={'Cache-Control': 'no-store'})
 
 
 @router.get('/api/v1/runs/{run_id}/ssh-practice')

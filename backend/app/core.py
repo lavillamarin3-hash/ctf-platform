@@ -40,6 +40,10 @@ class Settings(BaseSettings):
     # El backend no intenta conectarse a ninguna VM hasta que
     # FLAG_INJECTOR_ENABLED=true y las credenciales estén configuradas.
     # --------------------------------------------------------
+    dvwa_lab_enabled: bool = False
+    dvwa_lab_ssh_user: str = "labops"
+    dvwa_lab_ssh_private_key: str | None = None
+    dvwa_lab_known_hosts: str | None = None
     flag_injector_enabled: bool = False
     flag_injector_ssh_user: str = "ctf-injector"
     flag_injector_ssh_password: str | None = None
