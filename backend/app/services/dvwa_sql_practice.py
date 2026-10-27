@@ -24,7 +24,7 @@ def supports(challenge) -> bool:
 
 
 def row_id(run_id: int) -> int:
-    if type(run_id) is not int or not 1 <= run_id <= 2_146_483_647:
+    if type(run_id) is not int or not 1 <= run_id <= 2_145_483_647:
         raise ValueError("Identificador de corrida inválido")
     return OFFSET + run_id
 
