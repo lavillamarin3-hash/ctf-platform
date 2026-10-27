@@ -60,7 +60,7 @@ def _view_from_run(run: ChallengeRun, challenge: Challenge, assignment: RemoteAc
         connection_state=assignment.status if assignment else None,
         workspace_strategy=run.workspace_strategy,
         target_vm_name=vm.name if vm else ('LAB-KALI' if kali else None),
-        target_vm_ip=vm.ip_address if vm else ('192.168.146.134' if kali else None),
+        target_vm_ip=vm.ip_address if vm else ('10.10.20.10' if kali else None),
         target_protocol=protocol,
         laboratory_code=None,
     )
