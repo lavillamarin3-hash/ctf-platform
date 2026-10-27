@@ -25,7 +25,7 @@ class ReadSession:
 
 class LabDiagnosticTests(unittest.IsolatedAsyncioTestCase):
     def setUp(self):
-        vm = SimpleNamespace(id=6, name="LAB-LNXVICT", ip_address="192.168.146.137", guacamole_connection_id=None)
+        vm = SimpleNamespace(id=6, name="LAB-LNXVICT", ip_address="10.10.30.12", guacamole_connection_id=None)
         flag = ChallengeFlag(id=1, mode="dynamic", template="FLAG{lab-01_{{RAND}}}", flag_order=1, is_active=True)
         challenge = SimpleNamespace(code="LAB-01", flags=[flag])
         pool = SimpleNamespace(state=InstanceState.AVAILABLE.value, run_id=None, user_id=None)
