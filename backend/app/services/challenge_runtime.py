@@ -69,7 +69,7 @@ def _asset_ref_key(value: str) -> str:
 def _guacamole_access_references(challenge: Challenge) -> list[str]:
     """La VM víctima de ESC se usa para inyección, no para acceso del jugador."""
     refs = challenge.asset_references or []
-    if (challenge.code in ("ESC-01-RECON", "ESC-02-BRUTEFORCE", "ESC-06-WEBAUTH", "ESC-07-EXPOSED")
+    if (challenge.code in ("ESC-01-RECON", "ESC-02-BRUTEFORCE", "ESC-03-WEBEXPLOIT", "ESC-06-WEBAUTH", "ESC-07-EXPOSED")
             or (challenge.scenario or '').startswith('VM-LOGIC-')):
         return [ref for ref in refs if _asset_ref_key(ref) == "LAB-KALI"]
     return refs
