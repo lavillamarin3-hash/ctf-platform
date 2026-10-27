@@ -88,12 +88,20 @@ async def seed_data(session_factory) -> None:
             await session.commit()
             return
 
+        # Catálogo AHV: solo para instalaciones demo nuevas. Los registros
+        # existentes no se sobrescriben durante el arranque de la API.
         inventory = [
-            {"code": "LAB-ATACANTES", "name": "Laboratorio de Atacantes", "segment": "Red actual · 192.168.146.0/24", "vms": [
-                ("LAB-KALI", "Kali Linux 2026.2", "192.168.146.134", "Atacantes", "RED ACTUAL", "192.168.146.0/24", "standard"),
+            {"code": "LAB-ATACANTES", "name": "Laboratorio de Atacantes", "segment": "VLAN 20 · 10.10.20.0/24", "vms": [
+                ("LAB-KALI", "Kali Linux", "10.10.20.10", "Atacantes", "VLAN 20", "10.10.20.0/24", "standard"),
+                ("LAB-KALI-PURPLE", "Kali Linux", "10.10.20.11", "Atacantes", "VLAN 20", "10.10.20.0/24", "standard"),
+                ("LAB-KALI-BLUE", "Kali Linux", "10.10.20.12", "Atacantes", "VLAN 20", "10.10.20.0/24", "standard"),
             ]},
-            {"code": "LAB-VICTIMAS", "name": "Laboratorio de Víctimas", "segment": "Red actual · 192.168.146.0/24", "vms": [
-                ("LAB-LNXVICT", "Ubuntu Server 26.04", "192.168.146.137", "Víctimas", "RED ACTUAL", "192.168.146.0/24", "vulnerable"),
+            {"code": "LAB-VICTIMAS", "name": "Laboratorio de Víctimas", "segment": "VLAN 30 · 10.10.30.0/24", "vms": [
+                ("LAB-WINVICT-A", "Windows", "10.10.30.10", "Víctimas", "VLAN 30", "10.10.30.0/24", "vulnerable"),
+                ("LAB-WINVICT-B", "Windows", "10.10.30.11", "Víctimas", "VLAN 30", "10.10.30.0/24", "vulnerable"),
+                ("LAB-LNXVICT", "Ubuntu Server 26.04", "10.10.30.12", "Víctimas", "VLAN 30", "10.10.30.0/24", "vulnerable"),
+                ("LAB-SRVWEB", "Ubuntu Server 26.04", "10.10.30.20", "Víctimas", "VLAN 30", "10.10.30.0/24", "vulnerable"),
+                ("LAB-SRVFSAD", "Servidor de archivos/AD", "10.10.30.21", "Víctimas", "VLAN 30", "10.10.30.0/24", "vulnerable"),
             ]},
         ]
         for lab_data in inventory:
@@ -105,7 +113,7 @@ async def seed_data(session_factory) -> None:
             for vm_name, os_name, ip, net_role, vlan, subnet, profile in lab_data["vms"]:
                 vm = await session.scalar(select(VMAsset).where(VMAsset.name == vm_name))
                 if vm is None:
-                    session.add(VMAsset(laboratory_id=lab.id, name=vm_name, os=os_name, ip_address=ip, vlan=vlan, role=net_role, network_role=net_role, subnet=subnet, profile=profile, status="ready"))
+                    session.add(VMAsset(laboratory_id=lab.id, name=vm_name, os=os_name, ip_address=ip, vlan=vlan, role=net_role, network_role=net_role, subnet=subnet, profile=profile, status="planned"))
 
         await session.flush()
         from .challenge_deletion import deleted_codes
