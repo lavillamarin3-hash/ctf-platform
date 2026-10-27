@@ -11,8 +11,14 @@ import type { ManagementController } from "../../controllers/useManagementContro
 import { operationalLaboratories } from "../../lib/operationalLabs";
 
 const OPERATIONAL_VM_TARGETS = new Map<string, string>([
-  ["LAB-KALI", "192.168.146.134"],
-  ["LAB-LNXVICT", "192.168.146.137"],
+  ["LAB-KALI", "10.10.20.10"],
+  ["LAB-KALI-PURPLE", "10.10.20.11"],
+  ["LAB-KALI-BLUE", "10.10.20.12"],
+  ["LAB-LNXVICT", "10.10.30.12"],
+  ["LAB-SRVWEB", "10.10.30.20"],
+  ["LAB-WINVICT-A", "10.10.30.10"],
+  ["LAB-WINVICT-B", "10.10.30.11"],
+  ["LAB-SRVFSAD", "10.10.30.21"],
 ]);
 
 export function ManagementLaboratory({ controller }: { controller: ManagementController }) {
