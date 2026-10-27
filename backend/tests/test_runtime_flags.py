@@ -41,8 +41,8 @@ class RuntimeFlagsTests(unittest.TestCase):
         self.assertFalse(is_effectively_dynamic("LAB-01", flag))
 
     def test_current_inventory_and_attack_scenario_seed_are_safe_drafts(self):
-        self.assertEqual(DEMO_VM_IPS["Atacantes"], {"192.168.146.134"})
-        self.assertEqual(DEMO_VM_IPS["Víctimas"], {"192.168.146.137"})
+        self.assertEqual(DEMO_VM_IPS["Atacantes"], {"10.10.20.10", "10.10.20.11", "10.10.20.12"})
+        self.assertEqual(DEMO_VM_IPS["Víctimas"], {"10.10.30.10", "10.10.30.11", "10.10.30.12", "10.10.30.20", "10.10.30.21"})
         scenario = next(item for item in SEED_CHALLENGES if item["code"] == "ESC-01-RECON")
         self.assertFalse(scenario["is_published"])
         self.assertEqual(scenario["asset_references"][0], "LAB-LNXVICT")
