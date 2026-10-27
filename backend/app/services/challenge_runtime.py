@@ -12,9 +12,9 @@ from ..models import Challenge, ChallengeGroupAssignment, GroupMembership, Labor
 
 
 ESC_ATTACKER_NAME = "LAB-KALI"
-ESC_ATTACKER_IP = "192.168.146.134"
+ESC_ATTACKER_IP = "10.10.20.10"
 ESC_VICTIM_NAME = "LAB-LNXVICT"
-ESC_VICTIM_IP = "192.168.146.137"
+ESC_VICTIM_IP = "10.10.30.12"
 
 
 class EscAttackerNotReady(ValueError):
@@ -109,7 +109,7 @@ async def _resolve_esc_attacker_targets(app, session, username: str, challenge: 
 
     candidates = _unique_esc_kali_connections(connections)
     if not candidates:
-        raise EscAttackerNotReady("Kali necesita una conexión SSH o RDP única hacia 192.168.146.134")
+        raise EscAttackerNotReady("Kali necesita una conexión SSH o RDP única hacia 10.10.20.10")
 
     readable = {
         str(identifier) for identifier, values in (permissions.get("connectionPermissions") or {}).items()
@@ -341,7 +341,7 @@ async def _find_challenge_vm(session, challenge: Challenge):
             (lab, vm) for lab in labs if lab.status == "ready" for vm in lab.vms
             if vm.status == "ready"
             and _asset_ref_key(vm.name) == "LAB-LNXVICT"
-            and _asset_ref_key(vm.ip_address or "") == "192.168.146.137"
+            and _asset_ref_key(vm.ip_address or "") == "10.10.30.12"
             and ("linux" in vm.os.lower() or "ubuntu" in vm.os.lower())
         ]
         return matches[0] if len(matches) == 1 else (None, None)
