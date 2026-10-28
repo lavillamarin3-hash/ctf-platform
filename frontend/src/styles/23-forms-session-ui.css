@@ -27,3 +27,65 @@
  .ctf-form-section {padding:10px;}
  .ctf-form-section > summary span {float:none; margin-left:8px;}
 }
+
+
+/* Ojo integrado en todos los inputs password: login, usuarios y Guacamole. */
+.ctf-password-control { display:block; position:relative; width:100%; min-width:0; }
+.ctf-password-control > input,
+.form-grid .ctf-password-control > input { display:block; width:100%; min-width:0; padding-right:3.45rem !important; }
+.ctf-password-control .ctf-password-toggle {
+  position:absolute; right:5px; top:50%; transform:translateY(-50%); z-index:2;
+  width:38px; height:36px; padding:0; display:grid; place-items:center;
+  color:#b4c6dc; background:transparent; border:0; border-radius:8px;
+  box-shadow:none; opacity:.95; transition:background .15s, color .15s;
+}
+.ctf-password-control .ctf-password-toggle:hover { color:#fff; background:rgba(109,141,194,.16); }
+.ctf-password-control .ctf-password-toggle:focus-visible { outline:2px solid #8ab9ff; outline-offset:0; }
+.ctf-password-control .ctf-password-toggle:disabled { opacity:.45; cursor:not-allowed; }
+.password-field > .ctf-password-control { flex:1; min-width:0; }
+.password-field .ctf-password-control > .dark-field { margin-top:7px; }
+/* Conservar el icono del candado sin interferir con el ojo. */
+.password-field > .icon { z-index:2; }
+
+/* Editor de retos: tarjetas alineadas y contrastes suficientes para ambos temas. */
+.challenge-modal { width:min(1040px,calc(100vw - 24px)); max-height: min(92vh, 100dvh - 16px);
+  overflow-y:auto; overflow-x:hidden; color:#e8f0fa; background:#0b1828; }
+.challenge-modal .ctf-form-section { background:#101f33; border-color:#334b69; color:#edf4ff; }
+.challenge-modal .ctf-form-section > summary { color:#eef4ff; line-height:1.5; }
+.challenge-modal .ctf-form-section > summary span { color:#b3c6df; }
+.challenge-modal .ctf-section-toggle { color:#eaf2ff; background:#172b45; border-color:#456587; line-height:1.5; }
+.challenge-modal .ctf-form-section :is(label,legend,h3,h4,strong) { color:inherit; }
+.challenge-modal .ctf-form-section :is(input,select,textarea) { max-width:100%; }
+.challenge-modal .ctf-form-section .form-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+.challenge-modal .ctf-form-section .form-full { display:grid; min-width:0; gap:7px; margin:12px 0; }
+.challenge-modal .ctf-form-section .learning-policy-editor { border:1px solid #35516d; border-radius:12px; padding:14px; min-width:0; }
+.challenge-modal .ctf-form-section .learning-policy-editor > legend { font-weight:750; font-size:13px; padding:0 8px; }
+.challenge-modal :is(.field-help,.learning-policy-editor > p) { line-height:1.65; overflow-wrap:anywhere; }
+.challenge-modal .modal-head { position:relative; min-width:0; }
+.challenge-modal .modal-head > div { min-width:0; overflow-wrap:anywhere; }
+
+/* Modo claro: evitar fondos oscuros con tipografía clara o viceversa. */
+html[data-theme="light"] .challenge-modal { color:#203248; background:#f6f8fc; border-color:#cad6e4; }
+html[data-theme="light"] .challenge-modal .ctf-form-section { color:#23364c; background:#fff; border-color:#cddae9; }
+html[data-theme="light"] .challenge-modal .ctf-form-section > summary { color:#1e3753; }
+html[data-theme="light"] .challenge-modal .ctf-form-section > summary span { color:#546b85; }
+html[data-theme="light"] .challenge-modal .ctf-section-toggle { color:#213a56; background:#eaf1fa; border-color:#b8cce3; }
+html[data-theme="light"] .challenge-modal .ctf-section-toggle:hover { background:#e0edfc; }
+html[data-theme="light"] .challenge-modal .ctf-form-section .learning-policy-editor { border-color:#bfcee1; background:#f8fbff; color:#24374d; }
+html[data-theme="light"] .challenge-modal .ctf-form-section :is(.learning-policy-editor legend,.learning-policy-hints-heading h4,label,strong,h3) { color:#1c3149; }
+html[data-theme="light"] .challenge-modal .ctf-form-section :is(input,select,textarea) {
+  color:#1d3049; background:#fff; border:1px solid #bdccdd;
+}
+html[data-theme="light"] .challenge-modal .ctf-form-section :is(input,select,textarea)::placeholder { color:#728399; }
+html[data-theme="light"] .challenge-modal .ctf-form-section :is(.field-help,.learning-policy-editor > p,.resource-editor-empty) { color:#4d647d; }
+html[data-theme="light"] .challenge-modal .ctf-form-section :is(.learning-resource-editor,.flag-builder,.assignment-panel,.learning-policy-hint) {
+  color:#20344a; background:#f5f8fc; border-color:#c7d5e5;
+}
+html[data-theme="light"] .ctf-password-toggle { color:#455e78; }
+html[data-theme="light"] .ctf-password-toggle:hover { color:#213e61; background:#e5ecf5; }
+@media(max-width:720px) {
+ .challenge-modal .ctf-form-section .form-grid,
+ .challenge-modal .ctf-form-section .flag-builder-row .form-grid,
+ .challenge-modal .selection-list { grid-template-columns:1fr; }
+ .challenge-modal .ctf-form-section { padding:12px; }
+}
