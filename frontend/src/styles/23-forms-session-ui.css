@@ -89,3 +89,16 @@ html[data-theme="light"] .ctf-password-toggle:hover { color:#213e61; background:
  .challenge-modal .selection-list { grid-template-columns:1fr; }
  .challenge-modal .ctf-form-section { padding:12px; }
 }
+
+/* Mensajes locales: mantenerlos junto al control que falló. */
+.ctf-inline-error {
+ margin:10px 0; padding:11px 12px; border-radius:9px; border:1px solid #bb5c6b;
+ background:rgba(190,45,67,.12); color:#ffd4de; font-size:12px; line-height:1.55; overflow-wrap:anywhere;
+}
+.ctf-optional-note { margin:12px 0; padding:12px 14px; border:1px solid #46739c; border-radius:10px;
+ background:rgba(45,112,176,.12); color:#c4ddf8; font-size:12px; line-height:1.6; }
+.ctf-learning-subsection { min-width:0; margin:12px 0 18px; }
+.ctf-learning-subsection h4 { margin:8px 0; }
+html[data-theme="light"] .ctf-inline-error { color:#8f1c39; border-color:#d8909d; background:#ffedf1; }
+html[data-theme="light"] .ctf-optional-note { color:#244c71; border-color:#bad0e9; background:#eef5ff; }
+html[data-theme="light"] .challenge-modal .learning-policy-total { color:#284a68; }
