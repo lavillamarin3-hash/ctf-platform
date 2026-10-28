@@ -88,7 +88,7 @@ export function GuacamoleUserForm({
     <div className="modal-backdrop" role="presentation" onMouseDown={(event) => {
       if (event.target === event.currentTarget) onClose();
     }}>
-      <form className="modal-card" onSubmit={submit}>
+      <form className="modal-card guacamole-connection-modal" onSubmit={submit}>
         <div className="modal-head">
           <div>
             <span className="eyebrow accent">GUACAMOLE · USUARIO</span>
@@ -198,6 +198,7 @@ export function GuacamoleConnectionForm({
   const [port, setPort] = useState(initial?.port ? Number(initial.port) : 22);
   const [username, setUsername] = useState(getParameter("username"));
   const [password, setPassword] = useState("");
+  const [showVmPassword, setShowVmPassword] = useState(false);
   const [domain, setDomain] = useState(getParameter("domain"));
   const [parentIdentifier, setParentIdentifier] = useState(initial?.parent_identifier ?? "ROOT");
   const [saving, setSaving] = useState(false);
@@ -210,7 +211,8 @@ export function GuacamoleConnectionForm({
 
   const changeProtocol = (value: "ssh" | "rdp" | "vnc") => {
     setProtocol(value);
-    if (!initial) setPort(value === "rdp" ? 3389 : value === "vnc" ? 5900 : 22);
+    // Al cambiar el protocolo, ajustar también el puerto en modo edición.
+    setPort(value === "rdp" ? 3389 : value === "vnc" ? 5900 : 22);
   };
 
   const submit = async (event: FormEvent) => {
@@ -226,8 +228,9 @@ export function GuacamoleConnectionForm({
           hostname: hostname.trim(),
           port: Number(port),
           username: username.trim() || null,
-          password: password.trim() || null,
-          domain: domain.trim() || null,
+          // Undefined significa conservar la credencial existente en Guacamole.
+          password: password || undefined,
+          domain: protocol === "rdp" ? (domain.trim() || null) : undefined,
           parent_identifier: parentIdentifier.trim() || "ROOT",
         },
         initial?.identifier,
@@ -300,27 +303,32 @@ export function GuacamoleConnectionForm({
           </label>
 
           <label>
-            Usuario remoto
+            Usuario o hostname de la máquina virtual
             <input
               value={username}
               onChange={(event) => setUsername(event.target.value)}
-              placeholder="kali / usuario"
+              placeholder="Usuario o hostname de la MV"
               disabled={saving}
             />
           </label>
 
           <label>
-            Contraseña
-            <input
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              placeholder={initial ? "Dejar vacío para conservar" : "Contraseña SSH/RDP"}
-              disabled={saving}
-            />
+            Contraseña de la MV
+            <span className="ctf-password-entry">
+              <input
+                type={showVmPassword ? "text" : "password"}
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                placeholder={initial ? "Dejar vacío para conservar contraseña de la MV" : "Contraseña de la MV"}
+                autoComplete="new-password"
+                disabled={saving}
+              />
+              <button type="button" className="ctf-password-eye" aria-label={showVmPassword ? "Ocultar contraseña de la MV" : "Mostrar contraseña de la MV"} aria-pressed={showVmPassword} onClick={() => setShowVmPassword((visible) => !visible)} disabled={saving}>{showVmPassword ? "◉" : "👁"}</button>
+            </span>
+            {initial && <small className="field-help">Por seguridad no se muestra la contraseña guardada. Déjala vacía para conservarla.</small>}
           </label>
 
-          <label>
+          {protocol === "rdp" && <label>
             Dominio (RDP)
             <input
               value={domain}
@@ -328,7 +336,7 @@ export function GuacamoleConnectionForm({
               placeholder="Opcional"
               disabled={saving}
             />
-          </label>
+          </label>}
 
           <label>
             Grupo padre
@@ -339,12 +347,6 @@ export function GuacamoleConnectionForm({
               disabled={saving}
             />
           </label>
-        </div>
-
-        <div className="form-full">
-          <small className="form-help">
-            Para tu laboratorio actual, la víctima SSH es <strong>10.10.30.12:22</strong>.
-          </small>
         </div>
 
         <div className="modal-actions">
