@@ -10,6 +10,7 @@ export type Flag = {
 
 /** Configuración privada, disponible únicamente para administración e instructores. */
 export type ChallengeLearningPolicy = {
+  timer_enabled?: boolean;
   duration_minutes: number;
   expired_points_percent: number;
   hints: Array<{ title: string; content: string; penalty_percent: number }>;
