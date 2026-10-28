@@ -24,6 +24,7 @@ export function Login({
 
   const [password, setPassword] =
     useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const [error, setError] =
     useState<string | null>(null);
@@ -173,7 +174,7 @@ export function Login({
                 <input
                   className="dark-field bare"
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) =>
                     setPassword(
@@ -183,6 +184,7 @@ export function Login({
                   autoComplete="current-password"
                   required
                 />
+                <button type="button" className="ctf-password-eye" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} aria-pressed={showPassword}>{showPassword ? "◉" : "👁"}</button>
               </div>
             </label>
 
