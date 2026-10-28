@@ -1,6 +1,7 @@
 import type { ChallengeLearningPolicy } from '../models/challenge';
 
 export type LearningPolicyDraft = {
+  timer_enabled: boolean;
   duration_minutes: string;
   expired_points_percent: string;
   hints: Array<{ title: string; content: string; penalty_percent: string }>;
@@ -9,6 +10,7 @@ export type LearningPolicyDraft = {
 
 export function learningPolicyDraft(policy?: ChallengeLearningPolicy | null): LearningPolicyDraft {
   return {
+    timer_enabled: policy?.timer_enabled !== false,
     duration_minutes: String(policy?.duration_minutes ?? 60),
     expired_points_percent: String(policy?.expired_points_percent ?? 25),
     hints: policy?.hints.map(hint => ({ ...hint, penalty_percent: String(hint.penalty_percent) }))
@@ -29,7 +31,7 @@ function integer(value: string, minimum: number, maximum: number, label: string)
 export function serializeLearningPolicy(draft: LearningPolicyDraft): ChallengeLearningPolicy {
   const duration_minutes = integer(draft.duration_minutes, 1, 1440, 'Duración');
   const expired_points_percent = integer(draft.expired_points_percent, 0, 100, 'Puntaje al vencer el tiempo');
-  if (draft.hints.length < 1 || draft.hints.length > 3) throw new Error('Configura entre una y tres pistas.');
+  if (draft.hints.length > 3) throw new Error('Configura como máximo tres pistas.');
   const hints = draft.hints.map((hint, index) => {
     const title = hint.title.trim();
     const content = hint.content.trim();
@@ -42,7 +44,7 @@ export function serializeLearningPolicy(draft: LearningPolicyDraft): ChallengeLe
   }
   const solution_text = draft.solution_text.trim();
   if (solution_text.length > 12000) throw new Error('La solución admite hasta 12000 caracteres.');
-  return { duration_minutes, expired_points_percent, hints, solution_text: solution_text || null };
+  return { timer_enabled: draft.timer_enabled, duration_minutes, expired_points_percent, hints, solution_text: solution_text || null };
 }
 
 export function remainingLearningPoints(base: number, percent: number): number {
