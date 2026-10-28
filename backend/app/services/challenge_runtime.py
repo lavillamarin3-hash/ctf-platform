@@ -15,6 +15,7 @@ ESC_ATTACKER_NAME = "LAB-KALI"
 ESC_ATTACKER_IP = "10.10.20.10"
 ESC_VICTIM_NAME = "LAB-LNXVICT"
 ESC_VICTIM_IP = "10.10.30.12"
+KALI_ATTACKERS = {'LAB-KALI': ESC_ATTACKER_IP, 'LAB-KALI-PURPLE': '10.10.20.11', 'LAB-KALI-BLUE': '10.10.20.12'}
 
 
 class EscAttackerNotReady(ValueError):
@@ -69,7 +70,9 @@ def _asset_ref_key(value: str) -> str:
 def _guacamole_access_references(challenge: Challenge) -> list[str]:
     """La VM víctima de ESC se usa para inyección, no para acceso del jugador."""
     refs = challenge.asset_references or []
-    if (challenge.code in ("ESC-01-RECON", "ESC-02-BRUTEFORCE", "ESC-03-WEBEXPLOIT", "ESC-06-WEBAUTH", "ESC-07-EXPOSED")
+    if challenge.code == "ESC-02-BRUTEFORCE":
+        return [ref for ref in refs if _asset_ref_key(ref) in KALI_ATTACKERS]
+    if (challenge.code in ("ESC-01-RECON", "ESC-03-WEBEXPLOIT", "ESC-06-WEBAUTH", "ESC-07-EXPOSED")
             or (challenge.scenario or '').startswith('VM-LOGIC-')):
         return [ref for ref in refs if _asset_ref_key(ref) == "LAB-KALI"]
     return refs
@@ -119,6 +122,33 @@ async def _resolve_esc_attacker_targets(app, session, username: str, challenge: 
     if not targets:
         raise EscAttackerNotReady("Tu cuenta de laboratorio necesita permiso de lectura sobre la conexión Kali")
     return targets
+
+
+def _ssh_kali_connection_ids(challenge, vms, labs, connections) -> set[str]:
+    """Solo protocolos únicos SSH/RDP en la Kali escogida y lista.
+    
+    No devuelve conexiones de la víctima ni permite usuarios directos a ella.
+    """
+    if challenge.code != 'ESC-02-BRUTEFORCE':
+        return set()
+    references = set(challenge.asset_references or [])
+    selected = [name for name in KALI_ATTACKERS if name in references]
+    if len(selected) != 1 or 'LAB-LNXVICT' not in references:
+        return set()
+    name = selected[0]
+    ip = KALI_ATTACKERS[name]
+    owners = [vm for vm in vms if _asset_ref_key(vm.ip_address or '') == ip]
+    if len(owners) != 1 or owners[0].name != name or owners[0].status != 'ready':
+        return set()
+    if not any(lab.id == owners[0].laboratory_id and lab.status == 'ready' for lab in labs):
+        return set()
+    result = set()
+    for protocol in ('ssh', 'rdp'):
+        matches = [item for item in connections if _asset_ref_key(item.hostname or '') == ip
+                   and (item.protocol or '').strip().lower() == protocol]
+        if len(matches) == 1:
+            result.add(str(matches[0].identifier))
+    return result
 
 
 async def _sync_player_guacamole_permissions(request: Request, user_id: int) -> None:
@@ -185,6 +215,10 @@ async def _sync_player_guacamole_permissions(request: Request, user_id: int) -> 
         for challenge in assigned_challenges:
             if challenge.code == "ESC-01-RECON":
                 for connection_id in _esc_sync_connection_ids(challenge, vms, lab_rows, guac_connections):
+                    desired[connection_id] = ["READ"]
+                continue
+            if challenge.code == "ESC-02-BRUTEFORCE":
+                for connection_id in _ssh_kali_connection_ids(challenge, vms, lab_rows, guac_connections):
                     desired[connection_id] = ["READ"]
                 continue
             for raw_ref in _guacamole_access_references(challenge):
@@ -263,6 +297,10 @@ async def _sync_guacamole_group_permissions(request: Request, group_id: int) -> 
     for challenge in assigned_challenges:
         if challenge.code == "ESC-01-RECON":
             for connection_id in _esc_sync_connection_ids(challenge, vms, labs, guac_connections):
+                desired[connection_id] = ["READ"]
+            continue
+        if challenge.code == "ESC-02-BRUTEFORCE":
+            for connection_id in _ssh_kali_connection_ids(challenge, vms, labs, guac_connections):
                 desired[connection_id] = ["READ"]
             continue
         for raw_ref in _guacamole_access_references(challenge):
