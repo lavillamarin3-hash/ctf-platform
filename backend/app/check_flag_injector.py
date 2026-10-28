@@ -89,10 +89,15 @@ async def main() -> int:
     required = ("inyector_activado", "credencial_ssh_configurada", "tcp_ssh_desde_api",
                 "autenticacion_ssh", "ssh_sftp", "inyector_instalado", "sudo_sin_password")
     report["ready_for_flag_injection"] = all(report["checks"].get(key) for key in required)
-    report["ready_for_ssh_practice"] = (
-        report["ready_for_flag_injection"]
-        and report["checks"].get("python3_en_victima")
-        and report["checks"].get("paramiko_en_victima")
+    # ESC-02 es un servicio SFTP/Paramiko sin sudo ni inyector root.
+    # No bloquearlo artificialmente por un sudoers inexistente: ese requisito
+    # corresponde a LAB-01/ESC-01, no al SSH de práctica.
+    ssh_practice_checks = (
+        "credencial_ssh_configurada", "tcp_ssh_desde_api", "autenticacion_ssh",
+        "ssh_sftp", "python3_en_victima", "paramiko_en_victima",
+    )
+    report["ready_for_ssh_practice"] = all(
+        report["checks"].get(key) for key in ssh_practice_checks
     )
     print(json.dumps(report, indent=2, ensure_ascii=False))
     return 0 if report["ready_for_flag_injection"] else 1
