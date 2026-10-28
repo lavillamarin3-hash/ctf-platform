@@ -9,6 +9,7 @@ import { api, session, User } from "../api";
 import { Theme } from "../config";
 import { ThemeToggle, ErrorMessage, Icon } from "./common";
 import Logo from "../assets/images/Logo.png";
+import { PasswordField } from "./PasswordField";
 
 export function Login({
   onLogin,
@@ -24,7 +25,6 @@ export function Login({
 
   const [password, setPassword] =
     useState("");
-  const [showPassword, setShowPassword] = useState(false);
 
   const [error, setError] =
     useState<string | null>(null);
@@ -171,20 +171,15 @@ export function Login({
               <div className="password-field">
                 <Icon name="lock" />
 
-                <input
+                <PasswordField
+                  label="contraseña"
                   className="dark-field bare"
                   id="password"
-                  type={showPassword ? "text" : "password"}
                   value={password}
-                  onChange={(e) =>
-                    setPassword(
-                      e.target.value
-                    )
-                  }
+                  onChange={(e) => setPassword(e.target.value)}
                   autoComplete="current-password"
                   required
                 />
-                <button type="button" className="ctf-password-eye" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"} aria-pressed={showPassword}>{showPassword ? "◉" : "👁"}</button>
               </div>
             </label>
 
