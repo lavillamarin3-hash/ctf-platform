@@ -28,7 +28,7 @@ class EvidenceServiceTests(unittest.TestCase):
         flag_path = Path(self.temp.name) / "flag.txt"
 
         class TestHandler(module.EvidenceHandler):
-            allowed_client_ip = "127.0.0.1"
+            allowed_client_ips = frozenset(("127.0.0.1",))
 
         TestHandler.flag_path = flag_path
         self.handler = TestHandler
@@ -71,7 +71,7 @@ class EvidenceServiceTests(unittest.TestCase):
         self.assertEqual(self.request("/")[0], 200)
         self.assertEqual(self.request("/flag.txt")[0], 404)
         self.assertEqual(self.request("/../flag.txt")[0], 404)
-        self.handler.allowed_client_ip = "192.168.146.134"
+        self.handler.allowed_client_ips = frozenset(("192.0.2.10",))
         status, content, _ = self.request("/evidence")
         self.assertEqual(status, 403)
         self.assertNotIn(b"FLAG{", content)
