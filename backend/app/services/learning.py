@@ -70,7 +70,7 @@ def default_policy(challenge, *, strategy=None):
     strategy = strategy or _strategy_for(challenge)
     duration = 240 if strategy == 'offline_case' else 120 if strategy == 'dfir_case' else 60
     prototype = SimpleNamespace(id='{{RUN_ID}}', workspace_strategy=strategy)
-    return {'timer_enabled': True, 'duration_minutes': duration, 'expired_points_percent': 25, 'solution_text': None,
+    return {'duration_minutes': duration, 'expired_points_percent': 25, 'solution_text': None,
             'hints': [{'title': hint['title'], 'content': hint['content'], 'penalty_percent': 10}
                       for hint in _default_hints_for(prototype, challenge)]}
 
@@ -78,7 +78,11 @@ def default_policy(challenge, *, strategy=None):
 def effective_policy(challenge):
     configured = getattr(challenge, 'learning_policy', None)
     if isinstance(configured, dict):
-        return LearningPolicy.model_validate(configured).model_dump()
+        policy = LearningPolicy.model_validate(configured).model_dump()
+        # Conservar instantáneas existentes sin añadir campos nuevos a retos antiguos.
+        if 'timer_enabled' not in configured:
+            policy.pop('timer_enabled', None)
+        return policy
     return default_policy(challenge)
 
 
