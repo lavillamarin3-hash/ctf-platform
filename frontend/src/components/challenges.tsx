@@ -307,7 +307,9 @@ export function ChallengeForm({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Secciones optativas: deshabilitar oculta los campos sin hacerlos obligatorios.
-  const [useLearning, setUseLearning] = useState(true);
+  const [useLearning, setUseLearning] = useState(true); // Instrucciones del estudiante
+  const [useHints, setUseHints] = useState(Boolean(initial?.learning_policy?.hints?.length));
+  const [useTimer, setUseTimer] = useState(initial?.learning_policy?.timer_enabled !== false);
   const [useResources, setUseResources] = useState(true);
   const [useFlags, setUseFlags] = useState(true);
   const [useGroups, setUseGroups] = useState(true);
@@ -413,7 +415,11 @@ export function ChallengeForm({
       }
       const uniqueReferences = [...new Set(references.filter(Boolean))];
       if (!uniqueReferences.length) throw new Error("Selecciona al menos un laboratorio o una VM.");
-      const serializedLearningPolicy = useLearning ? serializeLearningPolicy(learningPolicy) : (initial?.learning_policy ?? undefined);
+      const serializedLearningPolicy = serializeLearningPolicy({
+        ...learningPolicy,
+        timer_enabled: useTimer,
+        hints: useHints ? learningPolicy.hints : [],
+      });
       await onSave(
         {
           code: code.trim().toUpperCase(),
@@ -444,7 +450,11 @@ export function ChallengeForm({
 
   return (
     <div className="modal-backdrop">
-      <form className="modal-card challenge-modal" onSubmit={submit}>
+      <form className="modal-card challenge-modal" onSubmit={submit}
+        onInvalidCapture={(event) => {
+          const details = (event.target as HTMLElement).closest("details");
+          if (details && !details.open) details.open = true;
+        }}>
         <div className="modal-head">
           <div>
             <span className="eyebrow accent">GESTIÓN DE RETO</span>
@@ -509,13 +519,22 @@ export function ChallengeForm({
           <small className="field-help">Opcional. Usa nombres exactos separados por comas.</small>
         </label>}
         <label className="form-full">Descripción<textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} required /></label>
-        <label className="ctf-section-toggle"><input type="checkbox" checked={useLearning} onChange={(event) => setUseLearning(event.target.checked)} /> 2. Habilitar instrucciones, tiempo y pistas</label>
-        {useLearning && <details className="ctf-form-section" open><summary>Instrucciones y aprendizaje <span>Opcional</span></summary>
-        <label className="form-full">Instrucciones del reto<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={4} /></label>
-        <LearningPolicyEditor value={learningPolicy} points={Number(points)} onChange={setLearningPolicy} />
+        <label className="ctf-section-toggle"><input type="checkbox" checked={useLearning} onChange={(event) => setUseLearning(event.target.checked)} /> 2. Habilitar instrucciones del reto</label>
+        {useLearning && <details className="ctf-form-section" open><summary>Instrucciones del estudiante <span>Opcional</span></summary>
+          <label className="form-full">Instrucciones del reto
+            <textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={4} />
+          </label>
         </details>}
+        <label className="ctf-section-toggle"><input type="checkbox" checked={useHints} onChange={(event) => setUseHints(event.target.checked)} /> 3. Habilitar pistas y solución guiada</label>
+        <label className="ctf-section-toggle"><input type="checkbox" checked={useTimer} onChange={(event) => setUseTimer(event.target.checked)} /> 4. Habilitar temporizador académico</label>
+        {(useHints || useTimer) && <details className="ctf-form-section" open>
+          <summary>Pistas y tiempo <span>Opcionales e independientes</span></summary>
+          <LearningPolicyEditor value={learningPolicy} points={Number(points)} onChange={setLearningPolicy}
+            showTimer={useTimer} showHints={useHints} />
+        </details>}
+        {!useTimer && <p className="ctf-optional-note">Sin reloj ni descuento académico por tiempo. Las conexiones remotas siguen sujetas al cierre técnico de seguridad.</p>}
 
-        <label className="ctf-section-toggle"><input type="checkbox" checked={useResources} onChange={(event) => setUseResources(event.target.checked)} /> 3. Habilitar videos y presentaciones</label>
+        <label className="ctf-section-toggle"><input type="checkbox" checked={useResources} onChange={(event) => setUseResources(event.target.checked)} /> 5. Habilitar videos y presentaciones</label>
         {useResources && <details className="ctf-form-section" open><summary>Recursos educativos <span>Opcional</span></summary>
         <section className="learning-resource-editor">
           <div className="panel-head">
@@ -537,7 +556,7 @@ export function ChallengeForm({
         </section>
 
         </details>}
-        <label className="ctf-section-toggle"><input type="checkbox" checked={useFlags} onChange={(event) => setUseFlags(event.target.checked)} /> 4. Habilitar configuración de banderas</label>
+        <label className="ctf-section-toggle"><input type="checkbox" checked={useFlags} onChange={(event) => setUseFlags(event.target.checked)} /> 6. Habilitar configuración de banderas</label>
         {useFlags && <details className="ctf-form-section" open><summary>Banderas del reto <span>Opcional</span></summary>
         <section className="glass-panel flag-builder">
           <div className="panel-head">
@@ -567,7 +586,7 @@ export function ChallengeForm({
         </section>
 
         </details>}
-        <label className="ctf-section-toggle"><input type="checkbox" checked={useGroups} onChange={(event) => setUseGroups(event.target.checked)} /> 5. Habilitar asignación a grupos</label>
+        <label className="ctf-section-toggle"><input type="checkbox" checked={useGroups} onChange={(event) => setUseGroups(event.target.checked)} /> 7. Habilitar asignación a grupos</label>
         {useGroups && <details className="ctf-form-section" open><summary>Asignación de estudiantes <span>Opcional</span></summary>
         <section className="glass-panel assignment-panel">
           <div className="panel-head"><div><span className="eyebrow accent">GRUPOS</span><h3>Publicación por grupo</h3><small>Solo los estudiantes de los grupos seleccionados verán este reto.</small></div></div>
