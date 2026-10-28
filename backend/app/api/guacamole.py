@@ -24,7 +24,7 @@ router = APIRouter()
 def public_parameters(parameters: dict | None) -> dict:
     """Los parámetros técnicos sensibles nunca vuelven al navegador."""
     return {key: value for key, value in (parameters or {}).items()
-            if not any(word in key.lower() for word in ("password", "passphrase", "secret", "private-key", "token", "username"))}
+            if not any(word in key.lower() for word in ("password", "passphrase", "secret", "private-key", "token"))}
 
 @router.get("/api/v1/admin/guacamole/status", response_model=GuacamoleStatus)
 async def guacamole_status(request: Request, _=Depends(require_roles("admin"))):
