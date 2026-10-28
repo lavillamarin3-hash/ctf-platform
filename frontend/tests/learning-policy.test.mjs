@@ -14,7 +14,7 @@ test('new challenge defaults require instructor hint contents', () => {
   const draft = learningPolicyDraft();
   assert.equal(draft.duration_minutes, '60');
   assert.equal(draft.expired_points_percent, '25');
-  assert.equal(draft.hints.length, 3);
+  assert.equal(draft.hints.length, 1);
   assert.throws(() => serializeLearningPolicy(draft), /Completa el título y el texto/);
 });
 
@@ -26,7 +26,9 @@ test('rejects missing, fractional or out of range policy values and excessive co
   draft.hints[0].penalty_percent = '90';
   assert.throws(() => serializeLearningPolicy(draft), /suma de los descuentos/);
   draft.hints = [];
-  assert.throws(() => serializeLearningPolicy(draft), /una y tres/);
+  const noHints = serializeLearningPolicy({ ...draft, timer_enabled: false });
+  assert.deepEqual(noHints.hints, []);
+  assert.equal(noHints.timer_enabled, false);
 });
 
 test('permits zero cost hints and zero or full expiry credit with one hint', () => {
