@@ -14,7 +14,7 @@ export function learningPolicyDraft(policy?: ChallengeLearningPolicy | null): Le
     duration_minutes: String(policy?.duration_minutes ?? 60),
     expired_points_percent: String(policy?.expired_points_percent ?? 25),
     hints: policy?.hints.map(hint => ({ ...hint, penalty_percent: String(hint.penalty_percent) }))
-      ?? [1, 2, 3].map(number => ({ title: `Pista ${number}`, content: '', penalty_percent: '10' })),
+      ?? [{ title: 'Pista 1', content: '', penalty_percent: '10' }],
     solution_text: policy?.solution_text ?? '',
   };
 }
