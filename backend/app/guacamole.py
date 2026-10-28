@@ -160,6 +160,7 @@ class StubGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
         if username is not None: params["username"]=username
         if password is not None: params["password"]=password
         if domain is not None: params["domain"]=domain
+        if protocol.lower() != "rdp": params.pop("domain", None); params.pop("resize-method", None)
         params = _connection_parameters(protocol, params)
         c=GuacamoleConnection(identifier,name,protocol,parent_identifier,hostname,str(port),params,old.attributes or {},old.active_connections); self.connections[identifier]=c; return c
     async def delete_connection(self, identifier: str) -> None: self.connections.pop(identifier,None)
@@ -220,7 +221,7 @@ class ManagedGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
     def _conn(identifier,p):
         params=dict(p.get('parameters') or {}); attrs=dict(p.get('attributes') or {}); return GuacamoleConnection(str(identifier),str(p.get('name','')),str(p.get('protocol','')),str(p.get('parentIdentifier') or 'ROOT'),params.get('hostname'),params.get('port'),params,attrs,int(p.get('activeConnections') or 0))
     async def status(self):
-        users=await self.list_users(); token,ds=await self._post_token(); _=token; return {"mode":"real","connected":True,"base_url":self.base_url,"data_source":ds,"username":self.service_account,"user_count":len(users)}
+        users=await self.list_users(); token,ds=await self._post_token(); _=token; return {"mode":"real","connected":True,"base_url":get_settings().guacamole_base_url.rstrip("/"),"data_source":ds,"username":self.service_account,"user_count":len(users)}
     async def list_users(self):
         p=await self._api_request('GET','/users'); return [self._user(x) for x in p.values()] if isinstance(p,dict) else []
     async def create_user(self,username,password,*,email=None,full_name=None):
@@ -327,6 +328,7 @@ class ManagedGuacamoleAdapter(RemoteAccessProvisioningPort, GuacamoleAdminPort):
         if username is not None: params['username']=username
         if password is not None: params['password']=password
         if domain is not None: params['domain']=domain
+        if protocol.lower() != "rdp": params.pop("domain", None); params.pop("resize-method", None)
         params = _connection_parameters(protocol, params)
         body={"parentIdentifier":parent_identifier,"name":name,"protocol":protocol,"identifier":identifier,"activeConnections":p.get('activeConnections',0),"parameters":params,"attributes":dict(p.get('attributes') or {})}; await self._api_request('PUT',f'/connections/{quote(identifier,safe="")}',data=body); return self._conn(identifier,body)
     async def delete_connection(self,identifier): await self._api_request('DELETE',f'/connections/{quote(identifier,safe="")}')
