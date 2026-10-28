@@ -6,6 +6,7 @@
 
 import { useMemo, useState } from "react";
 import type { FormEvent } from "react";
+import { PasswordField } from "./PasswordField";
 import type {
   GuacamoleConnection,
   GuacamolePermissionSet,
@@ -114,11 +115,12 @@ export function GuacamoleUserForm({
 
           <label>
             Contraseña {editing ? "(opcional)" : ""}
-            <input
-              type="password"
+            <PasswordField
+              label="contraseña de Guacamole"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
               placeholder={editing ? "Dejar vacío para conservar" : "Contraseña inicial"}
+              autoComplete="new-password"
               disabled={saving}
               required={!editing}
             />
@@ -198,7 +200,6 @@ export function GuacamoleConnectionForm({
   const [port, setPort] = useState(initial?.port ? Number(initial.port) : 22);
   const [username, setUsername] = useState(getParameter("username"));
   const [password, setPassword] = useState("");
-  const [showVmPassword, setShowVmPassword] = useState(false);
   const [domain, setDomain] = useState(getParameter("domain"));
   const [parentIdentifier, setParentIdentifier] = useState(initial?.parent_identifier ?? "ROOT");
   const [saving, setSaving] = useState(false);
@@ -314,17 +315,14 @@ export function GuacamoleConnectionForm({
 
           <label>
             Contraseña de la MV
-            <span className="ctf-password-entry">
-              <input
-                type={showVmPassword ? "text" : "password"}
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-                placeholder={initial ? "Dejar vacío para conservar contraseña de la MV" : "Contraseña de la MV"}
-                autoComplete="new-password"
-                disabled={saving}
-              />
-              <button type="button" className="ctf-password-eye" aria-label={showVmPassword ? "Ocultar contraseña de la MV" : "Mostrar contraseña de la MV"} aria-pressed={showVmPassword} onClick={() => setShowVmPassword((visible) => !visible)} disabled={saving}>{showVmPassword ? "◉" : "👁"}</button>
-            </span>
+            <PasswordField
+              label="contraseña de la MV"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              placeholder={initial ? "Dejar vacío para conservar contraseña de la MV" : "Contraseña de la MV"}
+              autoComplete="new-password"
+              disabled={saving}
+            />
             {initial && <small className="field-help">Por seguridad no se muestra la contraseña guardada. Déjala vacía para conservarla.</small>}
           </label>
 
