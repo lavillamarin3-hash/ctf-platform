@@ -1,0 +1,12 @@
+[Unit]
+Description=CoCiber CTF · revisar nuevos commits de main cada dos minutos
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=2min
+AccuracySec=20s
+RandomizedDelaySec=10s
+Unit=cociber-ctf-auto-deploy.service
+
+[Install]
+WantedBy=timers.target
