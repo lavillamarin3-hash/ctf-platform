@@ -282,17 +282,19 @@ export function useManagementController({
     } catch (err) { setMessage(err instanceof Error ? err.message : "No se pudo guardar la conexión."); throw err; }
   };
   const checkGuacamoleManagedConnection = async (connection: import("../api").GuacamoleConnection) => {
+    const base = guacamoleStatus?.base_url;
+    if (!base || !(base.startsWith("https://") || base.startsWith("http://"))) {
+      setMessage("Configura GUACAMOLE_BASE_URL para abrir el portal web.");
+      return;
+    }
+    // Abrir durante el clic, antes de la llamada asíncrona: evita bloqueos de ventanas emergentes.
+    const portalUrl = base.replace(/\\/+$/, "") + "/";
+    window.open(portalUrl, "_blank", "noopener,noreferrer");
     try {
       const result = await api.checkGuacamoleConnection(connection.identifier);
-      setMessage(`${result.vm_name}: ${result.message}`);
-      if (result.reachable) {
-        // Abrir Guacamole en una ventana nueva para autenticar y probar la sesión real.
-        // La ventana no certifica éxito por sí misma; debe comprobarla el administrador.
-        const base = guacamoleStatus?.base_url;
-        if (base && (base.startsWith("https://") || base.startsWith("http://"))) window.open(base, "_blank", "noopener,noreferrer");
-      }
+      setMessage(`${result.vm_name}: ${result.message} El portal abierto permite verificar la sesión real.`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "No se pudo comprobar la conexión.");
+      setMessage(err instanceof Error ? err.message : "No se pudo comprobar la conectividad TCP.");
     }
   };
 
