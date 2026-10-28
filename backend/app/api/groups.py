@@ -47,6 +47,7 @@ async def _group_view(request: Request, group_id: int) -> GroupView:
         return GroupView.from_model(group)
 
 
+@router.post("/api/v1/groups", response_model=GroupView, status_code=status.HTTP_201_CREATED)
 async def create_group(payload: GroupCreate, request: Request, actor=Depends(require_roles("admin"))):
     guac_identifier = payload.code.strip().upper()
     created_in_guac = False
