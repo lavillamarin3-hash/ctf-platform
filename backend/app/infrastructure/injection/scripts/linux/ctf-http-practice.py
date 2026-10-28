@@ -283,7 +283,7 @@ def has_active_records(directory, *, at=None):
     return False
 
 
-def serve(directory, bind='10.10.30.12', port=18082, allowed=('10.10.20.10',)):
+def serve(directory, bind='10.10.30.12', port=18082, allowed=('10.10.20.10', '10.10.20.11', '10.10.20.12')):
     with PracticeHTTPServer((bind, port), directory, allowed) as server:
         server.timeout = 30
         while time.monotonic() - server.last_activity < 3600 or has_active_records(directory):
