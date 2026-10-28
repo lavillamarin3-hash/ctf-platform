@@ -10,7 +10,7 @@ type LearningState = {
   base_points: number; available_points: number; deadline: string; expired: boolean;
   hints_used: number; hints: Hint[]; solution_revealed: boolean;
   completed: boolean; awarded_points?: number; solution?: Solution;
-  hint_count?: number; expired_points_percent?: number; duration_minutes?: number;
+  hint_count?: number; expired_points_percent?: number; duration_minutes?: number; timer_enabled?: boolean;
   solution_available?: boolean; solution_reason?: 'expired' | 'all_hints' | null;
 };
 
@@ -66,7 +66,8 @@ export function LearningPanel({ run, completed, onComplete }: {
     if (generation.current === current) { setData(state); setSolution(state.solution ?? null); setError(''); }
   }, [base]);
   const remaining = data ? Math.max(0, Math.ceil((new Date(data.deadline).getTime() - now) / 1000)) : null;
-  const expired = Boolean(data && (data.expired || remaining === 0));
+  const timerEnabled = data?.timer_enabled !== false;
+  const expired = Boolean(data && (data.expired || (timerEnabled && remaining === 0)));
   const solutionAvailable = Boolean(data && (data.solution_available || expired));
   useEffect(() => {
     if (!run || !data || !solutionAvailable || solution || automaticSolutionPending.current
@@ -89,11 +90,13 @@ export function LearningPanel({ run, completed, onComplete }: {
       <div><span className="eyebrow accent">TU PROGRESO EN EL RETO</span><h3>Puntaje, tiempo y ayudas</h3></div>
       {data && <strong className="learning-points" aria-live="polite">{data.available_points} <small>de {data.base_points} puntos</small></strong>}
     </div>
-    <p>Investiga primero en la máquina virtual. Cada pista desbloquea una etapa guiada y aplica su descuento. La solución aparece al consultar todas las pistas o al agotar el tiempo. {data ? `Después del plazo queda el ${expiredPointsPercent}% del puntaje base. ` : ''}Cerrar o reabrir conserva las ayudas y el plazo.</p>
+    <p>Investiga primero en la máquina virtual. Cada pista desbloquea una etapa guiada y aplica su descuento. La solución aparece al consultar todas las pistas{timerEnabled ? ' o al agotar el tiempo' : ''}. {timerEnabled && data ? `Después del plazo queda el ${expiredPointsPercent}% del puntaje base. ` : ''}Cerrar o reabrir conserva el progreso.</p>
     {!run && <p className="field-help">Inicia el laboratorio para activar el tiempo y consultar tus pistas.</p>}
     {data && <>
-      <ChallengeClock remaining={remaining} durationMinutes={data.duration_minutes ?? 60} expired={expired}
-        hintsUsed={data.hints_used} hintCount={hintCount} />
+      {timerEnabled
+        ? <ChallengeClock remaining={remaining} durationMinutes={data.duration_minutes ?? 60} expired={expired}
+            hintsUsed={data.hints_used} hintCount={hintCount} />
+        : <p className="ctf-optional-note">Este reto no muestra un temporizador académico. La máquina virtual sigue teniendo un tiempo máximo de reserva por seguridad.</p>}
       {data.completed && <p role="status">Reto completado. Se conservan los {data.awarded_points ?? data.available_points} puntos registrados.</p>}
       <div className="learning-hints">
         {data.hints.map(hint => <article key={hint.id}>
