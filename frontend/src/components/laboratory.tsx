@@ -17,7 +17,7 @@ export function LaboratoryForm({
   onClose: () => void;
   onSave: (
     laboratory: Laboratory
-  ) => void;
+  ) => Promise<void>;
 }) {
   const [code, setCode] =
     useState(
@@ -48,7 +48,9 @@ export function LaboratoryForm({
         "Nutanix AHV · Guacamole"
     );
 
-  const submit = (
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const submit = async (
     event: FormEvent
   ) => {
     event.preventDefault();
@@ -60,7 +62,10 @@ export function LaboratoryForm({
       return;
     }
 
-    onSave({
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await onSave({
       id:
         initial?.id ??
         `lab-${Date.now()}`,
@@ -76,9 +81,11 @@ export function LaboratoryForm({
         environment.trim(),
       vms:
         initial?.vms ?? [],
-    });
-
-    onClose();
+      });
+      onClose();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "No se pudo guardar el laboratorio");
+    } finally { setSaving(false); }
   };
 
   return (
@@ -109,6 +116,7 @@ export function LaboratoryForm({
           </button>
         </div>
 
+        {saveError && <p role="alert" className="field-help">{saveError}</p>}
         <div className="form-grid">
           <label>
             Código
@@ -208,8 +216,8 @@ export function LaboratoryForm({
             Cancelar
           </button>
 
-          <button className="primary-action">
-            {initial
+          <button className="primary-action" disabled={saving}>
+            {saving ? "Guardando…" : initial
               ? "Guardar laboratorio"
               : "Crear laboratorio"}
           </button>
@@ -229,7 +237,7 @@ export function VMForm({
   laboratory: Laboratory;
   initial: LabVM | null;
   onClose: () => void;
-  onSave: (laboratoryId: string, vm: LabVM) => void;
+  onSave: (laboratoryId: string, vm: LabVM) => Promise<void>;
   guacamoleConnections?: import("../api").GuacamoleConnection[];
 }) {
   const [name, setName] = useState(initial?.name ?? "");
@@ -239,6 +247,8 @@ export function VMForm({
   const [profile, setProfile] = useState<LabVM["profile"]>(initial?.profile ?? "Vulnerable");
   const [status, setStatus] = useState<NonNullable<LabVM["status"]>>(initial?.status ?? "planned");
   const [guacamoleConnectionId, setGuacamoleConnectionId] = useState(initial?.guacamoleConnectionId ?? "");
+  const [saveErrorVm, setSaveErrorVm] = useState<string | null>(null);
+  const [savingVm, setSavingVm] = useState(false);
 
   const usedIps = laboratory.vms.map((item) => item.ip).filter(Boolean);
   const availableIps = NETWORK_IPS[networkRole].filter((candidate) => !usedIps.includes(candidate) || candidate === initial?.ip);
@@ -260,10 +270,13 @@ export function VMForm({
   }, [guacamoleConnectionId, ip, guacamoleConnections]);
 
   /** Guarda la VM y conserva la conexión de Guacamole seleccionada. */
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim() || !operatingSystem) return;
-    onSave(laboratory.id, {
+    setSavingVm(true);
+    setSaveErrorVm(null);
+    try {
+      await onSave(laboratory.id, {
       id: initial?.id ?? `vm-${Date.now()}`,
       name: name.trim(),
       ip: selectedIp,
@@ -275,8 +288,11 @@ export function VMForm({
       subnet,
       guacamoleConnectionId: guacamoleConnectionId || undefined,
       guacamoleProtocol: guacamoleConnections.find((item) => item.identifier === guacamoleConnectionId)?.protocol,
-    });
-    onClose();
+      });
+      onClose();
+    } catch (err) {
+      setSaveErrorVm(err instanceof Error ? err.message : "No se pudo guardar la MV");
+    } finally { setSavingVm(false); }
   };
 
   return (
@@ -286,6 +302,7 @@ export function VMForm({
           <div><span className="eyebrow accent">MÁQUINA VIRTUAL</span><h2>{initial ? "Editar VM" : "Agregar VM"}</h2><small>{laboratory.code} · inventario del cyber range</small></div>
           <button type="button" className="icon-btn" onClick={onClose}>×</button>
         </div>
+        {saveErrorVm && <p role="alert" className="field-help">{saveErrorVm}</p>}
         <div className="form-grid">
           <label>Nombre de VM<input value={name} onChange={(e) => setName(e.target.value)} placeholder="LAB-WINVICT-A" required /></label>
           <label>Rol de red<select value={networkRole} onChange={(e) => { const next = e.target.value as "Atacantes" | "Víctimas"; setNetworkRole(next); const first = NETWORK_IPS[next].find((item) => !usedIps.includes(item) || item === initial?.ip); setIp(first || ""); }}><option value="Atacantes">Atacante</option><option value="Víctimas">Víctima</option></select></label>
@@ -297,7 +314,7 @@ export function VMForm({
           <label>Conexión de Guacamole<select value={guacamoleConnectionId} onChange={(e) => setGuacamoleConnectionId(e.target.value)}><option value="">Sin asociar</option>{guacamoleConnections.map((item) => <option key={item.identifier} value={item.identifier}>{item.name} · {item.protocol.toUpperCase()}{item.hostname ? ` · ${item.hostname}` : ""}</option>)}</select></label>
         </div>
         <div className="network-preview"><span>{LAB_NETWORK_METADATA[networkRole].label}</span><strong>{selectedIp || "Sin IP"}</strong><small>{subnet}</small></div>
-        <div className="modal-actions"><button type="button" className="secondary-action" onClick={onClose}>Cancelar</button><button className="primary-action">{initial ? "Guardar VM" : "Agregar VM"}</button></div>
+        <div className="modal-actions"><button type="button" className="secondary-action" onClick={onClose}>Cancelar</button><button className="primary-action" disabled={savingVm}>{savingVm ? "Guardando…" : initial ? "Guardar VM" : "Agregar VM"}</button></div>
       </form>
     </div>
   );
