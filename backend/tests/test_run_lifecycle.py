@@ -198,11 +198,11 @@ class RunLifecycleTests(unittest.IsolatedAsyncioTestCase):
         self.challenge.id = 2
         self.challenge.asset_references = ["LAB-LNXVICT", "LAB-KALI"]
         self.vm.name = "LAB-LNXVICT"
-        self.vm.ip_address = "192.168.146.137"
+        self.vm.ip_address = "10.10.30.12"
         self.vm.status = "ready"
         self.connection.hostname = self.vm.ip_address
         self.settings.guacamole_base_url = "https://guacamole.test"
-        kali = SimpleNamespace(id=5, name="LAB-KALI", ip_address="192.168.146.134",
+        kali = SimpleNamespace(id=5, name="LAB-KALI", ip_address="10.10.20.10",
                                laboratory_id=3, status="ready")
         self.objects[(Laboratory, 3)] = SimpleNamespace(id=3, status="ready")
         connections = [self.connection]
