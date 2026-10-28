@@ -49,7 +49,8 @@ def _player_launch_url(challenge: Challenge, assignment: RemoteAccessAssignment 
 
 
 def _view_from_run(run: ChallengeRun, challenge: Challenge, assignment: RemoteAccessAssignment | None, vm=None, protocol: str | None = None, *, player: bool = True) -> RunView:
-    kali = run.workspace_strategy in kali_workspace.STRATEGIES and 'LAB-KALI' in (challenge.asset_references or [])
+    kali_name = kali_workspace.selected_attacker(challenge) if run.workspace_strategy in kali_workspace.STRATEGIES else None
+    kali_ip = kali_workspace.KALI_VMS.get(kali_name) if kali_name else None
     return RunView(
         id=run.id,
         challenge_code=challenge.code,
@@ -59,8 +60,8 @@ def _view_from_run(run: ChallengeRun, challenge: Challenge, assignment: RemoteAc
         launch_url=_player_launch_url(challenge, assignment, player=player),
         connection_state=assignment.status if assignment else None,
         workspace_strategy=run.workspace_strategy,
-        target_vm_name=vm.name if vm else ('LAB-KALI' if kali else None),
-        target_vm_ip=vm.ip_address if vm else ('10.10.20.10' if kali else None),
+        target_vm_name=vm.name if vm else kali_name,
+        target_vm_ip=vm.ip_address if vm else kali_ip,
         target_protocol=protocol,
         laboratory_code=None,
     )
@@ -471,8 +472,13 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             run = await dfir_runtime.start(session, challenge, user, expires_at=planned_expires_at, policy=planned_policy)
             return _view_from_run(run, challenge, None)
 
-        if challenge.code == ssh_practice.CODE and challenge.scenario == 'SSH-PASSWORD-LAB':
-            await kali_workspace.context(request.app, session, user)
+        if challenge.code == ssh_practice.CODE:
+            if challenge.scenario != 'SSH-PASSWORD-LAB':
+                raise HTTPException(409, 'Configura el escenario SSH-PASSWORD-LAB para ESC-02-BRUTEFORCE. El modo genérico no inicia este reto.')
+            attacker_names = [name for name in kali_workspace.KALI_VMS if name in (challenge.asset_references or [])]
+            if len(attacker_names) != 1 or 'LAB-LNXVICT' not in (challenge.asset_references or []):
+                raise HTTPException(409, 'ESC-02 necesita LAB-LNXVICT y una sola Kali: LAB-KALI, LAB-KALI-PURPLE o LAB-KALI-BLUE. Revisa también la escritura del nombre.')
+            await kali_workspace.context(request.app, session, user, challenge)
             flags = [flag for flag in challenge.flags if flag.is_active]
             if len(flags)!=1 or flags[0].mode!='dynamic' or not flags[0].template:
                 raise HTTPException(409,'La práctica SSH requiere una flag dinámica activa.')
@@ -852,8 +858,8 @@ async def list_runs(request: Request, user=Depends(get_current_user)):
                     launch_url=_player_launch_url(challenge, assignment, player=user.role == "player"),
                     connection_state=assignment.status if assignment else None,
                     workspace_strategy=run.workspace_strategy,
-                    target_vm_name=display_vm.name if display_vm else ('LAB-KALI' if run.workspace_strategy in kali_workspace.STRATEGIES and 'LAB-KALI' in challenge.asset_references else None),
-                    target_vm_ip=display_vm.ip_address if display_vm else ('192.168.146.134' if run.workspace_strategy in kali_workspace.STRATEGIES and 'LAB-KALI' in challenge.asset_references else None),
+                    target_vm_name=display_vm.name if display_vm else (kali_workspace.selected_attacker(challenge) if run.workspace_strategy in kali_workspace.STRATEGIES else None),
+                    target_vm_ip=display_vm.ip_address if display_vm else (kali_workspace.KALI_VMS[kali_workspace.selected_attacker(challenge)] if run.workspace_strategy in kali_workspace.STRATEGIES else None),
                     target_protocol=display_protocol,
                     laboratory_code=None,
                 )
