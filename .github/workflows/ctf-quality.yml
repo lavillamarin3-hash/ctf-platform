@@ -44,3 +44,14 @@ jobs:
       - run: npm ci
       - run: node --test tests/*.cjs tests/*.mjs
       - run: npm run build
+
+  deployment_scripts:
+    name: Despliegue - sintaxis y seguridad estatica
+    runs-on: ubuntu-latest
+    timeout-minutes: 4
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validar sintaxis Bash
+        run: bash -n scripts/cociber_auto_deploy_main.sh scripts/instalar_auto_deploy_main.sh
+      - name: Comprobar configuración del despliegue supervisado
+        run: python3 scripts/qa/check_auto_deploy.py
