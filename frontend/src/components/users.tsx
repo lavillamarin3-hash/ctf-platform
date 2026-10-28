@@ -7,6 +7,7 @@ import { createElement, FormEvent, useState } from "react";
 
 import { User } from "../api";
 import { ManagedUser, UserFunction, USER_FUNCTIONS } from "../config";
+import { PasswordField } from "./PasswordField";
 
 export function UserForm({
   initial,
@@ -210,12 +211,10 @@ export function UserForm({
             <label>
               Contraseña
 
-              <input
-                type="password"
+              <PasswordField
+                label="contraseña del usuario"
                 value={password}
-                onChange={(e) =>
-                  setPassword(e.target.value)
-                }
+                onChange={(e) => setPassword(e.target.value)}
                 placeholder="Mínimo 8 caracteres"
                 minLength={8}
                 autoComplete="new-password"
