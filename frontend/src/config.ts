@@ -235,22 +235,22 @@ export const VM_OS_OPTIONS = [
 // 6. INVENTARIO DE RED REAL
 // ============================================================
 // IPs disponibles para la demostración real actual.
-// Atacante: 192.168.146.134
-// Víctima:  192.168.146.137
+// Atacante: 10.10.20.10
+// Víctima:  10.10.30.12
 
 export const NETWORK_IPS = { 
-  Atacantes: ["192.168.146.134"], 
-  Víctimas: ["192.168.146.137"], 
+  Atacantes: ["10.10.20.10", "10.10.20.11", "10.10.20.12"], 
+  Víctimas: ["10.10.30.10", "10.10.30.11", "10.10.30.12", "10.10.30.20", "10.10.30.21"], 
 } as const; 
 
 export const LAB_NETWORK_METADATA = { 
   Atacantes: { 
     label: "Atacante", 
-    segment: "Red actual · 192.168.146.134", 
+    segment: "VLAN 20 · 10.10.20.0/24", 
   }, 
   Víctimas: { 
     label: "Víctima", 
-    segment: "Red actual · 192.168.146.137", 
+    segment: "VLAN 30 · 10.10.30.0/24", 
   }, 
 } as const; 
 
@@ -269,17 +269,17 @@ export const DEFAULT_LABORATORIES: Laboratory[] = [
       "Segmento ofensivo del cyber range para ejercicios controlados.", 
     status: "Disponible", 
     environment: 
-      "Red actual · 192.168.146.0/24 · Nutanix AHV · Guacamole", 
+      "VLAN 20 · 10.10.20.0/24 · Nutanix AHV · Guacamole", 
     vms: [ 
       { 
         id: "vm-kali", 
         name: "LAB-KALI", 
-        ip: "192.168.146.134", 
+        ip: "10.10.20.10", 
         operatingSystem: "Kali Linux 2026.2", 
         profile: "Standard", 
         networkRole: "Atacantes", 
-        vlan: "Red actual", 
-        subnet: "192.168.146.0/24", 
+        vlan: "VLAN 20", 
+        subnet: "10.10.20.0/24", 
       }, 
     ], 
   }, 
@@ -291,17 +291,17 @@ export const DEFAULT_LABORATORIES: Laboratory[] = [
       "Segmento objetivo para escenarios de ataque, explotación y movimiento lateral.", 
     status: "Disponible", 
     environment: 
-      "Red actual · 192.168.146.0/24 · Nutanix AHV · Guacamole", 
+      "Red actual · 10.10.30.0/24 · Nutanix AHV · Guacamole", 
     vms: [ 
       { 
         id: "vm-lnx", 
         name: "LAB-LNXVICT", 
-        ip: "192.168.146.137", 
+        ip: "10.10.30.12", 
         operatingSystem: "Ubuntu Server 26.04", 
         profile: "Vulnerable", 
         networkRole: "Víctimas", 
-        vlan: "Red actual", 
-        subnet: "192.168.146.0/24", 
+        vlan: "VLAN 30", 
+        subnet: "10.10.30.0/24", 
       }, 
     ], 
   }, 
