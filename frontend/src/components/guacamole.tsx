@@ -190,7 +190,7 @@ export function GuacamoleConnectionForm({
     parent_identifier?: string;
   }, identifier?: string) => Promise<void>;
 }) {
-  const getParameter = (key: string) => initial?.parameters?.[key] ?? "";
+  const getParameter = (key: string) => key === "username" ? (initial?.remote_username ?? initial?.parameters?.[key] ?? "") : (initial?.parameters?.[key] ?? "");
 
   const [name, setName] = useState(initial?.name ?? "");
   const [protocol, setProtocol] = useState<"ssh" | "rdp" | "vnc">(initial?.protocol ?? "ssh");
