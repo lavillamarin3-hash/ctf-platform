@@ -24,6 +24,7 @@ export function GroupManagement({
   const [memberId, setMemberId] = useState("");
   const [challengeCode, setChallengeCode] = useState("");
   const [busy, setBusy] = useState(false);
+  const [groupError, setGroupError] = useState("");
   const [progress, setProgress] = useState<import("../api").ProgressRow[]>([]);
 
   /**
@@ -77,17 +78,33 @@ export function GroupManagement({
 
   /** Crea o actualiza el grupo seleccionado. */
   const saveGroup = async () => {
-    if (!isAdmin || !name.trim() || !code.trim()) return;
+    if (!isAdmin) return;
+    const cleanCode = code.trim().toUpperCase();
+    const cleanName = name.trim();
+    setGroupError("");
+    if (!/^[A-Z0-9_-]{2,64}$/.test(cleanCode)) {
+      setGroupError("Código: utiliza de 2 a 64 caracteres, solo letras mayúsculas, números, guiones y _."); return;
+    }
+    if (cleanName.length < 2 || cleanName.length > 120) {
+      setGroupError("Nombre: utiliza entre 2 y 120 caracteres."); return;
+    }
     setBusy(true);
     try {
-      const payload = { name: name.trim(), code: code.trim().toUpperCase(), description: description.trim(), is_active: true };
+      const payload = { name: cleanName, code: cleanCode, description: description.trim(), is_active: true };
       const saved = editingId ? await api.updateGroup(editingId, payload) : await api.createGroup(payload);
       setGroups((current) => editingId ? current.map((item) => item.id === saved.id ? saved : item) : [saved, ...current]);
       setSelectedId(saved.id);
       resetForm();
       onMessage(editingId ? "Grupo actualizado en Cociber CTF y sincronizado con Guacamole." : "Grupo creado en Cociber CTF y en Guacamole.");
     } catch (err) {
-      onMessage(err instanceof Error ? err.message : "No se pudo guardar el grupo.");
+      const status = (err as { status?: number } | null)?.status;
+      const message = status === 405
+        ? "La API no permite crear grupos (HTTP 405). Actualiza el backend de CoCiber CTF en el servidor y confirma POST /api/v1/groups."
+        : status === 502
+          ? "No se pudo sincronizar el grupo con Guacamole. Comprueba su API y la cuenta de servicio."
+          : err instanceof Error ? err.message : "No se pudo guardar el grupo.";
+      setGroupError(message);
+      onMessage(message);
     } finally {
       setBusy(false);
     }
@@ -220,6 +237,7 @@ export function GroupManagement({
               <input value={editingId ? name : name} onChange={(e) => setName(e.target.value)} placeholder="Grupo Red Team 01" />
               <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} placeholder="GRP-RED-01" disabled={Boolean(editingId)} />
               <textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Curso, paralelo o laboratorio" rows={3} />
+              {groupError && <p role="alert" className="ctf-inline-error">{groupError}</p>}
               <button className="primary-action full" onClick={() => void saveGroup()} disabled={busy || !name.trim() || !code.trim()}>{editingId ? "Guardar cambios" : "Crear grupo"}</button>
               {editingId && <button className="secondary-action full" onClick={resetForm} disabled={busy}>Cancelar edición</button>}
             </div>
