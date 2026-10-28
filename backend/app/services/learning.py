@@ -24,6 +24,10 @@ def utc(value: datetime) -> datetime:
 
 
 def expired(progress, at=None):
+    policy = getattr(progress, 'policy_snapshot', None)
+    if isinstance(policy, dict) and policy.get('timer_enabled') is False:
+        # TTL de la VM sigue vigente; no afecta al puntaje académico.
+        return False
     return utc(at or now_utc()) >= utc(progress.deadline)
 
 
@@ -66,7 +70,7 @@ def default_policy(challenge, *, strategy=None):
     strategy = strategy or _strategy_for(challenge)
     duration = 240 if strategy == 'offline_case' else 120 if strategy == 'dfir_case' else 60
     prototype = SimpleNamespace(id='{{RUN_ID}}', workspace_strategy=strategy)
-    return {'duration_minutes': duration, 'expired_points_percent': 25, 'solution_text': None,
+    return {'timer_enabled': True, 'duration_minutes': duration, 'expired_points_percent': 25, 'solution_text': None,
             'hints': [{'title': hint['title'], 'content': hint['content'], 'penalty_percent': 10}
                       for hint in _default_hints_for(prototype, challenge)]}
 
@@ -300,6 +304,7 @@ async def metadata(session, run, challenge, progress):
     access = solution_access(progress, hints, used)
     result = {'base_points': progress.base_points, 'expired_points_percent': expired_percent(progress), 'hint_count': len(hints),
               'duration_minutes': policy_for_progress(progress, run, challenge)['duration_minutes'],
+              'timer_enabled': policy_for_progress(progress, run, challenge).get('timer_enabled', True),
               'solution_available': access is not None, 'solution_reason': access,
               'available_points': completion.awarded_points if completion is not None else points_for(progress, len(used)),
               'deadline': utc(progress.deadline).isoformat(), 'expired': expired(progress), 'hints_used': len(used),
