@@ -24,6 +24,7 @@ class Settings(BaseSettings):
     field_hmac_secret: str = "unsafe-development-hmac-change-me"
     jwt_algorithm: str = "HS256"
     access_token_minutes: int = 20
+    single_session_enabled: bool = False  # Activar solo tras revisar sesiones existentes
     refresh_token_days: int = 7
     ctf_demo_password: str = "LabDemo-ChangeMe-2026!"
     ctf_seed_demo_data: bool = True
@@ -87,7 +88,7 @@ def submission_fingerprint(value: str) -> str:
     return hmac.new(secret, value.encode(), hashlib.sha256).hexdigest()
 
 
-def create_token(subject: str, token_type: str, expires: timedelta) -> str:
+def create_token(subject: str, token_type: str, expires: timedelta, *, session_id: str | None = None) -> str:
     settings = get_settings()
     issued = now_utc()
     payload = {
@@ -96,6 +97,7 @@ def create_token(subject: str, token_type: str, expires: timedelta) -> str:
         "iat": issued,
         "exp": issued + expires,
         "iss": "lab-ctf-platform",
+        **({"sid": session_id} if session_id else {}),
     }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
@@ -118,6 +120,9 @@ async def get_current_user(
     if credentials is None:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Autenticación requerida")
     payload = decode_token(credentials.credentials)
+    if get_settings().single_session_enabled:
+        from .services.single_session import validate
+        await validate(request.app.state.redis, int(payload["sub"]), payload.get("sid"))
     session_factory = request.app.state.session_factory
     from .models import User
     from sqlalchemy import select
