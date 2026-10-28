@@ -96,9 +96,9 @@ async def _run_connection_context(app, session, run_id: int, user_id: int):
     if challenge is None or not challenge.is_published or not await _assigned(session, challenge.id, user_id):
         raise HTTPException(403, "Este laboratorio ya no está asignado a tu grupo")
     if getattr(run,'workspace_strategy',None) in kali_workspace.STRATEGIES:
-        if 'LAB-KALI' not in (challenge.asset_references or []):
+        if not any(name in (challenge.asset_references or []) for name in kali_workspace.KALI_VMS):
             raise HTTPException(409,'Este ejercicio no tiene una terminal Kali asignada.')
-        vm,targets=await kali_workspace.context(app,session,user)
+        vm,targets=await kali_workspace.context(app,session,user,challenge)
         primary=targets.get('ssh') or targets.get('rdp')
         return run,challenge,None,vm,str(primary),user.username
     instance = await session.scalar(select(ChallengeInstance).where(ChallengeInstance.run_id == run.id))
@@ -132,7 +132,7 @@ async def authorized_target(app, run_id: int, user_id: int, protocol: str | None
         if getattr(run,'workspace_strategy',None) in kali_workspace.STRATEGIES:
             if target!='victim': raise HTTPException(409,'Usa la terminal Kali asignada al ejercicio.')
             user=await session.get(User,user_id)
-            _,targets=await kali_workspace.context(app,session,user)
+            _,targets=await kali_workspace.context(app,session,user,challenge)
             if protocol and protocol not in targets: raise HTTPException(403,'Protocolo no autorizado para tu cuenta Kali.')
             return str(targets[protocol] if protocol else connection_id),run.expires_at,username
         if challenge.code == ATTACK_CHALLENGE_CODE and target != "attacker":
@@ -207,7 +207,7 @@ async def terminal_options(run_id: int, request: Request, user=Depends(require_r
             request.app, session, run_id, user.id
         )
         if getattr(run,'workspace_strategy',None) in kali_workspace.STRATEGIES:
-            _,targets=await kali_workspace.context(request.app,session,user)
+            _,targets=await kali_workspace.context(request.app,session,user,challenge)
             return {'protocols':[name for name in ('ssh','rdp') if name in targets],'attacker_protocols':[]}
         attacker_targets = await _attacker_targets(request.app, session, username, challenge, instance, vm)
     targets = {} if challenge.code == ATTACK_CHALLENGE_CODE else await _protocol_targets(request.app, vm, primary_id)
