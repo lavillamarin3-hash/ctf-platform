@@ -780,6 +780,7 @@ export function useManagementController({
       setMessage(isPersisted ? "Laboratorio actualizado correctamente." : "Laboratorio creado y guardado en la base de datos.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "No se pudo persistir el laboratorio.");
+      throw err;
     }
   };
 
@@ -830,6 +831,7 @@ export function useManagementController({
       setMessage("Máquina virtual guardada correctamente.");
     } catch (err) {
       setMessage(err instanceof Error ? err.message : "No se pudo persistir la VM.");
+      throw err;
     }
   };
 
