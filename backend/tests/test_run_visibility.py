@@ -86,16 +86,16 @@ class RunVisibilityTests(unittest.IsolatedAsyncioTestCase):
         challenge.asset_references = ["LAB-VICTIMAS"]
         lab = Laboratory(id=21, code="LAB-VICTIMAS", name="Víctimas prueba", status="ready")
         lab.vms = [
-            VMAsset(id=31, name="LAB-LNXVICT", ip_address="192.168.146.137", status="ready"),
+            VMAsset(id=31, name="LAB-LNXVICT", ip_address="10.10.30.12", status="ready"),
             VMAsset(id=32, name="LAB-SRVWEB", ip_address="10.10.30.20", status="ready"),
-            VMAsset(id=33, name="LAB-LNX-OFF", ip_address="192.168.146.134", status="offline"),
-            VMAsset(id=34, name="lab02", ip_address="192.168.146.137", status="ready"),
+            VMAsset(id=33, name="LAB-LNX-OFF", ip_address="10.10.20.10", status="offline"),
+            VMAsset(id=34, name="lab02", ip_address="10.10.30.12", status="ready"),
         ]
         self.session.add(lab)
         self.session.commit()
         result = await list_player_laboratories(self.request, self.player)
         self.assertEqual(len(result), 1)
-        self.assertEqual([vm.name for vm in result[0].vms], ["LAB-LNXVICT"])
+        self.assertEqual([vm.name for vm in result[0].vms], ["LAB-LNXVICT", "LAB-SRVWEB"])
 
 
 if __name__ == "__main__":
