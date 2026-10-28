@@ -18,6 +18,7 @@ export type GuacamoleStatus = {
 /** Conexión remota administrada por Guacamole. */
 export type GuacamoleConnection = {
   identifier: string;
+  remote_username?: string | null;
   name: string;
   protocol: "ssh" | "rdp" | "vnc";
   parent_identifier?: string;
