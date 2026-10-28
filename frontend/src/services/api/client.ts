@@ -4,13 +4,45 @@
 // ============================================================
 
 const tokenKey = "ctf-access-token";
+const ownerKey = "ctf-tab-session-owner";
+const instanceId = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : String(Date.now()) + String(Math.random());
+const startedAt = Date.now();
 
-/** Guarda, recupera o elimina el token de la sesión web. */
+/** Sesiones separadas por ventana; la defensa definitiva de login usa Redis. */
 export const session = {
   get: () => sessionStorage.getItem(tokenKey),
-  save: (token: string) => sessionStorage.setItem(tokenKey, token),
-  clear: () => sessionStorage.removeItem(tokenKey),
+  save: (token: string) => {
+    sessionStorage.setItem(tokenKey, token);
+    sessionStorage.setItem(ownerKey, crypto.randomUUID());
+  },
+  clear: () => {
+    sessionStorage.removeItem(tokenKey);
+    sessionStorage.removeItem(ownerKey);
+  },
 };
+
+if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+  const channel = new BroadcastChannel("ctf-session-tabs-v1");
+  channel.onmessage = (event: MessageEvent) => {
+    const message = event.data;
+    const owner = sessionStorage.getItem(ownerKey);
+    if (!owner || !session.get() || !message || message.owner !== owner) return;
+    if (message.type === "probe" && message.instance !== instanceId) {
+      // La pestaña antigua conserva la sesión al detectar una copia clonada.
+      if (startedAt < message.startedAt ||
+          (startedAt === message.startedAt && instanceId < message.instance)) {
+        channel.postMessage({ type: "occupied", owner, target: message.instance });
+      }
+    } else if (message.type === "occupied" && message.target === instanceId) {
+      session.clear();
+      window.dispatchEvent(new Event("ctf-session-expired"));
+    }
+  };
+  window.setTimeout(() => {
+    const owner = sessionStorage.getItem(ownerKey);
+    if (owner && session.get()) channel.postMessage({ type: "probe", owner, instance: instanceId, startedAt });
+  }, 100);
+}
 
 /** Ejecuta una petición al backend CTF y convierte errores HTTP en Error. */
 export class ApiError extends Error {
