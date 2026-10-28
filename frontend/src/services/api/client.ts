@@ -61,10 +61,20 @@ export async function request<T>(
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const response = await fetch(`/api/v1${path}`, {
-    ...init,
-    headers,
-  });
+  let response: Response;
+  try {
+    response = await fetch(`/api/v1${path}`, {
+      ...init,
+      headers,
+    });
+  } catch {
+    // El navegador no permite conocer desde JS la causa exacta (TLS, red, DNS,
+    // proxy o servidor). No confundir estos errores con "no hay datos".
+    throw new ApiError(
+      "No fue posible conectar con la API de CoCiber CTF. Comprueba el certificado HTTPS del sitio, la red y el proxy inverso; los registros remotos no necesariamente se han perdido.",
+      0,
+    );
+  }
 
   const body = await response.json().catch(() => ({}));
 
