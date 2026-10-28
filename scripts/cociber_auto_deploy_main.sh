@@ -107,14 +107,46 @@ wait_health() {
   return 1
 }
 
+# /health indica que FastAPI está arriba, pero NO garantiza conexión a BD/Redis.
+dependencies_ok() {
+  compose exec -T api python - <<'PY'
+import asyncio
+import redis.asyncio as redis
+from sqlalchemy import text
+from app.core import get_settings
+from app.db import make_session_factory
+
+async def main():
+    factory = make_session_factory()
+    try:
+        async with factory() as session:
+            await session.execute(text("SELECT 1"))
+    except Exception:
+        raise SystemExit("PostgreSQL no disponible")
+    finally:
+        await factory.kw["bind"].dispose()
+    client = redis.from_url(get_settings().redis_url, decode_responses=True)
+    try:
+        await client.ping()
+    except Exception:
+        raise SystemExit("Redis no disponible")
+    finally:
+        await client.aclose()
+    print("Comprobación interna: PostgreSQL y Redis accesibles.")
+
+asyncio.run(main())
+PY
+}
+
 # Se exige un despliegue operativo ANTES de cambiar el código.
 health_ok || die "La API actual no pasa /health; intervención manual antes de desplegar"
 compose config --quiet || die "Compose actual inválido"
+dependencies_ok || die "PostgreSQL/Redis actuales no disponibles; no se desplegará"
 log "Actualizando main y reconstruyendo exclusivamente api/web"
 git_app merge --ff-only "$NEW_SHA" || die "No fue posible avanzar main"
 
 deploy_ok=false
-if compose config --quiet && compose build api web && compose up -d --no-deps api web && wait_health; then
+if compose config --quiet && compose build api web && compose up -d --no-deps api web && wait_health && dependencies_ok; then
   deploy_ok=true
 fi
 if [[ "$deploy_ok" != true ]]; then
