@@ -306,6 +306,12 @@ export function ChallengeForm({
   const [published, setPublished] = useState(initial?.is_published ?? true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Secciones optativas: deshabilitar oculta los campos sin hacerlos obligatorios.
+  const [useLearning, setUseLearning] = useState(true);
+  const [useResources, setUseResources] = useState(true);
+  const [useFlags, setUseFlags] = useState(true);
+  const [useGroups, setUseGroups] = useState(true);
+  const [useScenarioDetails, setUseScenarioDetails] = useState(true);
 
   type Draft = {
     id?: number;
@@ -407,24 +413,26 @@ export function ChallengeForm({
       }
       const uniqueReferences = [...new Set(references.filter(Boolean))];
       if (!uniqueReferences.length) throw new Error("Selecciona al menos un laboratorio o una VM.");
-      const serializedLearningPolicy = serializeLearningPolicy(learningPolicy);
+      const serializedLearningPolicy = useLearning ? serializeLearningPolicy(learningPolicy) : (initial?.learning_policy ?? undefined);
       await onSave(
         {
           code: code.trim().toUpperCase(),
           name: name.trim(),
           category: selectedCategory,
           difficulty,
-          scenario: scenario || null,
-          mitre_technique: mitre || "—",
+          scenario: useScenarioDetails ? (scenario || null) : (initial?.scenario ?? null),
+          mitre_technique: useScenarioDetails ? (mitre.trim() || "No aplica") : (initial?.mitre_technique ?? "No aplica"),
           asset_references: uniqueReferences,
           points: Number(points),
           learning_policy: serializedLearningPolicy,
           description: description.trim(),
-          instructions: serializeChallengeResources(instructions, resources),
+          instructions: useLearning || useResources
+            ? serializeChallengeResources(useLearning ? instructions : initialLearning.instructions, useResources ? resources : initialLearning.resources)
+            : (initial?.instructions ?? ""),
           is_published: published,
         },
-        flags,
-        selectedGroupIds
+        useFlags ? flags : (initial?.flags?.map((flag) => ({ id: flag.id, label: flag.label, mode: flag.mode ?? "static", value: "", template: initialFlagTemplate(flag, initial?.code ?? "CODE"), flag_order: flag.flag_order, is_active: flag.is_active })) ?? []),
+        useGroups ? selectedGroupIds : existingGroupIds
       );
       onClose();
     } catch (err) {
@@ -448,6 +456,7 @@ export function ChallengeForm({
 
         {error && <ErrorMessage message={error} />}
 
+        <details className="ctf-form-section" open><summary>1. Datos generales y activo principal <span>Obligatorio</span></summary>
         <div className="form-grid">
           <label>Código<input value={code} onChange={(event) => setCode(event.target.value)} disabled={Boolean(initial)} required /></label>
           <label>Nombre<input value={name} onChange={(event) => setName(event.target.value)} required /></label>
@@ -470,8 +479,8 @@ export function ChallengeForm({
             <small className="field-help">Se guardará al crear o editar este reto y luego aparecerá en la lista.</small>
           </label>}
           <label>Dificultad<select value={difficulty} onChange={(event) => setDifficulty(event.target.value as Challenge["difficulty"])}><option>Básico</option><option>Medio</option><option>Avanzado</option></select></label>
-          <label>Escenario<input value={scenario} onChange={(event) => setScenario(event.target.value)} /></label>
-          <label>MITRE<input value={mitre} onChange={(event) => setMitre(event.target.value)} /></label>
+          {useScenarioDetails && <><label>Escenario<input value={scenario} onChange={(event) => setScenario(event.target.value)} /></label>
+          <label>MITRE<input value={mitre} onChange={(event) => setMitre(event.target.value)} /></label></>}
           {externalWeb ? <label>URL del portal Operación Cóndor
             <input type="url" value={portalUrl} onChange={(event) => setPortalUrl(event.target.value)} maxLength={1024} placeholder="http://localhost:8094/" required />
             <small className="field-help">Portal independiente: usa localhost, condor.lab o una IP privada del laboratorio. Cociber CTF administra tiempo, pistas y puntaje. Activa la terminal de Kali para investigar el servicio desde la VM del laboratorio.</small>
@@ -487,6 +496,8 @@ export function ChallengeForm({
           <label>Puntos<input type="number" min="1" max="10000" value={points} onChange={(event) => setPoints(event.target.value)} required /></label>
         </div>
 
+        </details>
+        <label className="ctf-section-toggle"><input type="checkbox" checked={useScenarioDetails} onChange={(event) => setUseScenarioDetails(event.target.checked)} /> Incluir escenario y técnica MITRE</label>
         {externalWeb && <label className="switch-row external-web-terminal-choice">
           <input type="checkbox" checked={useKaliTerminal} onChange={(event) => setUseKaliTerminal(event.target.checked)} />
           <span>Usar terminal de Kali para descubrir el servicio web
@@ -498,10 +509,14 @@ export function ChallengeForm({
           <small className="field-help">Opcional. Usa nombres exactos separados por comas.</small>
         </label>}
         <label className="form-full">Descripción<textarea value={description} onChange={(event) => setDescription(event.target.value)} rows={4} required /></label>
+        <label className="ctf-section-toggle"><input type="checkbox" checked={useLearning} onChange={(event) => setUseLearning(event.target.checked)} /> 2. Habilitar instrucciones, tiempo y pistas</label>
+        {useLearning && <details className="ctf-form-section" open><summary>Instrucciones y aprendizaje <span>Opcional</span></summary>
         <label className="form-full">Instrucciones del reto<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} rows={4} /></label>
-
         <LearningPolicyEditor value={learningPolicy} points={Number(points)} onChange={setLearningPolicy} />
+        </details>}
 
+        <label className="ctf-section-toggle"><input type="checkbox" checked={useResources} onChange={(event) => setUseResources(event.target.checked)} /> 3. Habilitar videos y presentaciones</label>
+        {useResources && <details className="ctf-form-section" open><summary>Recursos educativos <span>Opcional</span></summary>
         <section className="learning-resource-editor">
           <div className="panel-head">
             <div><span className="eyebrow accent">MATERIAL POR TEMA</span><h3>Videos y presentaciones</h3><p>Asocia material de apoyo a este reto. Usa enlaces HTTPS o rutas de archivos alojados en la plataforma.</p></div>
@@ -521,6 +536,9 @@ export function ChallengeForm({
           <small className="field-help">Los videos de YouTube y los archivos MP4/WebM/OGG se reproducen dentro del reto. Las presentaciones se abren en su visor de origen. Máximo {MAX_CHALLENGE_RESOURCES} recursos.</small>
         </section>
 
+        </details>}
+        <label className="ctf-section-toggle"><input type="checkbox" checked={useFlags} onChange={(event) => setUseFlags(event.target.checked)} /> 4. Habilitar configuración de banderas</label>
+        {useFlags && <details className="ctf-form-section" open><summary>Banderas del reto <span>Opcional</span></summary>
         <section className="glass-panel flag-builder">
           <div className="panel-head">
             <div><span className="eyebrow accent">FLAGS</span><h3>Validación del reto</h3><small>Las flags dinámicas se generan por ejecución, se inyectan en la VM víctima y solo se valida su hash asociado a esa ejecución.</small></div>
@@ -548,6 +566,9 @@ export function ChallengeForm({
           {!flags.length && <div className="empty-card"><strong>No hay flags configuradas</strong><span>Añade una flag para poder iniciar el reto.</span></div>}
         </section>
 
+        </details>}
+        <label className="ctf-section-toggle"><input type="checkbox" checked={useGroups} onChange={(event) => setUseGroups(event.target.checked)} /> 5. Habilitar asignación a grupos</label>
+        {useGroups && <details className="ctf-form-section" open><summary>Asignación de estudiantes <span>Opcional</span></summary>
         <section className="glass-panel assignment-panel">
           <div className="panel-head"><div><span className="eyebrow accent">GRUPOS</span><h3>Publicación por grupo</h3><small>Solo los estudiantes de los grupos seleccionados verán este reto.</small></div></div>
           <div className="selection-list">
@@ -561,6 +582,7 @@ export function ChallengeForm({
           {!groups.length && <div className="empty-card"><strong>No hay grupos</strong><span>Crea primero un grupo de estudiantes.</span></div>}
         </section>
 
+        </details>}
         <label className="switch-row"><input type="checkbox" checked={published} onChange={(event) => setPublished(event.target.checked)} /><span>Publicar reto inmediatamente</span></label>
         <div className="modal-actions"><button type="button" className="secondary-action" onClick={onClose}>Cancelar</button><button className="primary-action" disabled={busy}>{busy ? "Guardando…" : initial ? "Guardar cambios" : "Crear reto"}</button></div>
       </form>
