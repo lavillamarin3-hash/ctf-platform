@@ -288,7 +288,7 @@ export function useManagementController({
       return;
     }
     // Abrir durante el clic, antes de la llamada asíncrona: evita bloqueos de ventanas emergentes.
-    const portalUrl = base.replace(/\\/+$/, "") + "/";
+    const portalUrl = base.endsWith("/") ? base : `${base}/`;
     window.open(portalUrl, "_blank", "noopener,noreferrer");
     try {
       const result = await api.checkGuacamoleConnection(connection.identifier);
