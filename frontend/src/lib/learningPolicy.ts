@@ -44,7 +44,7 @@ export function serializeLearningPolicy(draft: LearningPolicyDraft): ChallengeLe
   }
   const solution_text = draft.solution_text.trim();
   if (solution_text.length > 12000) throw new Error('La solución admite hasta 12000 caracteres.');
-  return { timer_enabled: draft.timer_enabled, duration_minutes, expired_points_percent, hints, solution_text: solution_text || null };
+  return { ...(draft.timer_enabled === false ? { timer_enabled: false } : {}), duration_minutes, expired_points_percent, hints, solution_text: solution_text || null };
 }
 
 export function remainingLearningPoints(base: number, percent: number): number {
