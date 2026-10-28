@@ -49,7 +49,10 @@ def _player_launch_url(challenge: Challenge, assignment: RemoteAccessAssignment 
 
 
 def _view_from_run(run: ChallengeRun, challenge: Challenge, assignment: RemoteAccessAssignment | None, vm=None, protocol: str | None = None, *, player: bool = True) -> RunView:
-    kali_name = kali_workspace.selected_attacker(challenge) if run.workspace_strategy in kali_workspace.STRATEGIES else None
+    kali_name = (kali_workspace.selected_attacker(challenge)
+                 if run.workspace_strategy in kali_workspace.STRATEGIES
+                 and any(name in (challenge.asset_references or []) for name in kali_workspace.KALI_VMS)
+                 else None)
     kali_ip = kali_workspace.KALI_VMS.get(kali_name) if kali_name else None
     return RunView(
         id=run.id,
@@ -858,8 +861,8 @@ async def list_runs(request: Request, user=Depends(get_current_user)):
                     launch_url=_player_launch_url(challenge, assignment, player=user.role == "player"),
                     connection_state=assignment.status if assignment else None,
                     workspace_strategy=run.workspace_strategy,
-                    target_vm_name=display_vm.name if display_vm else (kali_workspace.selected_attacker(challenge) if run.workspace_strategy in kali_workspace.STRATEGIES else None),
-                    target_vm_ip=display_vm.ip_address if display_vm else (kali_workspace.KALI_VMS[kali_workspace.selected_attacker(challenge)] if run.workspace_strategy in kali_workspace.STRATEGIES else None),
+                    target_vm_name=display_vm.name if display_vm else (kali_workspace.selected_attacker(challenge) if run.workspace_strategy in kali_workspace.STRATEGIES and any(name in (challenge.asset_references or []) for name in kali_workspace.KALI_VMS) else None),
+                    target_vm_ip=display_vm.ip_address if display_vm else (kali_workspace.KALI_VMS[kali_workspace.selected_attacker(challenge)] if run.workspace_strategy in kali_workspace.STRATEGIES and any(name in (challenge.asset_references or []) for name in kali_workspace.KALI_VMS) else None),
                     target_protocol=display_protocol,
                     laboratory_code=None,
                 )
