@@ -130,7 +130,7 @@ def has_active_records(directory, *, at=None):
     return False
 
 
-def serve(directory, bind='192.168.146.137', port=2222, allowed=('192.168.146.134',)):
+def serve(directory, bind='10.10.30.12', port=2222, allowed=('10.10.20.10', '10.10.20.11', '10.10.20.12')):
     directory = Path(directory)
     key_path = directory / 'host-key'
     if not key_path.exists():
