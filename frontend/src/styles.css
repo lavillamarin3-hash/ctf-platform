@@ -28,6 +28,7 @@
 @import "./styles/20-challenge-deletion.css";
 @import "./styles/21-external-web.css";
 @import "./styles/22-challenge-clock.css";
+@import "./styles/23-forms-session-ui.css";
 
 /* Tailwind se procesa después de los módulos base. */
 @tailwind base;
