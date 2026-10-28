@@ -279,7 +279,7 @@ export function useManagementController({
       else await api.createGuacamoleConnection(input);
       await loadGuacamole();
       setMessage(identifier ? "Conexión de Guacamole actualizada correctamente." : "Conexión de Guacamole creada correctamente.");
-    } catch (err) { setMessage(err instanceof Error ? err.message : "No se pudo guardar la conexión."); }
+    } catch (err) { setMessage(err instanceof Error ? err.message : "No se pudo guardar la conexión."); throw err; }
   };
   const checkGuacamoleManagedConnection = async (connection: import("../api").GuacamoleConnection) => {
     try {
