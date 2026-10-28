@@ -61,6 +61,7 @@ class GuacamoleUserUpdate(BaseModel):
 
 class GuacamoleConnectionView(BaseModel):
     identifier: str
+    remote_username: str | None = None  # Solo endpoint de administración, nunca contraseña.
     name: str
     protocol: str
     parent_identifier: str = "ROOT"
