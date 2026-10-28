@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 from datetime import timedelta
+import secrets
 
 from fastapi import Depends, HTTPException, Request, status
 from sqlalchemy import select
 
-from ..core import create_token, get_current_user, get_settings, hash_password, require_roles, verify_password
+from ..core import create_token, decode_token, get_current_user, get_settings, hash_password, require_roles, verify_password
 from ..models import User
 from ..schemas import LoginRequest, PasswordChange, ProfileUpdate, TokenResponse, UserView
 from ..services.bootstrap import check_rate_limit, write_audit
@@ -31,7 +32,13 @@ async def login(payload: LoginRequest, request: Request):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario o contraseña incorrectos")
         await write_audit(session, user.id, "auth.login", "user", str(user.id))
         await session.commit()
-    token = create_token(str(user.id), "access", timedelta(minutes=get_settings().access_token_minutes))
+    settings = get_settings()
+    sid = None
+    if settings.single_session_enabled:
+        from ..services.single_session import reserve
+        sid = secrets.token_urlsafe(32)
+        await reserve(request.app.state.redis, user.id, sid, settings.access_token_minutes * 60)
+    token = create_token(str(user.id), "access", timedelta(minutes=settings.access_token_minutes), session_id=sid)
     # La sesión personal de Guacamole queda cifrada y efímera en Redis.
     # Un fallo remoto no impide usar los contenidos CTF: la terminal permite reconectar.
     if user.role == "player" and hasattr(request.app.state.guacamole, "authenticate_player"):
@@ -45,6 +52,12 @@ async def login(payload: LoginRequest, request: Request):
 
 @router.post("/api/v1/auth/logout")
 async def logout(request: Request, user=Depends(get_current_user)):
+    if get_settings().single_session_enabled:
+        from ..services.single_session import release
+        bearer = request.headers.get("authorization", "")
+        token = bearer[7:] if bearer.lower().startswith("bearer ") else ""
+        sid = decode_token(token).get("sid") if token else None
+        await release(request.app.state.redis, user.id, sid)
     await request.app.state.terminal_sessions.forget_user(user.id)
     return {"ok": True}
 
