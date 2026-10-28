@@ -17,7 +17,7 @@ die() { log "ERROR: $*"; exit 1; }
 [[ "$APP_DIR" = /* && -d "$APP_DIR/.git" ]] || die "APP_DIR no apunta al clon Git del proyecto"
 [[ -f "$APP_DIR/docker-compose.prod.yml" && -f "$APP_DIR/.env" ]] || die "Falta compose de producción o .env local"
 [[ "$GH_REPO" == "lavillamarin3-hash/ctf-platform" ]] || die "Repositorio no autorizado"
-[[ "$HEALTH_URL" =~ ^http://10\\.10\\.10\\.13:8081/api/v1/health$ ]] || die "Health URL fuera del servidor de aplicación esperado"
+[[ "$HEALTH_URL" == "http://10.10.10.13:8081/api/v1/health" ]] || die "Health URL fuera del servidor de aplicación esperado"
 command -v flock >/dev/null && command -v runuser >/dev/null || die "Faltan flock o runuser"
 command -v git >/dev/null && command -v docker >/dev/null || die "Faltan git o docker"
 command -v curl >/dev/null && command -v python3 >/dev/null || die "Faltan curl o python3"
@@ -31,7 +31,10 @@ compose() { (cd "$APP_DIR" && docker compose -f docker-compose.prod.yml "$@"); }
 
 [[ "$(git_app branch --show-current)" == main ]] || die "El clon no está en main"
 [[ -z "$(git_app status --porcelain --untracked-files=normal)" ]] || die "Existen cambios locales; no se sobrescribirán"
-[[ "$(git_app remote get-url origin)" =~ ^(https://github\\.com/|git@github\\.com:)lavillamarin3-hash/ctf-platform(\\.git)?$ ]] || die "origin no es el repositorio esperado"
+case "$(git_app remote get-url origin)" in
+  "https://github.com/lavillamarin3-hash/ctf-platform.git"|"https://github.com/lavillamarin3-hash/ctf-platform"|"git@github.com:lavillamarin3-hash/ctf-platform.git"|"git@github.com:lavillamarin3-hash/ctf-platform") ;;
+  *) die "origin no es el repositorio esperado" ;;
+esac
 
 # Descarga únicamente la referencia de main. No cambia archivos todavía.
 git_app fetch --no-tags origin '+refs/heads/main:refs/remotes/origin/main'
@@ -136,7 +139,10 @@ from app.guacamole import make_guacamole_admin
 async def main():
     if get_settings().guacamole_mode.lower() != "real":
         raise SystemExit("ADVERTENCIA: Guacamole está en modo stub, no se puede verificar inventario")
-    connections = await make_guacamole_admin().list_connections()
+    try:
+        connections = await make_guacamole_admin().list_connections()
+    except Exception:
+        raise SystemExit("No fue posible consultar conexiones en Guacamole")
     print(f"Guacamole remoto: {len(connections)} conexiones consultadas (sin modificarlas).")
 
 asyncio.run(main())
