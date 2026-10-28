@@ -7,7 +7,7 @@ from fastapi.responses import Response
 from sqlalchemy import func, select
 from ..core import get_settings, require_roles
 from ..guacamole import GuacamoleApiError
-from ..models import User
+from ..models import User, VMAsset
 from ..services.bootstrap import write_audit
 from ..schemas import (
     GuacamoleStatus, GuacamoleUserCreate, GuacamoleUserUpdate, GuacamoleUserView,
@@ -34,6 +34,47 @@ async def guacamole_status(request: Request, _=Depends(require_roles("admin"))):
         return result
     except GuacamoleApiError as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
+
+
+@router.get("/api/v1/admin/guacamole/inventory-audit")
+async def guacamole_inventory_audit(request: Request, _=Depends(require_roles("admin"))):
+    """Conciliar en solo lectura el inventario CTF con Guacamole remoto.
+
+    NUNCA crea, borra ni modifica conexiones existentes; los identificadores
+    de Guacamole pertenecen a su propio servidor y BD independiente.
+    """
+    if get_settings().guacamole_mode != "real":
+        raise HTTPException(status_code=409, detail="Configura GUACAMOLE_MODE=real antes de auditar las conexiones remotas")
+    try:
+        connections = await request.app.state.guacamole_admin.list_connections()
+    except GuacamoleApiError as exc:
+        raise HTTPException(status_code=502, detail="No se pudo consultar el inventario remoto de Guacamole") from exc
+    remote = {str(item.identifier): item for item in connections}
+    async with request.app.state.session_factory() as session:
+        vms = list((await session.scalars(select(VMAsset))).all())
+    linked = []
+    missing = []
+    mismatches = []
+    for vm in vms:
+        identifier = str(vm.guacamole_connection_id or "").strip()
+        if not identifier:
+            continue
+        item = {"vm_id": vm.id, "vm_name": vm.name, "connection_id": identifier}
+        connection = remote.get(identifier)
+        if connection is None:
+            missing.append(item)
+            continue
+        linked.append(item)
+        if vm.ip_address and connection.hostname and str(vm.ip_address) != str(connection.hostname):
+            mismatches.append({**item, "vm_host": vm.ip_address, "remote_host": connection.hostname})
+    return {
+        "read_only": True, "mode": "real", "remote_connections_total": len(remote),
+        "linked_vm_count": len(linked), "missing_vm_connections": missing,
+        "host_mismatches": mismatches,
+        "unlinked_remote_connections": sum(1 for identifier in remote if identifier not in
+            {str(vm.guacamole_connection_id) for vm in vms if vm.guacamole_connection_id}),
+        "message": "Inventario remoto consultado. No se crearon ni modificaron conexiones.",
+    }
 
 
 @router.get("/api/v1/admin/guacamole/users", response_model=list[GuacamoleUserView])
