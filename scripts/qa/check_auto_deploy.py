@@ -11,7 +11,7 @@ service = (repo / "deploy/systemd/cociber-ctf-auto-deploy.service").read_text(en
 timer = (repo / "deploy/systemd/cociber-ctf-auto-deploy.timer").read_text(encoding="utf-8")
 
 for expected in [
-    "ctf-quality.yml", "head_sha=$NEW_SHA", 'r.get("conclusion")=="success"',
+    "ctf-quality.yml", "head_sha=$NEW_SHA", 'runs[0].get("conclusion")=="success"',
     "git_app merge-base --is-ancestor", 'git_app merge --ff-only "$NEW_SHA"',
     'git_app status --porcelain', "flock -n 9",
     "docker compose -f docker-compose.prod.yml",
