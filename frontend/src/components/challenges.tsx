@@ -23,6 +23,7 @@ import { initialFlagTemplate } from "../lib/challengeFlagChanges";
 import { challengeCategoryOptions, isValidChallengeCategory, normalizeChallengeCategory } from "../lib/challengeCategories";
 import { learningPolicyDraft, serializeLearningPolicy } from '../lib/learningPolicy';
 import { LearningPolicyEditor } from './LearningPolicyEditor';
+import { PasswordField } from "./PasswordField";
 
 export function challengeInternalLevel(
   difficulty: Challenge["difficulty"]
@@ -571,7 +572,7 @@ export function ChallengeForm({
                 <label>Tipo<select value={flag.mode} onChange={(event) => updateFlag(index, { mode: event.target.value as Draft["mode"] })}><option value="static">Estática</option><option value="dynamic">Dinámica por ejecución</option></select></label>
                 {flag.mode === "static" ? (
                   <div className="form-span-2 static-flag-guidance">
-                    <label>Valor<input type="password" autoComplete="new-password" value={flag.value} onChange={(event) => updateFlag(index, { value: event.target.value })} placeholder={flag.id ? "Deja vacío para conservar el valor existente" : "FLAG{valor_estatico}"} /></label>
+                    <label>Valor<PasswordField label="bandera estática" autoComplete="new-password" value={flag.value} onChange={(event) => updateFlag(index, { value: event.target.value })} placeholder={flag.id ? "Deja vacío para conservar el valor existente" : "FLAG{valor_estatico}"} /></label>
                     <small className="field-help">El backend no devuelve el valor existente; al guardar se registra únicamente el hash. Coloca el mismo valor manualmente en la VM o artefacto. No se inyecta ni se borra al cerrar una corrida. Usa una ruta exclusiva, distinta de la flag dinámica de LAB-01.</small>
                   </div>
                 ) : (
