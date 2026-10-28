@@ -24,7 +24,7 @@ router = APIRouter()
 def public_parameters(parameters: dict | None) -> dict:
     """Los parámetros técnicos sensibles nunca vuelven al navegador."""
     return {key: value for key, value in (parameters or {}).items()
-            if not any(word in key.lower() for word in ("password", "passphrase", "secret", "private-key", "token"))}
+            if not any(word in key.lower() for word in ("password", "passphrase", "secret", "private-key", "token", "username"))}
 
 @router.get("/api/v1/admin/guacamole/status", response_model=GuacamoleStatus)
 async def guacamole_status(request: Request, _=Depends(require_roles("admin"))):
@@ -106,7 +106,7 @@ async def guacamole_delete_user(username: str, request: Request, actor=Depends(r
 async def guacamole_connections(request: Request, _=Depends(require_roles("admin"))):
     try:
         rows = await request.app.state.guacamole_admin.list_connections()
-        return [GuacamoleConnectionView(identifier=x.identifier, name=x.name, protocol=x.protocol, parent_identifier=x.parent_identifier, hostname=x.hostname, port=x.port, parameters=public_parameters(x.parameters), attributes=x.attributes or {}, active_connections=x.active_connections) for x in rows]
+        return [GuacamoleConnectionView(identifier=x.identifier, name=x.name, protocol=x.protocol, parent_identifier=x.parent_identifier, hostname=x.hostname, port=x.port, parameters=public_parameters(x.parameters), remote_username=(x.parameters or {}).get('username'), attributes=x.attributes or {}, active_connections=x.active_connections) for x in rows]
     except GuacamoleApiError as exc:
         raise HTTPException(status_code=502, detail=exc.detail or str(exc)) from exc
 
@@ -117,7 +117,7 @@ async def guacamole_create_connection(payload: GuacamoleConnectionCreate, reques
         c = await request.app.state.guacamole_admin.create_connection(name=payload.name, protocol=payload.protocol, hostname=payload.hostname, port=payload.port, username=payload.username, password=payload.password, domain=payload.domain, parent_identifier=payload.parent_identifier)
         async with request.app.state.session_factory() as session:
             await write_audit(session, actor.id, "guacamole.connection.create", "guacamole_connection", c.identifier, {"name": c.name, "protocol": c.protocol, "hostname": c.hostname, "port": c.port}); await session.commit()
-        return GuacamoleConnectionView(identifier=c.identifier, name=c.name, protocol=c.protocol, parent_identifier=c.parent_identifier, hostname=c.hostname, port=c.port, parameters=public_parameters(c.parameters), attributes=c.attributes or {}, active_connections=c.active_connections)
+        return GuacamoleConnectionView(identifier=c.identifier, name=c.name, protocol=c.protocol, parent_identifier=c.parent_identifier, hostname=c.hostname, port=c.port, parameters=public_parameters(c.parameters), remote_username=(c.parameters or {}).get('username'), attributes=c.attributes or {}, active_connections=c.active_connections)
     except GuacamoleApiError as exc:
         raise HTTPException(status_code=409 if exc.status_code in (400,409) else 502, detail=exc.detail or str(exc)) from exc
 
@@ -128,7 +128,7 @@ async def guacamole_update_connection(identifier: str, payload: GuacamoleConnect
         c = await request.app.state.guacamole_admin.update_connection(identifier, name=payload.name, protocol=payload.protocol, hostname=payload.hostname, port=payload.port, username=payload.username, password=payload.password, domain=payload.domain, parent_identifier=payload.parent_identifier)
         async with request.app.state.session_factory() as session:
             await write_audit(session, actor.id, "guacamole.connection.update", "guacamole_connection", identifier, {"name": c.name, "protocol": c.protocol, "hostname": c.hostname, "port": c.port}); await session.commit()
-        return GuacamoleConnectionView(identifier=c.identifier, name=c.name, protocol=c.protocol, parent_identifier=c.parent_identifier, hostname=c.hostname, port=c.port, parameters=public_parameters(c.parameters), attributes=c.attributes or {}, active_connections=c.active_connections)
+        return GuacamoleConnectionView(identifier=c.identifier, name=c.name, protocol=c.protocol, parent_identifier=c.parent_identifier, hostname=c.hostname, port=c.port, parameters=public_parameters(c.parameters), remote_username=(c.parameters or {}).get('username'), attributes=c.attributes or {}, active_connections=c.active_connections)
     except GuacamoleApiError as exc:
         raise HTTPException(status_code=404 if exc.status_code == 404 else 502, detail=exc.detail or str(exc)) from exc
 
