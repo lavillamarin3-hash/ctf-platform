@@ -1,0 +1,29 @@
+/* CoCiber CTF: formularios Guacamole, accesibilidad y secciones de retos. */
+.guacamole-connection-modal { width: min(930px, 100%); overflow-x: hidden; }
+.guacamole-connection-modal .form-grid { grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; }
+.guacamole-connection-modal .form-grid > label { min-width: 0; overflow-wrap: anywhere; line-height: 1.45; font-size: 12px; }
+.guacamole-connection-modal .form-grid input,
+.guacamole-connection-modal .form-grid select { min-width: 0; width: 100%; font-size: 13px; min-height: 42px; }
+.guacamole-connection-modal .modal-head { min-width: 0; align-items: flex-start; }
+.guacamole-connection-modal .modal-head > div { min-width: 0; overflow-wrap: anywhere; }
+.ctf-password-entry { display:flex; align-items:center; position:relative; width:100%; min-width:0; margin-top:6px; }
+.ctf-password-entry input { padding-right:56px !important; margin-top:0 !important; }
+.ctf-password-eye { display:inline-flex; align-items:center; justify-content:center; min-width:40px; min-height:36px; border:1px solid #40506a; border-radius:8px; color:inherit; background:rgba(110,132,160,.16); cursor:pointer; font-size:17px; }
+.ctf-password-entry .ctf-password-eye { position:absolute; right:3px; top:50%; transform:translateY(-50%); }
+.password-field { position:relative; }
+.password-field .ctf-password-eye { margin-left:auto; flex:0 0 40px; }
+.ctf-password-eye:hover, .ctf-password-eye:focus-visible { outline:2px solid #6a9fff; outline-offset:1px; }
+.ctf-password-eye:disabled { opacity:.55; cursor:not-allowed; }
+.ctf-section-toggle { display:flex; align-items:center; gap:10px; padding:12px 14px; margin-top:12px; background:rgba(74,119,177,.08); color:inherit; border:1px solid #334866; border-radius:10px; font-weight:650; font-size:12px; cursor:pointer; }
+.ctf-section-toggle input { width:18px; height:18px; accent-color:#4da8e8; }
+.ctf-form-section { min-width:0; padding:14px; border:1px solid #30465e; border-radius:12px; background:rgba(13,23,39,.65); margin-top:8px; }
+.ctf-form-section > summary { cursor:pointer; color:inherit; font-size:14px; font-weight:750; padding:4px 0 12px; }
+.ctf-form-section > summary span { float:right; font-size:11px; color:#87a3bd; }
+.ctf-form-section > .form-grid, .ctf-form-section > .glass-panel { min-width:0; }
+.ctf-form-section .learning-resource-editor, .ctf-form-section .flag-builder, .ctf-form-section .assignment-panel { max-width:100%; }
+@media (max-width:700px) {
+ .guacamole-connection-modal .form-grid { grid-template-columns:1fr; }
+ .guacamole-connection-modal { width:100%; padding:14px; }
+ .ctf-form-section {padding:10px;}
+ .ctf-form-section > summary span {float:none; margin-left:8px;}
+}
