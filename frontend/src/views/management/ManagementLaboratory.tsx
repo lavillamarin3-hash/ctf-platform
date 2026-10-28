@@ -105,7 +105,7 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
       {labDiagnostic.database_state.same_ip_records > 1 && <p role="alert">Inventario: {labDiagnostic.database_state.same_ip_records} fichas usan la IP de la víctima. Revisa sus nombres, SO y rol antes de editar; LAB-01 solo seleccionará «LAB-LNXVICT».</p>}
       <small>Esta comprobación no cambia Redis, PostgreSQL ni la VM; abre una sesión SSH y ejecuta «true». No prueba el script remoto ni sus permisos sudo: el inicio y cierre reales siguen siendo la verificación final.</small>
     </section>}
-    {!laboratoryError && !showAllInventory && <p className="field-help">Se muestran solo LAB-KALI (192.168.146.134) y LAB-LNXVICT (192.168.146.137) si están marcadas como listas. Los demás registros siguen guardados; consulta «Ver inventario completo» para administrarlos.</p>}
+    {!laboratoryError && !showAllInventory && <p className="field-help">Se muestran solo LAB-KALI (10.10.20.10) y LAB-LNXVICT (10.10.30.12) si están marcadas como listas. Los demás registros siguen guardados; consulta «Ver inventario completo» para administrarlos.</p>}
 
     <div className="stats-grid">
       <StatCard
@@ -125,14 +125,14 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
       <StatCard
         label="Víctimas"
         value={displayedLabs.reduce((sum, lab) => sum + lab.vms.filter((vm) => vm.networkRole === "Víctimas").length, 0)}
-        helper="Red actual · 192.168.146.0/24"
+        helper="VLAN 30 · 10.10.30.0/24"
         icon="target"
         accent="green"
       />
       <StatCard
         label="Atacantes"
         value={displayedLabs.reduce((sum, lab) => sum + lab.vms.filter((vm) => vm.networkRole === "Atacantes").length, 0)}
-        helper="Red actual · 192.168.146.0/24"
+        helper="VLAN 30 · 10.10.30.0/24"
         icon="arrow"
         accent="cyan"
       />
@@ -476,8 +476,8 @@ export function ManagementLaboratory({ controller }: { controller: ManagementCon
     <div className="info-panel glass-panel" style={{ marginTop: "13px" }}>
       <span className="eyebrow">MODELO DE RED</span>
       <p>
-        <strong>Atacante:</strong> 192.168.146.134. &nbsp;
-        <strong>Víctima:</strong> 192.168.146.137.
+        <strong>Atacante:</strong> 10.10.20.0/24. &nbsp;
+        <strong>Víctima:</strong> 10.10.30.0/24.
       </p>
     </div>
   </section>
