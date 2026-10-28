@@ -244,8 +244,8 @@ export function VMForm({
   const availableIps = NETWORK_IPS[networkRole].filter((candidate) => !usedIps.includes(candidate) || candidate === initial?.ip);
   // "Sin asignar" es una elección explícita: no tomar otra IP al guardar.
   const selectedIp = ip;
-  // La red real actual del laboratorio es 192.168.146.0/24 para ambos roles.
-  const subnet = "192.168.146.0/24";
+  // Las VLAN de atacantes y víctimas se mantienen separadas.
+  const subnet = networkRole === "Atacantes" ? "10.10.20.0/24" : "10.10.30.0/24";
   const segmentLabel = LAB_NETWORK_METADATA[networkRole].segment;
 
   const connectionForIp = (candidateIp: string) =>
@@ -271,7 +271,7 @@ export function VMForm({
       profile,
       status,
       networkRole,
-      vlan: "Red actual",
+      vlan: networkRole === "Atacantes" ? "VLAN 20" : "VLAN 30",
       subnet,
       guacamoleConnectionId: guacamoleConnectionId || undefined,
       guacamoleProtocol: guacamoleConnections.find((item) => item.identifier === guacamoleConnectionId)?.protocol,
