@@ -619,10 +619,11 @@ class LearningPolicyValidationTests(unittest.TestCase):
         valid = {'duration_minutes': 1, 'expired_points_percent': 0,
                  'hints': [{'title': 'Pista', 'content': 'Texto útil', 'penalty_percent': 100}]}
         self.assertEqual(LearningPolicy(**valid).duration_minutes, 1)
+        self.assertEqual(LearningPolicy(**{**valid, 'timer_enabled': False, 'hints': []}).hints, [])
         self.assertEqual(LearningPolicy(**{**valid, 'duration_minutes': 1440, 'expired_points_percent': 100}).expired_points_percent, 100)
         invalid = [{**valid, 'duration_minutes': 0}, {**valid, 'duration_minutes': 1441},
                    {**valid, 'expired_points_percent': -1}, {**valid, 'expired_points_percent': 101},
-                   {**valid, 'hints': []}, {**valid, 'hints': valid['hints'] * 4},
+                   {**valid, 'hints': valid['hints'] * 4},
                    {**valid, 'hints': [valid['hints'][0], {'title': 'Otra', 'content': 'Texto', 'penalty_percent': 1}]},
                    {**valid, 'hints': [{'title': ' ', 'content': 'Texto', 'penalty_percent': 1}]},
                    {**valid, 'hints': [{'title': 'Pista', 'content': ' ', 'penalty_percent': 1}]},
