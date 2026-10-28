@@ -11,6 +11,8 @@ export function useRankingLive(updateRows: (rows: RankingRow[]) => void): void {
     let socket: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | null = null;
     let delay = 2000;
+    let pageSuspended = false;
+    let connecting = false;
 
     const refresh = async () => {
       try {
@@ -20,19 +22,21 @@ export function useRankingLive(updateRows: (rows: RankingRow[]) => void): void {
     };
 
     const scheduleRetry = () => {
-      if (stopped || retry !== null) return;
+      if (stopped || pageSuspended || retry !== null || !navigator.onLine || document.visibilityState !== "visible") return;
       retry = setTimeout(() => {
         retry = null;
         void connect();
       }, delay);
-      delay = Math.min(delay * 2, 30000);
+      delay = Math.min(delay * 2, 120000);
     };
 
     async function connect() {
+      if (stopped || pageSuspended || connecting || !navigator.onLine || document.visibilityState !== "visible" || (socket && socket.readyState < WebSocket.CLOSING)) return;
+      connecting = true;
       try {
         // El ticket viaja en cookie HttpOnly; nunca se agrega un JWT a la URL.
         const ticket = await api.rankingSession();
-        if (stopped) return;
+        if (stopped || pageSuspended) return;
         if (ticket.websocket_path !== "/api/v1/ws/ranking") {
           scheduleRetry();
           return;
@@ -58,24 +62,40 @@ export function useRankingLive(updateRows: (rows: RankingRow[]) => void): void {
           }
         };
       } catch {
-        if (!stopped) {
+        if (!stopped && !pageSuspended) {
           void refresh();
           scheduleRetry();
         }
+      } finally {
+        connecting = false;
       }
     }
 
+    const clearRetry = () => { if (retry !== null) clearTimeout(retry); retry = null; };
+    const pause = () => { clearRetry(); socket?.close(); socket = null; };
+    const onPageHide = () => { pageSuspended = true; pause(); };
+    const onPageShow = () => { if (pageSuspended) { pageSuspended = false; void refresh(); void connect(); } };
+    const onOnline = () => { if (!pageSuspended) { void refresh(); void connect(); } };
+    const onOffline = () => pause();
     const onVisibility = () => {
-      if (document.visibilityState === "visible") void refresh();
+      if (document.visibilityState === "visible" && !pageSuspended) { void refresh(); void connect(); }
+      else pause();
     };
     document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("pagehide", onPageHide);
+    window.addEventListener("pageshow", onPageShow);
+    window.addEventListener("online", onOnline);
+    window.addEventListener("offline", onOffline);
     void connect();
 
     return () => {
       stopped = true;
       document.removeEventListener("visibilitychange", onVisibility);
-      if (retry !== null) clearTimeout(retry);
-      socket?.close();
+      window.removeEventListener("pagehide", onPageHide);
+      window.removeEventListener("pageshow", onPageShow);
+      window.removeEventListener("online", onOnline);
+      window.removeEventListener("offline", onOffline);
+      pause();
     };
   }, []);
 }
