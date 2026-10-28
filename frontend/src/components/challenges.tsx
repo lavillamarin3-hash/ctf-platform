@@ -414,6 +414,21 @@ export function ChallengeForm({
       } else {
         references = [primaryAsset, ...assets.split(",").map((value) => value.trim()).filter(Boolean)];
       }
+      // ESC-02 utiliza un provisionador de cuentas SSH por corrida. Si el
+      // escenario no coincide, la API intentaría usar el inyector genérico.
+      if (code.trim().toUpperCase() === "ESC-02-BRUTEFORCE") {
+        const kaliNames = ["LAB-KALI", "LAB-KALI-PURPLE", "LAB-KALI-BLUE"];
+        const chosenKali = [...new Set(references.filter((ref) => kaliNames.includes(ref.toUpperCase())))];
+        if (chosenKali.length !== 1 || !references.includes("LAB-LNXVICT")) {
+          throw new Error("ESC-02 necesita LAB-LNXVICT como víctima y una sola atacante: LAB-KALI, LAB-KALI-PURPLE o LAB-KALI-BLUE. Comprueba la escritura: LAB-KALI-LBUE no existe.");
+        }
+        if (!useScenarioDetails || scenario.trim() !== "SSH-PASSWORD-LAB") {
+          throw new Error("Para ESC-02 habilita Escenario y técnica MITRE y escribe exactamente SSH-PASSWORD-LAB.");
+        }
+        if (primaryAsset !== "LAB-LNXVICT") {
+          throw new Error("Selecciona LAB-LNXVICT como VM principal (víctima). Kali se registra en Activos adicionales.");
+        }
+      }
       const uniqueReferences = [...new Set(references.filter(Boolean))];
       if (!uniqueReferences.length) throw new Error("Selecciona al menos un laboratorio o una VM.");
       const serializedLearningPolicy = serializeLearningPolicy({
@@ -502,7 +517,9 @@ export function ChallengeForm({
               <option value="OFFLINE-CASE">OFFLINE-CASE · Análisis de evidencias en Kali</option>
               {assetOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
             </select>
-            <small className="field-help">La VM seleccionada determina IP, protocolo y conexión Guacamole cuando el jugador inicia el reto.</small>
+            <small className="field-help">{code.trim().toUpperCase() === "ESC-02-BRUTEFORCE"
+              ? "ESC-02: selecciona LAB-LNXVICT como víctima. En Activos adicionales escribe solo LAB-KALI, LAB-KALI-BLUE o LAB-KALI-PURPLE. SSH y RDP se abren sobre la Kali seleccionada, si Guacamole tiene ambas conexiones y el estudiante posee READ."
+              : "La VM seleccionada determina IP, protocolo y conexión Guacamole cuando el jugador inicia el reto."}</small>
           </label>}
           <label>Puntos<input type="number" min="1" max="10000" value={points} onChange={(event) => setPoints(event.target.value)} required /></label>
         </div>
