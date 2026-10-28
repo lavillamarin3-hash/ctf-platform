@@ -154,9 +154,12 @@ class LearningHintPolicy(BaseModel):
 
 
 class LearningPolicy(BaseModel):
+    # False oculta el contador y evita penalización académica por vencimiento.
+    # La ejecución real sigue teniendo TTL para proteger los recursos del laboratorio.
+    timer_enabled: bool = True
     duration_minutes: int = Field(ge=1, le=1440)
     expired_points_percent: int = Field(default=25, ge=0, le=100)
-    hints: list[LearningHintPolicy] = Field(min_length=1, max_length=3)
+    hints: list[LearningHintPolicy] = Field(min_length=0, max_length=3)
     solution_text: str | None = Field(default=None, max_length=12000)
 
     @field_validator('solution_text')
