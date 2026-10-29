@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 import unittest
 
+from fastapi import HTTPException
 from app.services import kali_workspace
 
 
@@ -20,8 +21,9 @@ class KaliWorkspaceSelectionTests(unittest.TestCase):
 
     def test_rejects_missing_or_ambiguous_attackers(self):
         self.assertIsNone(kali_workspace.attacker_for(self.challenge(['LAB-SRVWEB'])))
-        self.assertIsNone(kali_workspace.attacker_for(
-            self.challenge(['LAB-KALI-BLUE', 'LAB-KALI-PURPLE', 'LAB-LNXVICT'])))
+        with self.assertRaises(HTTPException):
+            kali_workspace.attacker_for(
+                self.challenge(['LAB-KALI-BLUE', 'LAB-KALI-PURPLE', 'LAB-LNXVICT']))
 
 
 if __name__ == '__main__':

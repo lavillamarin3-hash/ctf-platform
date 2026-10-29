@@ -26,6 +26,24 @@ def selected_attacker(challenge=None):
     return explicit[0] if explicit else ESC_ATTACKER_NAME
 
 
+def has_attacker(challenge) -> bool:
+    """Indica si el reto declaró explícitamente una Kali del inventario."""
+    references = set(getattr(challenge, 'asset_references', None) or [])
+    return any(name in references for name in KALI_VMS)
+
+
+def attacker_for(challenge):
+    """Compatibilidad para las vistas de corridas que necesitan nombre e IP.
+
+    Los retos sin Kali explícita conservan su comportamiento anterior y no
+    reciben terminal ni permisos Guacamole por inferencia.
+    """
+    if not has_attacker(challenge):
+        return None
+    name = selected_attacker(challenge)
+    return name, KALI_VMS[name]
+
+
 async def context(app, session, user, challenge=None):
     name = selected_attacker(challenge)
     ip = KALI_VMS[name]
