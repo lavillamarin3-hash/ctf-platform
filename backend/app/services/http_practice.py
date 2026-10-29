@@ -12,7 +12,7 @@ import paramiko
 from ..core import submission_fingerprint
 from .ssh_practice import connection, WORDS
 
-HOST = '192.168.146.137'
+HOST = '10.10.30.12'
 PORT = 18082
 PASSWORD_CODE = 'ESC-06-WEBAUTH'
 FILES_CODE = 'ESC-07-EXPOSED'

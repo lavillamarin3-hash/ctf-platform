@@ -96,7 +96,7 @@ async def _run_connection_context(app, session, run_id: int, user_id: int):
     if challenge is None or not challenge.is_published or not await _assigned(session, challenge.id, user_id):
         raise HTTPException(403, "Este laboratorio ya no está asignado a tu grupo")
     if getattr(run,'workspace_strategy',None) in kali_workspace.STRATEGIES:
-        if not kali_workspace.has_attacker(challenge):
+        if not any(name in (challenge.asset_references or []) for name in kali_workspace.KALI_VMS):
             raise HTTPException(409,'Este ejercicio no tiene una terminal Kali asignada.')
         vm,targets=await kali_workspace.context(app,session,user,challenge)
         primary=targets.get('ssh') or targets.get('rdp')

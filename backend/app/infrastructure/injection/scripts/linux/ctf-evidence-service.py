@@ -16,7 +16,7 @@ import stat
 
 
 class EvidenceHandler(BaseHTTPRequestHandler):
-    allowed_client_ip = "192.168.146.134"
+    allowed_client_ips = frozenset(("10.10.20.10", "10.10.20.11", "10.10.20.12"))
     flag_path = Path("/opt/ctf/ESC-01-RECON/flag.txt")
 
     def log_message(self, _format: str, *_args: object) -> None:
@@ -48,7 +48,7 @@ class EvidenceHandler(BaseHTTPRequestHandler):
             return None
 
     def _handle(self, *, head_only: bool = False) -> None:
-        if self.client_address[0] != self.allowed_client_ip:
+        if self.client_address[0] not in self.allowed_client_ips:
             self._reply(403, b"Acceso restringido al laboratorio\n", head_only=head_only)
         elif self.path == "/":
             self._reply(200, b"Servicio de evidencia. Consulta /evidence\n", head_only=head_only)
@@ -69,7 +69,7 @@ class EvidenceHandler(BaseHTTPRequestHandler):
 
 
 def main() -> None:
-    server = ThreadingHTTPServer(("192.168.146.137", 18081), EvidenceHandler)
+    server = ThreadingHTTPServer(("10.10.30.12", 18081), EvidenceHandler)
     server.daemon_threads = True
     try:
         server.serve_forever(poll_interval=0.5)

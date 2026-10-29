@@ -25,7 +25,7 @@ class PracticeHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
     block_on_close = False
 
-    def __init__(self, address, directory, allowed=('192.168.146.134',)):
+    def __init__(self, address, directory, allowed=('10.10.20.10', '10.10.20.11', '10.10.20.12')):
         self.directory = Path(directory)
         self.allowed = frozenset(allowed)
         self.gate = threading.BoundedSemaphore(8)
@@ -37,7 +37,7 @@ class PracticeHTTPServer(ThreadingHTTPServer):
         request.settimeout(10)
         # La propia víctima puede comprobar solo /__ctf-health/ID; las fuentes
         # del ejercicio continúan limitadas a Kali en el handler.
-        return client_address[0] in self.allowed or client_address[0] == '192.168.146.137'
+        return client_address[0] in self.allowed or client_address[0] == '10.10.30.12'
 
     def process_request(self, request, client_address):
         if not self.gate.acquire(blocking=False):
@@ -164,7 +164,7 @@ class PracticeHandler(BaseHTTPRequestHandler):
         self.server.last_activity = time.monotonic()
         if self.client_address[0] not in self.server.allowed:
             health = re.fullmatch(r'/__ctf-health/([1-9][0-9]{0,11})', self.path)
-            if self.client_address[0] == '192.168.146.137' and health and self.server.record(health.group(1)):
+            if self.client_address[0] == '10.10.30.12' and health and self.server.record(health.group(1)):
                 self.reply(200, 'Ready\n')
             else:
                 self.reply(403, 'Acceso restringido al laboratorio.\n')
@@ -283,7 +283,7 @@ def has_active_records(directory, *, at=None):
     return False
 
 
-def serve(directory, bind='192.168.146.137', port=18082, allowed=('192.168.146.134',)):
+def serve(directory, bind='10.10.30.12', port=18082, allowed=('10.10.20.10', '10.10.20.11', '10.10.20.12')):
     with PracticeHTTPServer((bind, port), directory, allowed) as server:
         server.timeout = 30
         while time.monotonic() - server.last_activity < 3600 or has_active_records(directory):
