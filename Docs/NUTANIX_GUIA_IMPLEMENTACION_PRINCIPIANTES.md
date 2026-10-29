@@ -43,7 +43,7 @@ Pulsa **Verificar conexión**: la API intenta abrir un socket únicamente a IPs 
 
 ## 4. Ejercicio 2: fuerza bruta SSH (dificultad media, 250 puntos)
 
-El código existente `ESC-02-BRUTEFORCE` genera usuario temporal `ctf<ID>`, contraseña seleccionada entre 12 candidatas y una **flag por corrida** en el servicio didáctico SSH, puerto 2222. Se conecta a `LAB-LNXVICT` (`10.10.30.12`). **No prueba ni modifica contraseñas administrativas del sistema**.
+El código existente `ESC-02-BRUTEFORCE` genera usuario temporal `ctf<ID>`, contraseña seleccionada entre 12 candidatas y una **flag por corrida** en el servicio didáctico SSH, puerto 2222. El piloto vigente usa `LAB-KALI-BLUE` (`10.10.20.12`) contra `LAB-LNXVICT` (`10.10.30.12`). **No prueba ni modifica contraseñas administrativas del sistema**.
 
 Antes de habilitarlo, comprueba:
 1. Acceso administrativo SSH autorizado desde la API a la VM, claves conocidas y permisos correctos del usuario inyector.

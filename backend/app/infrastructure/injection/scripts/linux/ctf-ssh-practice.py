@@ -130,7 +130,7 @@ def has_active_records(directory, *, at=None):
     return False
 
 
-def serve(directory, bind='192.168.146.137', port=2222, allowed=('192.168.146.134',)):
+def serve(directory, bind='10.10.30.12', port=2222, allowed=('10.10.20.12',)):
     directory = Path(directory)
     key_path = directory / 'host-key'
     if not key_path.exists():
@@ -157,5 +157,7 @@ def serve(directory, bind='192.168.146.137', port=2222, allowed=('192.168.146.13
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--directory',required=True)
+    parser.add_argument('--bind', default='10.10.30.12')
+    parser.add_argument('--allow', action='append', default=['10.10.20.12'])
     args = parser.parse_args()
-    serve(args.directory)
+    serve(args.directory, bind=args.bind, allowed=tuple(args.allow))

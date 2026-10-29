@@ -49,7 +49,8 @@ def _player_launch_url(challenge: Challenge, assignment: RemoteAccessAssignment 
 
 
 def _view_from_run(run: ChallengeRun, challenge: Challenge, assignment: RemoteAccessAssignment | None, vm=None, protocol: str | None = None, *, player: bool = True) -> RunView:
-    kali = run.workspace_strategy in kali_workspace.STRATEGIES and 'LAB-KALI' in (challenge.asset_references or [])
+    attacker = kali_workspace.attacker_for(challenge)
+    kali = run.workspace_strategy in kali_workspace.STRATEGIES and attacker is not None
     return RunView(
         id=run.id,
         challenge_code=challenge.code,
@@ -59,8 +60,8 @@ def _view_from_run(run: ChallengeRun, challenge: Challenge, assignment: RemoteAc
         launch_url=_player_launch_url(challenge, assignment, player=player),
         connection_state=assignment.status if assignment else None,
         workspace_strategy=run.workspace_strategy,
-        target_vm_name=vm.name if vm else ('LAB-KALI' if kali else None),
-        target_vm_ip=vm.ip_address if vm else ('10.10.20.10' if kali else None),
+        target_vm_name=vm.name if vm else (attacker[0] if kali else None),
+        target_vm_ip=vm.ip_address if vm else (attacker[1] if kali else None),
         target_protocol=protocol,
         laboratory_code=None,
     )
@@ -163,7 +164,7 @@ async def _cleanup_run(request: Request, session, run: ChallengeRun, challenge: 
     if run.workspace_strategy == external_web.STRATEGY:
         # El portal compartido es independiente: cerrar esta sesión no apaga
         # la página ni altera las sesiones o los comunicados de otros alumnos.
-        if challenge is not None and 'LAB-KALI' in (challenge.asset_references or []):
+        if challenge is not None and kali_workspace.has_attacker(challenge):
             terminal_sessions = getattr(request.app.state, 'terminal_sessions', None)
             if terminal_sessions is not None:
                 await terminal_sessions.close_run(run.id)
@@ -390,8 +391,8 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
                 external_web.portal_url(challenge)
             except ValueError as exc:
                 raise HTTPException(409, str(exc)) from exc
-            if 'LAB-KALI' in (challenge.asset_references or []):
-                await kali_workspace.context(request.app, session, user)
+            if kali_workspace.has_attacker(challenge):
+                await kali_workspace.context(request.app, session, user, challenge)
             flags = [flag for flag in challenge.flags if flag.is_active]
             if len(flags) != 1 or is_effectively_dynamic(challenge.code, flags[0]) or not flags[0].flag_hash:
                 raise HTTPException(409, 'Operación Cóndor requiere la flag estática de su instalación.')
@@ -406,9 +407,9 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             return _view_from_run(run, challenge, None)
 
         if dvwa_sql_practice.supports(challenge):
-            if challenge.asset_references != ['LAB-KALI', 'LAB-SRVWEB']:
-                raise HTTPException(409, 'DVWA requiere Kali y LAB-SRVWEB.')
-            await kali_workspace.context(request.app, session, user)
+            if challenge.asset_references != ['LAB-KALI-PURPLE', 'LAB-SRVWEB']:
+                raise HTTPException(409, 'DVWA requiere LAB-KALI-PURPLE y LAB-SRVWEB.')
+            await kali_workspace.context(request.app, session, user, challenge)
             flags = [flag for flag in challenge.flags if flag.is_active]
             if len(flags) != 1 or flags[0].mode != 'dynamic' or not flags[0].template:
                 raise HTTPException(409, 'DVWA requiere una bandera dinámica activa.')
@@ -438,7 +439,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
         if challenge.code in vm_logic.CODES and challenge.scenario == vm_logic.EXPECTED_SCENARIOS[challenge.code]:
             if set(challenge.asset_references or []) != {'LAB-KALI', 'LAB-LNXVICT'}:
                 raise HTTPException(409, 'Este ejercicio requiere Kali y LNX-VICT como activos.')
-            await kali_workspace.context(request.app, session, user)
+            await kali_workspace.context(request.app, session, user, challenge)
             flags = [flag for flag in challenge.flags if flag.is_active]
             if len(flags) != 1 or flags[0].mode != 'dynamic' or not flags[0].template:
                 raise HTTPException(409, 'El ejercicio VM requiere una flag dinámica activa.')
@@ -472,7 +473,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             return _view_from_run(run, challenge, None)
 
         if challenge.code == ssh_practice.CODE and challenge.scenario == 'SSH-PASSWORD-LAB':
-            await kali_workspace.context(request.app, session, user)
+            await kali_workspace.context(request.app, session, user, challenge)
             flags = [flag for flag in challenge.flags if flag.is_active]
             if len(flags)!=1 or flags[0].mode!='dynamic' or not flags[0].template:
                 raise HTTPException(409,'La práctica SSH requiere una flag dinámica activa.')
@@ -500,7 +501,7 @@ async def start_challenge(code: str, request: Request, user=Depends(require_role
             strategy, scenario = HTTP_SCENARIOS[challenge.code]
             if challenge.scenario != scenario or not {'LAB-KALI', 'LAB-LNXVICT'}.issubset(challenge.asset_references or []):
                 raise HTTPException(409, 'La práctica web requiere su escenario y las VMs Kali y LNX-VICT configuradas.')
-            await kali_workspace.context(request.app, session, user)
+            await kali_workspace.context(request.app, session, user, challenge)
             flags = [flag for flag in challenge.flags if flag.is_active]
             if len(flags) != 1 or flags[0].mode != 'dynamic' or not flags[0].template:
                 raise HTTPException(409, 'La práctica web requiere una flag dinámica activa.')
@@ -827,6 +828,7 @@ async def list_runs(request: Request, user=Depends(get_current_user)):
         response: list[RunView] = []
         for run, challenge, assignment, instance, vm in rows:
             state = "expired" if run.status == "active" and run.expires_at < current else run.status
+            attacker = kali_workspace.attacker_for(challenge)
 
             # Las ejecuciones históricas creadas antes de ChallengeInstance
             # también deben poder mostrarse en la interfaz. Resolvemos la VM
@@ -852,8 +854,8 @@ async def list_runs(request: Request, user=Depends(get_current_user)):
                     launch_url=_player_launch_url(challenge, assignment, player=user.role == "player"),
                     connection_state=assignment.status if assignment else None,
                     workspace_strategy=run.workspace_strategy,
-                    target_vm_name=display_vm.name if display_vm else ('LAB-KALI' if run.workspace_strategy in kali_workspace.STRATEGIES and 'LAB-KALI' in challenge.asset_references else None),
-                    target_vm_ip=display_vm.ip_address if display_vm else ('192.168.146.134' if run.workspace_strategy in kali_workspace.STRATEGIES and 'LAB-KALI' in challenge.asset_references else None),
+                    target_vm_name=display_vm.name if display_vm else (attacker[0] if run.workspace_strategy in kali_workspace.STRATEGIES and attacker else None),
+                    target_vm_ip=display_vm.ip_address if display_vm else (attacker[1] if run.workspace_strategy in kali_workspace.STRATEGIES and attacker else None),
                     target_protocol=display_protocol,
                     laboratory_code=None,
                 )

@@ -2,6 +2,12 @@
 
 Guía para expositor o estudiante sin experiencia. Usa únicamente la red del laboratorio autorizada. **No hay evidencia de pruebas en vivo contra Nutanix desde esta rama.**
 
+> Esta guía conserva el recorrido histórico con `LAB-KALI` y Operación Cóndor.
+> Para el piloto vigente de los dos laboratorios por VLAN, usa
+> [GUIA_OPERACION_RED_Y_PILOTO_2_LABS.md](GUIA_OPERACION_RED_Y_PILOTO_2_LABS.md):
+> `LAB-KALI-BLUE` para `ESC-02-BRUTEFORCE` y `LAB-KALI-PURPLE` para
+> `ESC-03-WEBEXPLOIT` (DVWA).
+
 ## Preparación de la exposición (administrador)
 
 1. Comprueba que se ven la web de CoCiber y el panel de administración.

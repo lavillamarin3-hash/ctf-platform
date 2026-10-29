@@ -12,6 +12,7 @@ from ..core import get_settings, submission_fingerprint
 CODE = 'ESC-02-BRUTEFORCE'
 HOST = '10.10.30.12'
 PORT = 2222
+ALLOWED_ATTACKERS = ('10.10.20.12',)
 WORDS = ['Verde2026!', 'Aula2026!', 'Practica01!', 'Kali2026!', 'Laboratorio7!', 'Alumno123!',
          'CTF2026!', 'Acceso2026!', 'Entrena01!', 'Linux2026!', 'ClaveLocal9!', 'Demo2026!']
 
@@ -79,8 +80,11 @@ def provision(run_id, username, password, flag, expires):
         if source_changed:
             # Solo recargar nuestro proceso de práctica, con UID y argv exactos.
             # Los registros y la clave de host permanecen en su directorio.
+            argv = [b'python3', remote.encode(), b'--directory', directory.encode(), b'--bind', HOST.encode()]
+            for source in ALLOWED_ATTACKERS:
+                argv.extend((b'--allow', source.encode()))
             restart = ("import os,pathlib,signal,time; "
-                       f"expected=[b'python3',{remote.encode()!r},b'--directory',{directory.encode()!r}]; "
+                       f"expected={argv!r}; "
                        "pids=[]; "
                        "\nfor p in pathlib.Path('/proc').glob('[0-9]*'):"
                        "\n try:"
@@ -93,7 +97,9 @@ def provision(run_id, username, password, flag, expires):
             _command(client, 'python3 -c ' + shlex.quote(restart))
         # Un lock de archivo evita duplicar servidores al iniciar corridas concurrentes.
         command = ('nohup flock -n '+shlex.quote(directory+'/server.lock')+' python3 '+shlex.quote(remote)
-                   +' --directory '+shlex.quote(directory)+' </dev/null >'+shlex.quote(directory+'/server.log')+' 2>&1 &')
+                   +' --directory '+shlex.quote(directory)+' --bind '+shlex.quote(HOST)
+                   + ''.join(' --allow '+shlex.quote(source) for source in ALLOWED_ATTACKERS)
+                   +' </dev/null >'+shlex.quote(directory+'/server.log')+' 2>&1 &')
         _command(client,command)
         for _ in range(40):
             transport = client.get_transport()

@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from ..guacamole import GuacamoleApiError
 from ..domain.flags.service import FlagService
 from ..models import Challenge, ChallengeGroupAssignment, GroupMembership, Laboratory, StudentGroup, User, VMAsset
+from . import kali_workspace
 
 
 ESC_ATTACKER_NAME = "LAB-KALI"
@@ -71,7 +72,8 @@ def _guacamole_access_references(challenge: Challenge) -> list[str]:
     refs = challenge.asset_references or []
     if (challenge.code in ("ESC-01-RECON", "ESC-02-BRUTEFORCE", "ESC-03-WEBEXPLOIT", "ESC-06-WEBAUTH", "ESC-07-EXPOSED")
             or (challenge.scenario or '').startswith('VM-LOGIC-')):
-        return [ref for ref in refs if _asset_ref_key(ref) == "LAB-KALI"]
+        attacker = kali_workspace.attacker_for(challenge)
+        return [attacker[0]] if attacker else []
     return refs
 
 

@@ -16,7 +16,7 @@ SPEC = dict(
     instructions='Abre Kali y accede a http://10.10.30.20/dvwa/. Inicia sesión con la cuenta de laboratorio autorizada, fija DVWA Security en Low y trabaja solo en el módulo SQL Injection. Introduce una consulta UNION que recupere el campo flag desde ctf_app_db.secrets filtrando por el ID de tu corrida (visible en la guía de DVWA del reto). Copia esa flag y envíala a Cociber. Cierra el reto para eliminar solo tu evidencia.',
     difficulty='Medio',
     mitre_technique='T1190 — Exploit Public-Facing Application',
-    asset_references=['LAB-KALI', 'LAB-SRVWEB'],
+    asset_references=['LAB-KALI-PURPLE', 'LAB-SRVWEB'],
     points=250,
 )
 
