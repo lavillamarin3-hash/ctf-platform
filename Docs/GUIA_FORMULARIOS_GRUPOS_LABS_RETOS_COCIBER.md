@@ -233,4 +233,4 @@ sudo docker compose -f docker-compose.prod.yml ps
 
 El navegador debe conectarse a la API actualizada, no a una instancia vieja detrás de un proxy. **No usar `docker compose down -v`**, no cambiar la base de datos de Guacamole y no publicar contraseñas.
 
-Consulta también `Docs/VALIDACION_UIUX_GUACAMOLE_SESIONES_20261028.md` y `Docs/NUTANIX_DVWA_LAB_SRVWEB_IMPLEMENTACION.md`.
+Consulta también `Docs/VALIDACION_UIUX_GUACAMOLE_SESIONES_20261028.md` y `Docs/GUIA_BANDERAS_LNXVICT_Y_SRVWEB.md`.

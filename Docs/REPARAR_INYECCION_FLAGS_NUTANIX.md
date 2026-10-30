@@ -118,7 +118,7 @@ En **Administración > Retos**:
 - Para retos dinámicos, conserva **una bandera dinámica activa** con plantilla válida.
 - Para ESC-02: código `ESC-02-BRUTEFORCE`, escenario `SSH-PASSWORD-LAB`, activos `LAB-KALI` y `LAB-LNXVICT`.
 - Para ESC-01: código `ESC-01-RECON`, escenario `ESC-01-RECON`, activos víctima `LAB-LNXVICT` y atacante `LAB-KALI`.
-- Para DVWA: sigue `Docs/NUTANIX_DVWA_LAB_SRVWEB_IMPLEMENTACION.md`; no se soluciona instalando el inyector en LNXVICT.
+- Para DVWA: sigue `Docs/GUIA_BANDERAS_LNXVICT_Y_SRVWEB.md`; no se soluciona instalando el inyector en LNXVICT.
 
 ## F. Paso 5: prueba del estudiante y diagnóstico por tipo de error
 
