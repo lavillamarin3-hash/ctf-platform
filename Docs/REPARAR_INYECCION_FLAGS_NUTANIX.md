@@ -38,7 +38,7 @@ Si el temporizador automático está instalado y activo, normalmente actualizar�
 ## C. Paso 2: diagnóstico de SOLO LECTURA desde la API
 
 ```bash
-sudo docker compose -f docker-compose.prod.yml exec -T api python -m app.check_flag_injector
+sudo docker compose -f docker-compose.prod.yml -f deploy/docker-compose.ssh-lab-secrets.yml exec -T api python -m app.check_flag_injector
 ```
 
 Este comando no crea ni revela ninguna bandera. Revisa los resultados:

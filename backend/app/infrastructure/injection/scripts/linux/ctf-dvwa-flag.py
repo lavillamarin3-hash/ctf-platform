@@ -33,8 +33,11 @@ def sql_command(argv: list[str], stdin: str) -> str:
 
 def main() -> int:
     try:
-        data = sys.stdin.read(130)  # Máximo 64 caracteres + nueva línea.
-        sql = sql_command(sys.argv[1:], data)
+        args = sys.argv[1:]
+        # En una ejecución remota Paramiko deja stdin abierto. `--delete` no
+        # consume una evidencia, por lo que leer stdin aquí lo bloquearía.
+        data = "" if args and args[0] == "--delete" else sys.stdin.read(130)
+        sql = sql_command(args, data)
         p = subprocess.run(
             ["/usr/bin/mariadb", "--batch", "--silent"],
             input=sql, text=True, capture_output=True, timeout=10, check=False,

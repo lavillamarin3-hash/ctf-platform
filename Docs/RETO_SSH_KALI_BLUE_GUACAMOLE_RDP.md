@@ -28,15 +28,15 @@ Si aparece `No fue posible conectar con la API`, revisar primero TLS de **`https
 
 ## 3. Creación o reparación idempotente del reto en PostgreSQL
 
-Usar **únicamente** `docker-compose.prod.yml` en el servidor web, dentro del clon Git `ctf-platform` actualizado.
+Usar `docker-compose.prod.yml` junto con el overlay de secretos SSH en el servidor web, dentro del clon Git `ctf-platform` actualizado.
 
 ### 3.1. Comprueba primero qué código está ejecutándose
 
 ```bash
 git status --short
 git log -1 --oneline
-sudo docker compose -f docker-compose.prod.yml ps
-sudo docker compose -f docker-compose.prod.yml exec -T api python -m app.check_flag_injector
+sudo docker compose -f docker-compose.prod.yml -f deploy/docker-compose.ssh-lab-secrets.yml ps
+sudo docker compose -f docker-compose.prod.yml -f deploy/docker-compose.ssh-lab-secrets.yml exec -T api python -m app.check_flag_injector
 ```
 
 Si `git status` no está limpio, revisar los cambios antes de actualizar. Si el despliegue automático está habilitado, **no lo ejecutes simultáneamente de forma manual**.
@@ -46,7 +46,7 @@ Si `git status` no está limpio, revisar los cambios antes de actualizar. Si el 
 Sustituye `GRP-PILOTO-01` por el **código real** del grupo de estudiantes existente:
 
 ```bash
-sudo docker compose -f docker-compose.prod.yml exec -T api \
+sudo docker compose -f docker-compose.prod.yml -f deploy/docker-compose.ssh-lab-secrets.yml exec -T api \
   python configure_ssh_access_challenge.py --group GRP-PILOTO-01 --attacker LAB-KALI-BLUE
 ```
 
@@ -57,7 +57,7 @@ Para continuar, debes ver que el reto, grupo y máquinas son coherentes. Si indi
 ### 3.3. Aplicar solamente tras respaldar PostgreSQL
 
 ```bash
-sudo docker compose -f docker-compose.prod.yml exec -T api \
+sudo docker compose -f docker-compose.prod.yml -f deploy/docker-compose.ssh-lab-secrets.yml exec -T api \
   python configure_ssh_access_challenge.py --group GRP-PILOTO-01 --attacker LAB-KALI-BLUE --apply
 ```
 

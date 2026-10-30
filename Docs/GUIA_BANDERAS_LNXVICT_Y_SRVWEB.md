@@ -51,9 +51,10 @@ sudo chmod 0640 /opt/cociber-secrets/*_ed25519
 sudo chmod 0644 /opt/cociber-secrets/*_known_hosts
 ```
 
-El GID `10001` corresponde al usuario `appuser` del contenedor API. Compruebe
-los permisos con `sudo ls -l /opt/cociber-secrets`; nunca muestre el contenido
-de las claves privadas.
+El GID `10001` corresponde al usuario `appuser` del contenedor API. En el
+host puede mostrarse como `UNKNOWN` si no existe un grupo local con ese nombre;
+lo importante es que el GID numérico sea `10001`. Compruébelo sin mostrar las
+claves con `sudo stat -c '%u:%g %a %n' /opt/cociber-secrets/*_ed25519`.
 
 ## 1. LAB-LNXVICT: servicio para ESC-02
 
@@ -109,13 +110,25 @@ No instale `/usr/local/sbin/ctf-inject-flag.sh` para este reto: corresponde a
 
 ### 1.2 Verificar la clave desde CTFWEB
 
-En CTFWEB, sin mostrar ninguna clave:
+La clave original debe conservarse como `root:10001` con modo `0640`: el
+grupo `10001` permite que el contenedor API la lea. OpenSSH ejecutado en el
+host la rechaza correctamente por ser legible por un grupo. No cambie la
+clave original a `0600`, porque la API dejaría de poder leerla.
+
+Para probarla desde el host, cree una copia temporal exclusiva de `root` y
+elimínela automáticamente al terminar:
 
 ```bash
-sudo ssh -i /opt/cociber-secrets/lnxvict_ctf_ed25519 \
-  -o UserKnownHostsFile=/opt/cociber-secrets/lnxvict_known_hosts \
-  -o StrictHostKeyChecking=yes ctf-injector@10.10.30.12 \
-  'python3 -c "import paramiko; print(\"OK\")"'
+(
+  set -e
+  sudo install -o root -g root -m 0600 \
+    /opt/cociber-secrets/lnxvict_ctf_ed25519 /run/cociber-lnxvict-verify.key
+  trap 'sudo rm -f /run/cociber-lnxvict-verify.key' EXIT
+  sudo ssh -i /run/cociber-lnxvict-verify.key \
+    -o UserKnownHostsFile=/opt/cociber-secrets/lnxvict_known_hosts \
+    -o StrictHostKeyChecking=yes ctf-injector@10.10.30.12 \
+    'python3 -c "import paramiko; print(\"OK\")"'
+)
 ```
 
 El resultado debe ser únicamente `OK`. Si falla, corrija la clave pública,
@@ -150,8 +163,15 @@ Desde el checkout de CTFWEB, sustituya `GRUPO_PILOTO` por un grupo activo:
 sudo docker compose -f docker-compose.prod.yml -f deploy/docker-compose.ssh-lab-secrets.yml config --quiet
 sudo docker compose -f docker-compose.prod.yml -f deploy/docker-compose.ssh-lab-secrets.yml up -d --force-recreate api
 sudo docker compose -f docker-compose.prod.yml -f deploy/docker-compose.ssh-lab-secrets.yml exec -T api \
+  python -m app.check_flag_injector
+sudo docker compose -f docker-compose.prod.yml -f deploy/docker-compose.ssh-lab-secrets.yml exec -T api \
   python configure_ssh_access_challenge.py --group GRUPO_PILOTO --attacker LAB-KALI-BLUE
 ```
+
+En el JSON de diagnóstico, `ready_for_ssh_practice` debe ser `true`. Para
+`ESC-02`, que `inyector_instalado` y `sudo_sin_password` sean `false` es
+normal: esos requisitos pertenecen a LAB-01/ESC-01 y no al servicio SSH
+didáctico.
 
 Revise el JSON del último comando. Si el plan es correcto, aplíquelo:
 
@@ -244,7 +264,9 @@ sudo install -o labops -g labops -m 0600 \
 sudo chown -R labops:labops /home/labops/.ssh
 ```
 
-En SRVWEB instale el helper ya copiado:
+En SRVWEB instale el helper ya copiado. Si el helper se instaló antes de una
+actualización del repositorio, repita esta copia e instalación: la versión
+actual no lee `stdin` al ejecutar `--delete`.
 
 ```bash
 sudo install -o root -g root -m 0750 /tmp/ctf-dvwa-flag.py /usr/local/sbin/ctf-dvwa-flag
@@ -264,12 +286,15 @@ sudo visudo -cf /etc/sudoers.d/ctf-dvwa-flag
 sudo -u labops sudo -n -l /usr/local/sbin/ctf-dvwa-flag
 ```
 
-Prueba controlada, sin usar una flag de un estudiante:
+Prueba controlada, sin usar una flag de un estudiante. El ID máximo elegido
+no puede corresponder a una corrida válida de la plataforma:
 
 ```bash
-sudo -u labops python3 -c "print('FLAG{dvwa_sql_' + '0'*40 + '}')" | sudo -u labops sudo -n /usr/local/sbin/ctf-dvwa-flag --upsert 1000001
-sudo -u labops sudo -n /usr/local/sbin/ctf-dvwa-flag --delete 1000001
-sudo mariadb -N -e 'SELECT COUNT(*) FROM ctf_app_db.secrets WHERE id=1000001;'
+TEST_ROW_ID=2147483647
+sudo -u labops python3 -c "print('FLAG{dvwa_sql_' + '0'*40 + '}')" | \
+  sudo -u labops sudo -n /usr/local/sbin/ctf-dvwa-flag --upsert "$TEST_ROW_ID"
+sudo -u labops sudo -n /usr/local/sbin/ctf-dvwa-flag --delete "$TEST_ROW_ID"
+sudo mariadb -N -e "SELECT COUNT(*) FROM ctf_app_db.secrets WHERE id=$TEST_ROW_ID;"
 ```
 
 El último comando debe devolver `0`. Si no lo hace, no habilite DVWA.
@@ -287,16 +312,24 @@ DVWA_LAB_SSH_PRIVATE_KEY_HOST=/opt/cociber-secrets/srvweb_labops_ed25519
 DVWA_LAB_KNOWN_HOSTS_HOST=/opt/cociber-secrets/srvweb_known_hosts
 ```
 
-Antes de activar el laboratorio, compruebe la autenticación desde CTFWEB:
+Antes de activar el laboratorio, compruebe la autenticación desde CTFWEB.
+La clave de SRVWEB también se comparte en modo `0640` con el contenedor y
+por ello la validación con OpenSSH usa una copia temporal de `root`:
 
 ```bash
-sudo ssh -i /opt/cociber-secrets/srvweb_labops_ed25519 \
-  -o UserKnownHostsFile=/opt/cociber-secrets/srvweb_known_hosts \
-  -o StrictHostKeyChecking=yes labops@10.10.30.20 \
-  'sudo -n /usr/local/sbin/ctf-dvwa-flag --delete 1000001'
+(
+  set -e
+  sudo install -o root -g root -m 0600 \
+    /opt/cociber-secrets/srvweb_labops_ed25519 /run/cociber-srvweb-verify.key
+  trap 'sudo rm -f /run/cociber-srvweb-verify.key' EXIT
+  sudo ssh -i /run/cociber-srvweb-verify.key \
+    -o UserKnownHostsFile=/opt/cociber-secrets/srvweb_known_hosts \
+    -o StrictHostKeyChecking=yes labops@10.10.30.20 \
+    'test -x /usr/local/sbin/ctf-dvwa-flag && sudo -n -l /usr/local/sbin/ctf-dvwa-flag >/dev/null && echo OK'
+)
 ```
 
-Si devuelve sin salida ni error, cambie solo entonces a:
+Si devuelve únicamente `OK`, cambie solo entonces a:
 
 ```dotenv
 DVWA_LAB_ENABLED=true

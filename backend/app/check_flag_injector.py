@@ -100,7 +100,9 @@ async def main() -> int:
         report["checks"].get(key) for key in ssh_practice_checks
     )
     print(json.dumps(report, indent=2, ensure_ascii=False))
-    return 0 if report["ready_for_flag_injection"] else 1
+    # ESC-02 only requires the SFTP/Paramiko path. A missing privileged
+    # injector is expected there and must not make its diagnostic fail.
+    return 0 if (report["ready_for_flag_injection"] or report["ready_for_ssh_practice"]) else 1
 
 
 if __name__ == "__main__":

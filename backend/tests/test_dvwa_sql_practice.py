@@ -2,6 +2,7 @@ import importlib.util
 from pathlib import Path
 from types import SimpleNamespace
 import unittest
+from unittest.mock import MagicMock, patch
 
 from app.services import dvwa_sql_practice as dvwa
 
@@ -35,3 +36,12 @@ class DvwaSqlTests(unittest.TestCase):
     def test_helper_rejects_incorrect_flag(self):
         with self.assertRaises(ValueError):
             helper.sql_command(['--upsert', '1000010'], "FLAG{invalid}'")
+
+    def test_delete_does_not_read_open_stdin(self):
+        stdin = MagicMock()
+        completed = SimpleNamespace(returncode=0)
+        with (patch.object(helper.sys, 'argv', ['ctf-dvwa-flag', '--delete', '1000010']),
+              patch.object(helper.sys, 'stdin', stdin),
+              patch.object(helper.subprocess, 'run', return_value=completed)):
+            self.assertEqual(helper.main(), 0)
+        stdin.read.assert_not_called()
