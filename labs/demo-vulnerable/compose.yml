@@ -1,0 +1,53 @@
+name: cociber-demo-vulnerable
+
+# Ejecutar cada perfil únicamente en su VM destino:
+#   LAB-LNXVICT: docker compose --profile lnxvict up -d --build
+#   LAB-SRVWEB:  docker compose --profile srvweb up -d --build
+#
+# network_mode: host conserva la IP real de la Kali para que cada servicio
+# pueda restringir su origen. No publicar este laboratorio fuera de las VLAN.
+services:
+  ssh-demo:
+    profiles: ["lnxvict"]
+    build: ./ssh-demo
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DEMO_SSH_HOST: ${DEMO_SSH_HOST:-10.10.30.12}
+      DEMO_SSH_PORT: ${DEMO_SSH_PORT:-22222}
+      DEMO_SSH_ALLOWED_SOURCE: ${DEMO_SSH_ALLOWED_SOURCE:-10.10.20.12}
+      DEMO_SSH_USERNAME: ${DEMO_SSH_USERNAME:?Configure el usuario de práctica}
+      DEMO_SSH_PASSWORD: ${DEMO_SSH_PASSWORD:?Configure la contraseña de práctica}
+      DEMO_SSH_FLAG: ${DEMO_SSH_FLAG:?Configure la bandera SSH de práctica}
+    volumes:
+      - ssh_demo_state:/state
+    tmpfs:
+      - /tmp
+
+  web-demo:
+    profiles: ["srvweb"]
+    build: ./web-demo
+    network_mode: host
+    restart: unless-stopped
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    environment:
+      DEMO_WEB_HOST: ${DEMO_WEB_HOST:-10.10.30.20}
+      DEMO_WEB_PORT: ${DEMO_WEB_PORT:-8088}
+      DEMO_WEB_ALLOWED_SOURCE: ${DEMO_WEB_ALLOWED_SOURCE:-10.10.20.11}
+      DEMO_WEB_STUDENT_USER: ${DEMO_WEB_STUDENT_USER:?Configure el usuario web de práctica}
+      DEMO_WEB_STUDENT_PASSWORD: ${DEMO_WEB_STUDENT_PASSWORD:?Configure la contraseña web de práctica}
+      DEMO_WEB_FLAG: ${DEMO_WEB_FLAG:?Configure la bandera web de práctica}
+      DEMO_WEB_SESSION_SECRET: ${DEMO_WEB_SESSION_SECRET:?Configure un secreto de sesión aleatorio}
+    volumes:
+      - web_demo_state:/state
+    tmpfs:
+      - /tmp
+
+volumes:
+  ssh_demo_state:
+  web_demo_state:

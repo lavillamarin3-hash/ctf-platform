@@ -61,6 +61,7 @@ Los overlays de secretos de LNXVICT y SRVWEB son opcionales y se habilitan solo 
 
 - [Topología de red dentro de Nutanix](./README_TOPOLOGIA_NUTANIX.md)
 - [Banderas dinámicas de LNXVICT y SRVWEB](./Docs/GUIA_BANDERAS_LNXVICT_Y_SRVWEB.md)
+- [Paquete aislado de demo vulnerable SSH y web](./labs/demo-vulnerable/README.md)
 - [Reto SSH desde Kali Blue y Guacamole](./Docs/RETO_SSH_KALI_BLUE_GUACAMOLE_RDP.md)
 - [Gestión de formularios, grupos, laboratorios y retos](./Docs/GUIA_FORMULARIOS_GRUPOS_LABS_RETOS_COCIBER.md)
 - [Recuperación TLS de Guacamole](./Docs/RECUPERACION_TLS_GUACAMOLE_PRODUCCION.md)
