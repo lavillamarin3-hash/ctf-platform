@@ -35,3 +35,4 @@ work/
 *.dump
 .env
 .env.*
+!deploy/schema/*.sql

@@ -1,5 +1,22 @@
 # CoCiber CTF
 
+## Instalación nueva en preparación
+
+El refactor de noviembre de 2026 incorpora una instalación independiente con esquema PostgreSQL nuevo, API hexagonal, formulario rápido, reservas persistentes, worker externo y consola embebida. **No migra ni reemplaza automáticamente la plataforma histórica.**
+
+Empieza por la [guía de instalación nueva](Docs/INSTALACION_NUEVA_COCIBER.md). Usa exclusivamente `deploy/docker-compose.fresh.yml` y `.env.fresh` para esa versión; el compose de producción descrito más abajo conserva la implementación histórica.
+
+- [Helpers y preparación de ESC-02/ESC-03](Docs/HELPERS_FRESH.md).
+- [Guía del jugador para la demo nueva](Docs/DEMO_JUGADORES_FRESH.md).
+- [ESC-01/ESC-04/ESC-05 configurados y deshabilitados: siguiente fase](Docs/PENDIENTES_ESCENARIOS.md).
+- [Esquema SQL](deploy/schema/cociber_fresh.sql), [diccionario de datos](Docs/DICCIONARIO_FRESH.md) y [auditoría de archivos](Docs/AUDITORIA_ARCHIVOS.csv).
+- [Restauración manual de snapshots](Docs/RESTAURACION_SNAPSHOTS_FRESH.md).
+- [Resultados de validación y comprobaciones pendientes](Docs/VALIDACION_FRESH.md).
+
+Las integraciones reales requieren prueba en las VM antes de habilitarse. No se modificó el servidor Nutanix durante la preparación local.
+
+## Instalación histórica
+
 Plataforma web para la operación de retos de ciberseguridad en el laboratorio controlado CoCiber. Gestiona usuarios, grupos, retos, banderas, puntuación, progreso y el acceso del estudiante a la Kali asignada mediante Apache Guacamole.
 
 La plataforma coordina el entrenamiento; no sustituye las funciones de monitoreo y detección de Security Onion ni habilita actividades fuera de los activos y ventanas autorizados.

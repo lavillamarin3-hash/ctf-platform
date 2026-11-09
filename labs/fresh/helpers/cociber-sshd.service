@@ -1,0 +1,9 @@
+[Unit]
+Description=CoCiber SSH didactico puerto 2222
+After=network.target ssh.service
+[Service]
+ExecStartPre=/usr/sbin/sshd -t -f /etc/ssh/sshd-practice.conf
+ExecStart=/usr/sbin/sshd -D -f /etc/ssh/sshd-practice.conf
+Restart=on-failure
+[Install]
+WantedBy=multi-user.target

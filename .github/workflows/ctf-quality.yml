@@ -11,6 +11,35 @@ permissions:
   contents: read
 
 jobs:
+  fresh_postgres:
+    name: Instalacion nueva - PostgreSQL 16
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: cociber_test
+          POSTGRES_PASSWORD: test-only-ci-password
+          POSTGRES_DB: cociber_refactor_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U cociber_test -d cociber_refactor_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r requirements-test.txt
+      - run: python -m unittest discover -s tests -p integration_fresh.py -v
+        env:
+          FRESH_TEST_DATABASE_URL: postgresql+asyncpg://cociber_test:test-only-ci-password@127.0.0.1:5432/cociber_refactor_test
+
   backend:
     name: Backend - pruebas de unidad
     runs-on: ubuntu-latest
@@ -44,6 +73,10 @@ jobs:
       - run: npm ci
       - run: node --test tests/*.cjs tests/*.mjs
       - run: npm run build
+      - name: Compilar interfaz de instalación nueva
+        run: npm run build
+        env:
+          VITE_FRESH_INSTALL: 'true'
 
   deployment_scripts:
     name: Despliegue - sintaxis y seguridad estatica
@@ -52,6 +85,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Validar sintaxis Bash
-        run: bash -n scripts/cociber_auto_deploy_main.sh scripts/instalar_auto_deploy_main.sh
+        run: |
+          for script in scripts/cociber_auto_deploy_main.sh scripts/instalar_auto_deploy_main.sh scripts/crear_admin.sh scripts/backup_db.sh scripts/probar_inyector.sh scripts/actualizar_produccion.sh; do
+            bash -n "$script" || exit 1
+          done
       - name: Comprobar configuración del despliegue supervisado
         run: python3 scripts/qa/check_auto_deploy.py

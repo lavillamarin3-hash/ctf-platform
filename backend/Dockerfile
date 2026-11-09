@@ -7,6 +7,7 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app ./app
+COPY ctf ./ctf
 COPY configure_dvwa_catalog.py ./configure_dvwa_catalog.py
 COPY configure_ssh_access_challenge.py ./configure_ssh_access_challenge.py
 COPY reconcile_nutanix_inventory.py ./reconcile_nutanix_inventory.py

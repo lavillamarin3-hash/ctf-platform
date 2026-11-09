@@ -13,6 +13,10 @@ Este documento describe la topología operativa del laboratorio AHV/Nutanix. Es 
 
 LAB-RTRFW conecta los cuatro segmentos. Sus interfaces de referencia son ens9 hacia gestión, ens3 hacia VLAN 10, ens4 hacia VLAN 20 y ens5 hacia VLAN 30. Las direcciones de puerta de enlace de las VLAN se administran en el router; no se deben inventar rutas directas desde la red de gestión.
 
+Aclaración confirmada por el operador: **10.195.20.20 y 10.195.20.21 están en una misma interfaz de LAB-RTRFW. 10.195.20.22 está en una segunda interfaz de LAB-GUAC**, para acceso administrativo a Guacamole desde gestión. No es otra IP del router. Las puertas de enlace de VLAN10/20/30 son respectivamente 10.10.10.1, 10.10.20.1 y 10.10.30.1. VLAN40 es captura de monitoreo sin IP y queda fuera de este refactor.
+
+VLAN20 y VLAN30 no pueden iniciar conexiones hacia VLAN10. La API y Guacamole, en VLAN10, sí pueden iniciar las conexiones necesarias hacia las VM. La instalación nueva sirve la consola mediante el mismo origen de la plataforma, sin pedir al jugador acceso directo a la interfaz de gestión .22.
+
 ~~~mermaid
 flowchart LR
     OP[Operador / red de gestión<br/>10.195.20.0/24]

@@ -61,7 +61,11 @@ async def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--apply", action="store_true",
                         help="Aplicar únicamente cambios revisados previamente")
+    parser.add_argument("--fresh", action="store_true", help="Usar el esquema nuevo, sin leer ni migrar el histórico")
     args = parser.parse_args()
+    if args.fresh:
+        await reconcile_fresh(args.apply)
+        return
     factory = make_session_factory()
     try:
         async with factory() as session:
@@ -92,6 +96,35 @@ async def main():
                               "plan": plan, "blockers": blockers}, ensure_ascii=False, indent=2))
     finally:
         await factory.kw["bind"].dispose()
+
+
+async def reconcile_fresh(apply=False):
+    """Mismo catálogo confirmado, fichas planned; no declara validación de Prism."""
+    from ctf.infrastructure.settings import settings
+    from ctf.adapters.persistence.repository import Repository, audit as fresh_audit
+    from ctf.adapters.persistence.models import Machine
+    repo = Repository(settings().database_url)
+    try:
+        async with repo.sessions.begin() as session:
+            rows = (await session.scalars(select(Machine).with_for_update())).all()
+            plan, blockers = [], []
+            for name, ip in OPERATIONAL_VM_TARGETS.items():
+                vm = next((row for row in rows if row.name == name), None)
+                if vm and str(vm.ip) != ip:
+                    blockers.append(f"{name}: IP distinta; revisar manualmente")
+                elif any(str(row.ip) == ip and row.name != name for row in rows):
+                    blockers.append(f"{name}: IP ocupada por otra ficha")
+                elif not vm:
+                    plan.append({"name": name, "ip": ip, "state": "planned"})
+            if apply and blockers: raise ValueError("Hay conflictos; no se cambia el inventario")
+            if apply:
+                for item in plan:
+                    attacker = item["name"] in ATTACKERS
+                    session.add(Machine(name=item["name"], ip=item["ip"], state="planned", kind="atacante" if attacker else "victima", vlan=20 if attacker else 30,
+                                        os="Windows" if "WINVICT" in item["name"] else "Linux"))
+                fresh_audit(session, "inventory.reconciled", "catalog", added=len(plan))
+            print(json.dumps({"applied": apply, "source": "catálogo confirmado; NO consulta Prism", "plan": plan, "blockers": blockers}, ensure_ascii=False, indent=2))
+    finally: await repo.engine.dispose()
 
 
 if __name__ == "__main__":

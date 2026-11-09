@@ -1,5 +1,8 @@
 // Declaraciones de módulos para archivos de imagen estáticos.
 // Vite los procesa y retorna la URL del asset como string en runtime.
+interface ImportMeta {
+  readonly env: { readonly VITE_FRESH_INSTALL?: string };
+}
 
 declare module "*.jpg" {
   const src: string;

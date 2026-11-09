@@ -1,0 +1,32 @@
+# Instalación NUEVA. No combinar con el compose histórico.
+name: cociber-ctf-fresh
+services:
+  api:
+    build:
+      context: ../backend
+    env_file: ../.env.fresh
+    command: ["uvicorn", "ctf.infrastructure.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-access-log"]
+    restart: unless-stopped
+    volumes:
+      - /opt/cociber-secrets:/run/secrets:ro
+    expose: ["8000"]
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health/ready', timeout=10)"]
+      interval: 30s
+      timeout: 12s
+      retries: 3
+    networks: [ctf_internal]
+  web:
+    build:
+      context: ../frontend
+      args:
+        VITE_FRESH_INSTALL: "true"
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    ports: ["${WEB_BIND_IP:-10.10.10.13}:${WEB_PORT:-8081}:80"]
+    networks: [ctf_internal]
+networks:
+  ctf_internal:
+    driver: bridge

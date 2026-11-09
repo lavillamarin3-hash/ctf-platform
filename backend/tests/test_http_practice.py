@@ -143,7 +143,8 @@ class HTTPPracticeTests(unittest.TestCase):
             path.write_text(json.dumps(data))
             self.assertEqual(self.request('/practice/202/robots.txt')[0], 404)
         self.server.allowed = frozenset(('192.0.2.1',))
-        with self.assertRaises((RemoteDisconnected, ConnectionResetError)):
+        # Windows puede notificar WSAECONNABORTED al cerrar una fuente denegada.
+        with self.assertRaises((RemoteDisconnected, ConnectionResetError, ConnectionAbortedError)):
             self.request('/practice/202/robots.txt')
 
     def test_public_instructions_and_dynamic_secrets(self):

@@ -3,6 +3,8 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
+ARG VITE_FRESH_INSTALL=false
+ENV VITE_FRESH_INSTALL=$VITE_FRESH_INSTALL
 RUN npm run build
 
 FROM nginx:1.27-alpine
