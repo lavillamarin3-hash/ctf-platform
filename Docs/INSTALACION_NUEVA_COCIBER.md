@@ -32,6 +32,8 @@ La carpeta `backend/ctf` separa dominio, aplicación, adaptadores HTTP/PostgreSQ
 
 ## 1. Preparar configuración y base vacía
 
+Si PostgreSQL y Redis se instalaron con las guías de `cociber-ctf-deploy` y vas a limpiar sus datos anteriores, sigue primero [DocumentacionBD, pasos 01 a 07](DocumentacionBD/01_CREDENCIALES_Y_PREPARACION.md). Esa secuencia conserva las cuentas y credenciales, crea `cociber_fresh`, ajusta HBA y el canal Redis del ranking. **Si cargaste el SQL en su paso 04, omite el comando `init-db --empty-database` de esta sección** y continúa con la creación del administrador.
+
 En LAB-CTFWEB, dentro del clon:
 
 ```bash
