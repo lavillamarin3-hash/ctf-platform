@@ -13,6 +13,7 @@ Empieza por la [guía de instalación nueva](Docs/INSTALACION_NUEVA_COCIBER.md).
 - [Restauración manual de snapshots](Docs/RESTAURACION_SNAPSHOTS_FRESH.md).
 - [Resultados de validación y comprobaciones pendientes](Docs/VALIDACION_FRESH.md).
 - [Bases de datos: limpieza del entorno anterior y preparación nueva, conservando credenciales](Docs/DocumentacionBD/01_CREDENCIALES_Y_PREPARACION.md).
+- [Actualizar login, panel derecho y administración Guacamole sin reinicializar la BD](Docs/ACTUALIZAR_INTERFAZ_Y_GUACAMOLE_FRESH.md).
 
 Las integraciones reales requieren prueba en las VM antes de habilitarse. No se modificó el servidor Nutanix durante la preparación local.
 

@@ -14,7 +14,7 @@ from redis.exceptions import RedisError
 from .runtime import Runtime
 from ..application.admin import bootstrap
 from ..domain.laboratory import DomainError, RecursoNoDisponibleError, CorridaYaActivaError
-from ..adapters.http import auth, routes, terminal, realtime
+from ..adapters.http import auth, routes, terminal, realtime, guacamole_admin
 from ..adapters.persistence.repository import audit
 
 
@@ -34,6 +34,7 @@ app.include_router(auth.router)
 app.include_router(routes.router)
 app.include_router(terminal.router)
 app.include_router(realtime.router)
+app.include_router(guacamole_admin.router)
 
 
 @app.middleware("http")

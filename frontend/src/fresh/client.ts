@@ -9,12 +9,13 @@ export const token = { get: () => sessionStorage.getItem('ctf-fresh-token'), set
 
 export async function api<T>(path: string, body?: unknown, method?: string): Promise<T> {
   let response: Response;
+  const accessToken = token.get();
   try {
-    response = await fetch(`/api/v1${path}`, { method: method ?? (body === undefined ? 'GET' : 'POST'), headers: { 'Content-Type': 'application/json', ...(token.get() ? { Authorization: `Bearer ${token.get()}` } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
+    response = await fetch(`/api/v1${path}`, { method: method ?? (body === undefined ? 'GET' : 'POST'), headers: { 'Content-Type': 'application/json', ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}) }, ...(body !== undefined ? { body: JSON.stringify(body) } : {}) });
   } catch { throw new Error('No se pudo conectar. Comprueba tu conexión y pulsa Reintentar.'); }
   const result = await response.json().catch(() => ({}));
   if (!response.ok) {
-    if (response.status === 401 && path !== '/auth/login') { token.clear(); window.dispatchEvent(new Event('fresh-logout')); }
+    if (response.status === 401 && path !== '/auth/login' && token.get() === accessToken) { token.clear(); window.dispatchEvent(new Event('fresh-logout')); }
     throw new Error(result.message || 'No se pudo completar la operación.');
   }
   return result as T;
