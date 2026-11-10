@@ -12,10 +12,11 @@ from ..adapters.persistence.models import Base
 def export():
     root = Path(__file__).resolve().parents[3]
     sql_path = root / "deploy/schema/cociber_fresh.sql"
-    dictionary = root / "Docs/DICCIONARIO_FRESH.md"
+    dictionary = root / "Docs/05_Referencia/02_DICCIONARIO_DATOS.md"
     sql_path.parent.mkdir(parents=True, exist_ok=True)
+    dictionary.parent.mkdir(parents=True, exist_ok=True)
     statements = ["-- Instalación NUEVA. Ejecutar solo en una base vacía. No es migración.", "BEGIN;", "CREATE EXTENSION IF NOT EXISTS pgcrypto;"]
-    doc = ["# Diccionario de datos de la instalación nueva", "", "Generado desde `backend/ctf/adapters/persistence/models.py`. No describe el esquema histórico.", "",
+    doc = ["# 02. Diccionario de datos de la instalación nueva", "", "Generado desde `backend/ctf/adapters/persistence/models.py`. No describe el esquema histórico.", "",
            "Los nombres de tabla están entre comillas para conservar MAYÚSCULAS en PostgreSQL.", "Los prefijos GRM, LBM, RGP y RCP distinguen uniones y finalizaciones. RCP es la tabla adicional que impide puntuar dos veces el mismo reto por usuario.", "",
            "`cor_resultado` conserva resuelta/expirada/cancelada cuando cor_estado pasa a reiniciando/liberada; `cor_piloto` excluye pruebas del ranking; `ret_piloto_aprobado` se escribe solo tras verificar y limpiar; `snp_prueba_aprobada` acredita la prueba posterior al snapshot.", ""]
     for table in Base.metadata.sorted_tables:

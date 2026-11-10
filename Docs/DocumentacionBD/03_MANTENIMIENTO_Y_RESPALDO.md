@@ -1,5 +1,9 @@
 # 03. Detener escrituras y respaldar antes de limpiar
 
+> **Secuencia condicionada de BD.** La plataforma actual ya conecta correctamente: no repitas limpieza ni inicialización para preparar los laboratorios. Usa esta carpeta solamente para un reinicio deliberado de datos con respaldo, siguiendo su [paso 01](01_CREDENCIALES_Y_PREPARACION.md). Para continuar la instalación operativa vuelve al [índice principal](../00_Inicio/01_LEEME_PRIMERO.md).
+>
+> Antes de ejecutar comandos, abre la sesión del servidor indicado en cada sección mediante [acceso SSH y comandos base](../00_Inicio/02_ACCESO_Y_COMANDOS_BASE.md). En LAB-CTFWEB ejecuta `cd /ctf-plataform/ || exit 1`; en LAB-DB-POSTGRES no se necesita esa carpeta. Si una sección cambia de servidor, abre otra terminal SSH y verifica `hostname`.
+
 Completa [02](02_SERVIDOR_Y_ALMACENAMIENTO.md) primero. El siguiente capítulo elimina datos de forma permanente; este respaldo es la vía de recuperación. No se importará en la instalación nueva salvo que se decida volver al entorno anterior.
 
 ## 1. En LAB-CTFWEB: cerrar corridas y detener consumidores
@@ -15,9 +19,10 @@ sudo docker ps --format 'table {{.Names}}\t{{.Status}}'
 
 Detén únicamente la automatización de la plataforma que hayas identificado. Anota su nombre y estado; no detengas servicios ajenos. Mantén el despliegue automático histórico detenido después del cambio de BD para que no vuelva a arrancar con la conexión antigua.
 
-3. Dentro de `~/ctf-platform`, para la instalación histórica con el overlay de secretos utilizado:
+3. Dentro de `/ctf-plataform`, para la instalación histórica con el overlay de secretos utilizado:
 
 ```bash
+cd /ctf-plataform/ || exit 1
 sudo docker compose -f docker-compose.prod.yml -f deploy/docker-compose.ssh-lab-secrets.yml stop api web
 ```
 

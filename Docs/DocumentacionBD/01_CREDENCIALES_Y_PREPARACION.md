@@ -1,5 +1,29 @@
 # 01. Preparación y credenciales de las bases de datos
 
+> **Secuencia condicionada de BD.** La plataforma actual ya conecta correctamente: no repitas limpieza ni inicialización para preparar los laboratorios. Usa esta carpeta solamente para un reinicio deliberado de datos con respaldo, siguiendo su [paso 01](01_CREDENCIALES_Y_PREPARACION.md). Para continuar la instalación operativa vuelve al [índice principal](../00_Inicio/01_LEEME_PRIMERO.md).
+>
+> Antes de ejecutar comandos, abre la sesión del servidor indicado en cada sección mediante [acceso SSH y comandos base](../00_Inicio/02_ACCESO_Y_COMANDOS_BASE.md). En LAB-CTFWEB ejecuta `cd /ctf-plataform/ || exit 1`; en LAB-DB-POSTGRES no se necesita esa carpeta. Si una sección cambia de servidor, abre otra terminal SSH y verifica `hostname`.
+
+## Acceso previo al servidor de datos
+
+Desde PowerShell local, escribe la cuenta **Linux** real cuando se solicite:
+
+```powershell
+$CuentaBD = Read-Host 'Cuenta Linux administrativa de LAB-DB-POSTGRES'
+ssh -J lab-rtrfw@10.195.20.20 "$($CuentaBD)@10.10.10.14"
+```
+
+Ya dentro de LAB-DB-POSTGRES, confirma el equipo antes de revisar credenciales o motores:
+
+```bash
+hostname
+ip -brief address
+```
+
+Debe corresponder a `10.10.10.14`. Para editar, abre el archivo con el comando indicado; en Nano guarda con Ctrl+O, Enter y Ctrl+X. Los bloques `sql` se ejecutan dentro del cliente de BD, no directamente en Bash. Los bloques con `<<'SQL'` se copian completos desde Bash.
+
+
+
 Actualizado: **9 de noviembre de 2026**. Procedimiento para sustituir los datos de la plataforma anterior por una instalación nueva, conservando PostgreSQL, Redis y las credenciales acordadas. Los comandos se entregan para ejecutarlos por etapas; no se han ejecutado en el servidor.
 
 ## Orden de trabajo

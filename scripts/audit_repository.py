@@ -11,12 +11,12 @@ from pathlib import Path
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-OUTPUT = ROOT / "Docs/AUDITORIA_ARCHIVOS.csv"
+OUTPUT = ROOT / "Docs/05_Referencia/05_AUDITORIA_ARCHIVOS.csv"
 
 
 def main():
     files = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--exclude-standard", "-z"], cwd=ROOT).decode().split("\0")
-    paths = sorted(set(path for path in files if path and (ROOT / path).is_file() and path != "Docs/AUDITORIA_ARCHIVOS.csv"))
+    paths = sorted(set(path for path in files if path and (ROOT / path).is_file() and path != "Docs/05_Referencia/05_AUDITORIA_ARCHIVOS.csv"))
     texts = {}
     for path in paths:
         try: texts[path] = (ROOT / path).read_text(encoding="utf-8")

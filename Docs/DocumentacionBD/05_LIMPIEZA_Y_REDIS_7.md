@@ -1,5 +1,9 @@
 # 05. Limpiar Redis del CTF y preparar sus permisos
 
+> **Secuencia condicionada de BD.** La plataforma actual ya conecta correctamente: no repitas limpieza ni inicialización para preparar los laboratorios. Usa esta carpeta solamente para un reinicio deliberado de datos con respaldo, siguiendo su [paso 01](01_CREDENCIALES_Y_PREPARACION.md). Para continuar la instalación operativa vuelve al [índice principal](../00_Inicio/01_LEEME_PRIMERO.md).
+>
+> Antes de ejecutar comandos, abre la sesión del servidor indicado en cada sección mediante [acceso SSH y comandos base](../00_Inicio/02_ACCESO_Y_COMANDOS_BASE.md). En LAB-CTFWEB ejecuta `cd /ctf-plataform/ || exit 1`; en LAB-DB-POSTGRES no se necesita esa carpeta. Si una sección cambia de servidor, abre otra terminal SSH y verifica `hostname`.
+
 Ejecutar en **LAB-DB-POSTGRES**, con API y worker detenidos y respaldo completo de [03](03_MANTENIMIENTO_Y_RESPALDO.md). Se conservan Redis, su configuración y las contraseñas. No borrar `/mnt/db_data/redis`, RDB, AOF ni `users.acl`.
 
 ## 1. Autenticarse como administrador sin contraseña en argumentos

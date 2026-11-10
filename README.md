@@ -1,92 +1,59 @@
 # CoCiber CTF
 
-## Instalación nueva en preparación
+Plataforma de laboratorios de ciberseguridad en Nutanix: jugadores y grupos, retos con banderas por corrida, acceso mediante Guacamole y limpieza de recursos. La instalación nueva utiliza PostgreSQL y Redis externos.
 
-El refactor de noviembre de 2026 incorpora una instalación independiente con esquema PostgreSQL nuevo, API hexagonal, formulario rápido, reservas persistentes, worker externo y consola embebida. **No migra ni reemplaza automáticamente la plataforma histórica.**
+## Empieza por la documentación
 
-Empieza por la [guía de instalación nueva](Docs/INSTALACION_NUEVA_COCIBER.md). Usa exclusivamente `deploy/docker-compose.fresh.yml` y `.env.fresh` para esa versión; el compose de producción descrito más abajo conserva la implementación histórica.
+**[Orden de ejecución para la plataforma desplegada](Docs/00_Inicio/01_LEEME_PRIMERO.md)**. Sigue esa guía antes de copiar comandos de otros documentos. Incluye los requisitos, el servidor de destino y el resultado esperado de cada etapa.
 
-- [Helpers y preparación de ESC-02/ESC-03](Docs/HELPERS_FRESH.md).
-- [Guía del jugador para la demo nueva](Docs/DEMO_JUGADORES_FRESH.md).
-- [ESC-01/ESC-04/ESC-05 configurados y deshabilitados: siguiente fase](Docs/PENDIENTES_ESCENARIOS.md).
-- [Esquema SQL](deploy/schema/cociber_fresh.sql), [diccionario de datos](Docs/DICCIONARIO_FRESH.md) y [auditoría de archivos](Docs/AUDITORIA_ARCHIVOS.csv).
-- [Restauración manual de snapshots](Docs/RESTAURACION_SNAPSHOTS_FRESH.md).
-- [Resultados de validación y comprobaciones pendientes](Docs/VALIDACION_FRESH.md).
-- [Bases de datos: limpieza del entorno anterior y preparación nueva, conservando credenciales](Docs/DocumentacionBD/01_CREDENCIALES_Y_PREPARACION.md).
-- [Actualizar login, panel derecho y administración Guacamole sin reinicializar la BD](Docs/ACTUALIZAR_INTERFAZ_Y_GUACAMOLE_FRESH.md).
+El estado confirmado es: plataforma desplegada, conexión a la BD correcta y acceso con `admin_ctf`. Los laboratorios todavía deben prepararse. No hace falta limpiar bases ni inicializar otra vez el esquema para continuar.
 
-Las integraciones reales requieren prueba en las VM antes de habilitarse. No se modificó el servidor Nutanix durante la preparación local.
+| Carpeta | Contenido |
+| --- | --- |
+| [00_Inicio](Docs/00_Inicio/01_LEEME_PRIMERO.md) | Orden general, acceso SSH, comandos base y topología |
+| [01_Plataforma](Docs/01_Plataforma/01_VERIFICAR_PLATAFORMA_EXISTENTE.md) | Verificación, actualización de interfaz, Guacamole e inventario |
+| [02_Laboratorios](Docs/02_Laboratorios/01_REQUISITOS_Y_TRANSFERENCIA.md) | Preparación de VM y claves, pruebas, pilotos, grupos y demostración |
+| [03_Operacion](Docs/03_Operacion/01_RESTAURACION_SNAPSHOTS.md) | Restauraciones, respaldos y actualizaciones posteriores |
+| [04_Pendientes](Docs/04_Pendientes/01_ESTADO_Y_ENTREGABLES.md) | Información pendiente para ESC-01, ESC-04 y ESC-05; siguen deshabilitados |
+| [05_Referencia](Docs/05_Referencia/01_INSTALACION_DESDE_CERO.md) | Instalación desde cero, esquema, validación técnica e identidad visual |
+| [DocumentacionBD](Docs/DocumentacionBD/01_CREDENCIALES_Y_PREPARACION.md) | Reinicio deliberado de los datos e instalación de BD; fuera del recorrido actual |
+| [90_Historico](Docs/90_Historico/00_INDICE_HISTORICO.md) | Documentación de la versión anterior, conservada para consulta |
 
-## Instalación histórica
+Los números ordenan los documentos **dentro de cada carpeta**. No ejecutes todas las carpetas de forma consecutiva: `DocumentacionBD`, referencia e histórico son rutas condicionadas; el índice de inicio indica cuándo utilizarlas.
 
-Plataforma web para la operación de retos de ciberseguridad en el laboratorio controlado CoCiber. Gestiona usuarios, grupos, retos, banderas, puntuación, progreso y el acceso del estudiante a la Kali asignada mediante Apache Guacamole.
+## Ruta y componentes de la instalación actual
 
-La plataforma coordina el entrenamiento; no sustituye las funciones de monitoreo y detección de Security Onion ni habilita actividades fuera de los activos y ventanas autorizados.
+El proyecto del servidor web está en **`/ctf-plataform/`**, con esa escritura exacta. El nombre del repositorio local puede ser `ctf-platform`; eso no cambia la ruta remota. Los secretos siguen en `/opt/cociber-secrets`.
 
-## Plataforma desplegada
+| Componente | Ubicación / configuración |
+| --- | --- |
+| Plataforma | LAB-CTFWEB, `10.10.10.13`; `.env.fresh` |
+| PostgreSQL / Redis | LAB-DB-POSTGRES, `10.10.10.14`; servicios nativos |
+| Guacamole | LAB-GUAC, `10.10.10.10` |
+| API nueva | `backend/ctf`, `ctf.infrastructure.main:app` |
+| Interfaz nueva | `frontend/src/fresh` |
+| Contenedores | `deploy/docker-compose.fresh.yml`: API y web |
+| Cola y limpieza | `deploy/systemd/cociber-fresh-worker.service`: proceso independiente |
 
-| Componente | Dirección | Responsabilidad |
-| --- | --- | --- |
-| LAB-CTFWEB | 10.10.10.13 | Frontend Nginx y API FastAPI con Docker Compose. |
-| LAB-DB-POSTGRES | 10.10.10.14 | PostgreSQL y Redis nativos para la plataforma. |
-| Apache Guacamole | 10.10.10.10 | Espacios de trabajo SSH/RDP de las Kali. |
-| LAB-RTRFW | 10.195.20.20 | Salto SSH, router y firewall entre gestión y las VLAN. |
+Desde PowerShell local:
 
-La publicación HTTPS utiliza la IP de gestión 10.195.20.21 con DNAT hacia LAB-CTFWEB. La configuración del proxy TLS debe escuchar en el mismo puerto que publique el firewall. Consulta la [topología Nutanix](./README_TOPOLOGIA_NUTANIX.md) antes de cambiar rutas, interfaces o reglas.
+```powershell
+ssh -J lab-rtrfw@10.195.20.20 lab-ctfweb@10.10.10.13
+```
 
-## Demostración vigente
+Ya dentro de LAB-CTFWEB, para consultar el estado:
 
-Los dos laboratorios rápidos de la demostración usan una Kali concreta por reto y no dan una consola Guacamole directa a la víctima:
+```bash
+cd /ctf-plataform/ || exit 1
+sudo docker compose --env-file .env.fresh -f deploy/docker-compose.fresh.yml ps
+```
 
-| Reto | Kali del estudiante | Víctima | Alcance de práctica |
-| --- | --- | --- | --- |
-| ESC-02-BRUTEFORCE | LAB-KALI-BLUE (10.10.20.12) | LAB-LNXVICT (10.10.30.12) | SSH didáctico temporal en 2222. |
-| ESC-03-WEBEXPLOIT | LAB-KALI-PURPLE (10.10.20.11) | LAB-SRVWEB (10.10.30.20) | DVWA por HTTP en 80, con fila de bandera temporal. |
+Consulta [acceso y comandos base](Docs/00_Inicio/02_ACCESO_Y_COMANDOS_BASE.md) si no estás familiarizado con SSH, las terminales Linux o los editores.
 
-La preparación de cuentas técnicas, claves, known_hosts, variables de entorno y overlays de Docker se encuentra en la [guía de banderas](./Docs/GUIA_BANDERAS_LNXVICT_Y_SRVWEB.md).
+## Alcance de los escenarios
 
-## Arquitectura de la aplicación
+ESC-02 usa SSH didáctico en LAB-LNXVICT (`10.10.30.12:2222`). ESC-03 usa DVWA en LAB-SRVWEB (`10.10.30.20`). Ambos requieren helpers instalados, una Kali preparada, pruebas y piloto antes de publicar. ESC-01/04/05 continúan pendientes para otra fase.
 
-~~~mermaid
-flowchart LR
-    Browser[Navegador] --> Web[Frontend / Nginx]
-    Web --> API[API FastAPI]
-    API --> DB[(PostgreSQL)]
-    API --> Redis[(Redis)]
-    API --> Guac[Apache Guacamole]
-    API --> Labs[Servicios didácticos de las VMs]
-    Guac --> Kali[Kali asignada]
-~~~
+La consola integrada del reto es SSH. La demostración de DVWA necesita adicionalmente un navegador dentro de Kali con acceso gráfico comprobado. Un resultado TCP correcto en Guacamole no demuestra que las credenciales ni el escritorio funcionen.
 
-El backend aplica control de acceso por roles, valida el estado del reto y crea o elimina únicamente los datos temporales asociados a la corrida. Las claves privadas, contraseñas, banderas y el archivo .env no se versionan.
-
-## Operación
-
-1. Para una instalación nueva, sigue [README-SETUP.md](./README-SETUP.md).
-2. Para actualizar una plataforma ya operativa, sigue [GUIA_ACTUALIZAR_PRODUCCION.md](./GUIA_ACTUALIZAR_PRODUCCION.md).
-3. Copia el archivo [.env.example](./.env.example) a un .env privado solo en una instalación nueva; nunca sobrescribas un .env de producción.
-4. Verifica el Compose y las dependencias antes de recrear API y web:
-
-   ~~~bash
-   sudo docker compose -f docker-compose.prod.yml config --quiet
-   sudo docker compose -f docker-compose.prod.yml build api web
-   sudo docker compose -f docker-compose.prod.yml run --rm --no-deps api python -m app.check_services
-   sudo docker compose -f docker-compose.prod.yml up -d --force-recreate --wait api web
-   ~~~
-
-Los overlays de secretos de LNXVICT y SRVWEB son opcionales y se habilitan solo después de completar su guía. No uses docker compose down -v, no restaures snapshots durante una corrida y no añadas secretos a Git.
-
-## Documentación útil
-
-- [Topología de red dentro de Nutanix](./README_TOPOLOGIA_NUTANIX.md)
-- [Banderas dinámicas de LNXVICT y SRVWEB](./Docs/GUIA_BANDERAS_LNXVICT_Y_SRVWEB.md)
-- [Paquete aislado de demo vulnerable SSH y web](./labs/demo-vulnerable/README.md)
-- [Reto SSH desde Kali Blue y Guacamole](./Docs/RETO_SSH_KALI_BLUE_GUACAMOLE_RDP.md)
-- [Gestión de formularios, grupos, laboratorios y retos](./Docs/GUIA_FORMULARIOS_GRUPOS_LABS_RETOS_COCIBER.md)
-- [Recuperación TLS de Guacamole](./Docs/RECUPERACION_TLS_GUACAMOLE_PRODUCCION.md)
-- [Tiempo, pistas y descuento de puntos](./Docs/CONFIGURAR_TIEMPO_Y_PISTAS.md)
-- [Operación Cóndor](./Docs/GUIA_OPERACION_CONDOR.md)
-- [Eliminar retos](./Docs/ELIMINAR_RETOS.md)
-- [Verificación de release](./Docs/VERIFICACION_RELEASE.md)
-
-La documentación interactiva de la API está disponible en /docs solamente en la API interna; el proxy de producción no la expone.
+La implementación histórica (`backend/app`, `.env`, `docker-compose.prod.yml`) se conserva para compatibilidad y consulta. No combines su Compose ni sus guías de banderas con la instalación nueva. Los paquetes de `labs/demo-vulnerable` y `labs/operacion-condor` son opcionales y no sustituyen el recorrido documentado.

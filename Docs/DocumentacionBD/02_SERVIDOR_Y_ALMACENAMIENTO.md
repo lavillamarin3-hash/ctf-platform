@@ -1,5 +1,9 @@
 # 02. Revisar el servidor y almacenamiento existentes
 
+> **Secuencia condicionada de BD.** La plataforma actual ya conecta correctamente: no repitas limpieza ni inicialización para preparar los laboratorios. Usa esta carpeta solamente para un reinicio deliberado de datos con respaldo, siguiendo su [paso 01](01_CREDENCIALES_Y_PREPARACION.md). Para continuar la instalación operativa vuelve al [índice principal](../00_Inicio/01_LEEME_PRIMERO.md).
+>
+> Antes de ejecutar comandos, abre la sesión del servidor indicado en cada sección mediante [acceso SSH y comandos base](../00_Inicio/02_ACCESO_Y_COMANDOS_BASE.md). En LAB-CTFWEB ejecuta `cd /ctf-plataform/ || exit 1`; en LAB-DB-POSTGRES no se necesita esa carpeta. Si una sección cambia de servidor, abre otra terminal SSH y verifica `hostname`.
+
 Ejecutar en **LAB-DB-POSTGRES, 10.10.10.14**. La guía original registró hostname `lab-db-ctf`; el nombre visible en Nutanix puede ser LAB-DB-POSTGRES. No hace falta renombrar Linux.
 
 El operador indica 4 cores y 32 GiB. El dato «2.72 GiB /» no permite determinar por sí solo cuánto espacio está libre en la raíz; se comprueba a continuación. Las guías anteriores describen un disco de datos de 2 TB en `/mnt/db_data`, pero su estado debe verificarse ahora.

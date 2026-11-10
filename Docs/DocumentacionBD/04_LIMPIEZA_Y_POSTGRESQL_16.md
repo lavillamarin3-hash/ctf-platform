@@ -1,5 +1,9 @@
 # 04. Limpiar la base anterior y crear cociber_fresh
 
+> **Secuencia condicionada de BD.** La plataforma actual ya conecta correctamente: no repitas limpieza ni inicialización para preparar los laboratorios. Usa esta carpeta solamente para un reinicio deliberado de datos con respaldo, siguiendo su [paso 01](01_CREDENCIALES_Y_PREPARACION.md). Para continuar la instalación operativa vuelve al [índice principal](../00_Inicio/01_LEEME_PRIMERO.md).
+>
+> Antes de ejecutar comandos, abre la sesión del servidor indicado en cada sección mediante [acceso SSH y comandos base](../00_Inicio/02_ACCESO_Y_COMANDOS_BASE.md). En LAB-CTFWEB ejecuta `cd /ctf-plataform/ || exit 1`; en LAB-DB-POSTGRES no se necesita esa carpeta. Si una sección cambia de servidor, abre otra terminal SSH y verifica `hostname`.
+
 Ejecutar en **LAB-DB-POSTGRES, 10.10.10.14**, después del respaldo y mantenimiento de [03](03_MANTENIMIENTO_Y_RESPALDO.md). Se reutiliza PostgreSQL 16; no se reinstala ni se elimina el cluster.
 
 ## 1. Confirmar el destino antes de borrar
@@ -62,7 +66,23 @@ SQL
 
 ## 5. Cargar el esquema de este proyecto
 
-Transfiere el archivo **`ctf-platform/deploy/schema/cociber_fresh.sql`** del mismo checkout que desplegarás a una ruta legible por `postgres` en LAB-DB-POSTGRES, por ejemplo `/tmp/cociber_fresh.sql`. Usa SCP/SFTP con tu cuenta Linux administrativa real. El rol SQL `cociberctf` no sustituye esa cuenta Linux. Compara `sha256sum` en origen y destino.
+Transfiere el esquema del mismo checkout que desplegarás. Abre **otra sesión SSH a LAB-CTFWEB** mediante [acceso base](../00_Inicio/02_ACCESO_Y_COMANDOS_BASE.md). Desde ese servidor:
+
+```bash
+cd /ctf-plataform/ || exit 1
+sha256sum deploy/schema/cociber_fresh.sql
+read -rp 'Cuenta Linux administrativa de LAB-DB-POSTGRES: ' db_admin
+scp deploy/schema/cociber_fresh.sql "${db_admin}@10.10.10.14:/tmp/cociber_fresh.sql"
+unset db_admin
+```
+
+El rol SQL `cociberctf` no sustituye la cuenta Linux. Vuelve a la terminal de **LAB-DB-POSTGRES**, confirma `hostname` y ejecuta:
+
+```bash
+sha256sum /tmp/cociber_fresh.sql
+```
+
+El hash debe coincidir con el del servidor web. Solo entonces continúa en LAB-DB-POSTGRES:
 
 ```bash
 sudo install -d -o root -g postgres -m 0750 /opt/cociber-fresh

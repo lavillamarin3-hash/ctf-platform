@@ -1,5 +1,9 @@
 # 07. Validar y recuperar si fuera necesario
 
+> **Secuencia condicionada de BD.** La plataforma actual ya conecta correctamente: no repitas limpieza ni inicialización para preparar los laboratorios. Usa esta carpeta solamente para un reinicio deliberado de datos con respaldo, siguiendo su [paso 01](01_CREDENCIALES_Y_PREPARACION.md). Para continuar la instalación operativa vuelve al [índice principal](../00_Inicio/01_LEEME_PRIMERO.md).
+>
+> Antes de ejecutar comandos, abre la sesión del servidor indicado en cada sección mediante [acceso SSH y comandos base](../00_Inicio/02_ACCESO_Y_COMANDOS_BASE.md). En LAB-CTFWEB ejecuta `cd /ctf-plataform/ || exit 1`; en LAB-DB-POSTGRES no se necesita esa carpeta. Si una sección cambia de servidor, abre otra terminal SSH y verifica `hostname`.
+
 Esta lista distingue resultados esperados de resultados observados. Los comandos aún deben ejecutarse en las VM; la revisión local de esta documentación no acredita una instalación remota correcta.
 
 ## 1. Comprobar PostgreSQL desde LAB-CTFWEB
@@ -28,9 +32,10 @@ Si no tienes `psql` en LAB-CTFWEB, el `cli check` de 06 comprueba acceso a una t
 
 ## 2. Comprobar Redis desde la imagen API nueva
 
-Desde `~/ctf-platform` en LAB-CTFWEB. Se crean solo claves temporales con identificador aleatorio y TTL; no se borra un índice:
+Desde `/ctf-plataform` en LAB-CTFWEB. Se crean solo claves temporales con identificador aleatorio y TTL; no se borra un índice:
 
 ```bash
+cd /ctf-plataform/ || exit 1
 sudo docker compose --env-file .env.fresh -f deploy/docker-compose.fresh.yml run --rm --no-deps -T api python - <<'PY'
 import os, sys, uuid
 from redis import Redis
@@ -79,6 +84,7 @@ sudo -u postgres /usr/lib/postgresql/16/bin/psql -X -d postgres -c "SELECT datna
 En LAB-CTFWEB:
 
 ```bash
+cd /ctf-plataform/ || exit 1
 sudo docker compose --env-file .env.fresh -f deploy/docker-compose.fresh.yml ps
 sudo docker compose --env-file .env.fresh -f deploy/docker-compose.fresh.yml exec -T api python -m ctf.infrastructure.cli check
 ```

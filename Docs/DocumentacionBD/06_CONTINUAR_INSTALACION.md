@@ -1,17 +1,21 @@
 # 06. Conectar la plataforma nueva a las bases preparadas
 
+> **Secuencia condicionada de BD.** La plataforma actual ya conecta correctamente: no repitas limpieza ni inicialización para preparar los laboratorios. Usa esta carpeta solamente para un reinicio deliberado de datos con respaldo, siguiendo su [paso 01](01_CREDENCIALES_Y_PREPARACION.md). Para continuar la instalación operativa vuelve al [índice principal](../00_Inicio/01_LEEME_PRIMERO.md).
+>
+> Antes de ejecutar comandos, abre la sesión del servidor indicado en cada sección mediante [acceso SSH y comandos base](../00_Inicio/02_ACCESO_Y_COMANDOS_BASE.md). En LAB-CTFWEB ejecuta `cd /ctf-plataform/ || exit 1`; en LAB-DB-POSTGRES no se necesita esa carpeta. Si una sección cambia de servidor, abre otra terminal SSH y verifica `hostname`.
+
 Ejecutar en **LAB-CTFWEB, 10.10.10.13**, en el checkout actualizado de `ctf-platform`. Los capítulos 04 y 05 ya deben haber preparado `cociber_fresh`, su esquema y permisos, y Redis `/1` vacío. Los contenedores históricos permanecen detenidos.
 
 ## 1. Crear o revisar .env.fresh
 
 ```bash
-cd ~/ctf-platform
+cd /ctf-plataform
 cp -n deploy/fresh.env.example .env.fresh
 chmod 600 .env.fresh
 nano .env.fresh
 ```
 
-Conserva la configuración SSH, Guacamole y demás campos siguiendo [la instalación nueva](../INSTALACION_NUEVA_COCIBER.md). No copies todo el `.env` histórico. La aplicación nueva lee **URLs**, no las variables sueltas `PG_APP_USER` y `REDIS_APP_USER` del instalador anterior.
+Conserva la configuración SSH, Guacamole y demás campos siguiendo [la instalación nueva](../05_Referencia/01_INSTALACION_DESDE_CERO.md). No copies todo el `.env` histórico. La aplicación nueva lee **URLs**, no las variables sueltas `PG_APP_USER` y `REDIS_APP_USER` del instalador anterior.
 
 Introduce la contraseña de aplicación que ya se acordó en **ambas** URLs, con el mismo usuario `cociber_app`. Nunca utilices aquí la contraseña administrativa de `cociberctf`.
 
@@ -89,6 +93,6 @@ sudo docker compose --env-file .env.fresh -f deploy/docker-compose.fresh.yml exe
 
 La cuenta de administrador web es independiente de `cociberctf`; su contraseña se solicita al crearla. La primera entrada exige cambiarla. El catálogo se crea explícitamente en borrador; ESC-01/04/05 permanecen deshabilitados.
 
-La nueva web escucha por defecto en `10.10.10.13:8081`. Revisa el proxy HTTPS existente antes de dirigirle la publicación de `10.195.20.21:443`; estas guías de bases no cambian DNAT ni TLS. Continúa los helpers, worker y demo en [INSTALACION_NUEVA_COCIBER.md](../INSTALACION_NUEVA_COCIBER.md), desde sus secciones correspondientes, sin repetir la inicialización de BD.
+La nueva web escucha por defecto en `10.10.10.13:8081`. Revisa el proxy HTTPS existente antes de dirigirle la publicación de `10.195.20.21:443`; estas guías de bases no cambian DNAT ni TLS. Completa [07. Validación](07_VALIDACION_Y_RECUPERACION.md) y vuelve al [recorrido de plataforma y laboratorios](../00_Inicio/01_LEEME_PRIMERO.md), sin repetir la inicialización de BD.
 
 Siguiente: [07. Validación](07_VALIDACION_Y_RECUPERACION.md).
