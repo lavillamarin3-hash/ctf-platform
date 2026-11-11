@@ -1,6 +1,6 @@
 from typing import Literal
 from uuid import UUID
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from ...domain.laboratory import validate_hints
 
 
@@ -15,8 +15,27 @@ class Password(BaseModel):
 
 
 class NewUser(Login):
+    model_config = ConfigDict(extra="forbid")
     role: Literal[2, 3, 4] = 3
     password: str = Field(min_length=10, max_length=256)
+
+
+class UpdateUser(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    username: str | None = Field(default=None, min_length=3, max_length=50, pattern=r"^[A-Za-z0-9._-]+$")
+    role: Literal[2, 3, 4] | None = None
+    state: Literal["activo", "inactivo", "bloqueado"] | None = None
+    password: str | None = Field(default=None, min_length=10, max_length=256)
+
+    @model_validator(mode="after")
+    def nonempty(self):
+        if not self.model_fields_set or any(getattr(self, key) is None for key in self.model_fields_set):
+            raise ValueError("Indica al menos un cambio, sin valores nulos")
+        return self
+
+
+class DeleteUser(BaseModel):
+    confirmation: str = Field(min_length=3, max_length=50)
 
 
 class GroupInput(BaseModel):

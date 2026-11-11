@@ -30,7 +30,7 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             await connection.run_sync(Base.metadata.drop_all)
             await connection.run_sync(Base.metadata.create_all)
         async with self.repo.sessions.begin() as s:
-            s.add_all([Role(id=1, name="administrador"), Role(id=3, name="player")])
+            s.add_all([Role(id=1, name="administrador"), Role(id=2, name="instructor"), Role(id=3, name="player"), Role(id=4, name="invitado")])
             await s.flush()
             self.u1, self.u2 = uuid4(), uuid4()
             s.add_all([User(id=uid, username=str(uid), password_hash="test", role=3) for uid in (self.u1, self.u2)])
@@ -159,6 +159,140 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             publication = await client.post(f'/api/v1/challenges/{self.challenge}/publish')
             self.assertEqual(publication.status_code, 409)
             self.assertEqual((await client.get('/docs')).status_code, 404)
+
+
+    async def management_client(self):
+        import httpx
+        from unittest.mock import AsyncMock
+        from ctf.infrastructure.main import app
+        from ctf.application.admin import hasher
+        from ctf.adapters.http.auth import issue_token
+        cache = SimpleNamespace(login_attempt=AsyncMock(return_value=True), client=SimpleNamespace(exists=AsyncMock(return_value=False)))
+        app.state.runtime = SimpleNamespace(repo=self.repo, cache=cache, settings=SimpleNamespace(jwt_secret=SimpleNamespace(get_secret_value=lambda: 'local-test-secret-' * 6), jwt_expira_minutos=60))
+        async with self.repo.sessions.begin() as s:
+            actor = User(username='admin_crud',password_hash=hasher.hash('Test-admin-12345'),role=1,must_change_password=False)
+            s.add(actor)
+            await s.flush()
+        client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app),base_url='http://localhost')
+        client.headers['Authorization'] = 'Bearer ' + issue_token(app.state.runtime, actor)
+        return client, actor, app.state.runtime
+
+    async def test_user_crud_and_single_administrator(self):
+        client, actor, runtime = await self.management_client()
+        async with client:
+            created = await client.post('/api/v1/users',json={'username':'demo.crud','password':'Temporary-test-12345','role':3})
+            self.assertEqual(created.status_code,201,created.text)
+            uid=created.json()['id']
+            self.assertNotIn('password',created.json())
+            self.assertNotIn('password_hash',created.json())
+            self.assertNotIn('Temporary-test-12345',created.text)
+            for role in (2,4,3):
+                changed=await client.patch(f'/api/v1/users/{uid}',json={'role':role,'username':f'demo.role{role}'})
+                self.assertEqual(changed.status_code,200,changed.text)
+                self.assertEqual(changed.json()['role'],role)
+            self.assertEqual((await client.patch(f'/api/v1/users/{uid}',json={'role':1})).status_code,422)
+            self.assertEqual((await client.post('/api/v1/users',json={'username':'second.admin','password':'Temporary-test-12345','role':1})).status_code,422)
+            for body in ({'state':'inactivo'},{'role':3},{'username':'renamed.admin'},{'password':'Temporary-test-12345'}):
+                self.assertEqual((await client.patch(f'/api/v1/users/{actor.id}',json=body)).status_code,409)
+            self.assertEqual((await client.delete(f'/api/v1/users/{actor.id}',params={})).status_code,422)
+            response=await client.request('DELETE',f'/api/v1/users/{actor.id}',json={'confirmation':actor.username})
+            self.assertEqual(response.status_code,409)
+            wrong=await client.request('DELETE',f'/api/v1/users/{uid}',json={'confirmation':'wrong'})
+            self.assertEqual(wrong.status_code,422)
+            removed=await client.request('DELETE',f'/api/v1/users/{uid}',json={'confirmation':'demo.role3'})
+            self.assertEqual(removed.status_code,200,removed.text)
+            self.assertEqual((await client.patch(f'/api/v1/users/{uid}',json={'role':2})).status_code,404)
+        async with self.repo.sessions() as s:
+            self.assertEqual(len(list((await s.scalars(select(User).where(User.role==1))).all())),1)
+
+    async def test_user_mutations_require_administrator(self):
+        from ctf.adapters.http.auth import issue_token
+        client, actor, runtime=await self.management_client()
+        async with client:
+            for role in (2,3,4):
+                async with self.repo.sessions.begin() as s:
+                    other=User(username=f'role{role}',password_hash='unused',role=role)
+                    s.add(other)
+                    await s.flush()
+                client.headers['Authorization']='Bearer '+issue_token(runtime,other)
+                self.assertEqual((await client.post('/api/v1/users',json={'username':'unauthorized','password':'Temporary-test-12345'})).status_code,403)
+                self.assertEqual((await client.patch(f'/api/v1/users/{self.u1}',json={'role':4})).status_code,403)
+                self.assertEqual((await client.request('DELETE',f'/api/v1/users/{self.u1}',json={'confirmation':str(self.u1)})).status_code,403)
+            client.headers.clear()
+            self.assertEqual((await client.patch(f'/api/v1/users/{self.u1}',json={'role':2})).status_code,401)
+
+    async def test_role_change_revokes_token_and_removes_player_memberships(self):
+        from ctf.adapters.http.auth import issue_token
+        client, actor, runtime=await self.management_client()
+        async with self.repo.sessions() as s:
+            target=await s.get(User,self.u1)
+            old_token=issue_token(runtime,target)
+        async with client:
+            changed=await client.patch(f'/api/v1/users/{self.u1}',json={'role':2})
+            self.assertEqual(changed.status_code,200,changed.text)
+            client.headers['Authorization']='Bearer '+old_token
+            self.assertEqual((await client.get('/api/v1/auth/me')).status_code,401)
+        async with self.repo.sessions() as s:
+            self.assertFalse(await s.scalar(select(Member.id).where(Member.user_id==self.u1)))
+            self.assertEqual((await s.get(User,self.u1)).token_version,1)
+
+    async def test_reset_password_and_deactivation_preserve_history(self):
+        from ctf.adapters.http.auth import issue_token
+        client, actor, runtime=await self.management_client()
+        async with client:
+            response=await client.patch(f'/api/v1/users/{self.u1}',json={'password':'Temporary-reset-12345'})
+            self.assertEqual(response.status_code,200,response.text)
+            self.assertTrue(response.json()['must_change_password'])
+            login=await client.post('/api/v1/auth/login',json={'username':str(self.u1),'password':'Temporary-reset-12345'})
+            self.assertEqual(login.status_code,200,login.text)
+            removed=await client.request('DELETE',f'/api/v1/users/{self.u1}',json={'confirmation':str(self.u1)})
+            self.assertEqual(removed.status_code,409,removed.text) # login audit is retained
+            response=await client.patch(f'/api/v1/users/{self.u1}',json={'state':'inactivo'})
+            self.assertEqual(response.status_code,200)
+            client.headers['Authorization']='Bearer '+login.json()['access_token']
+            self.assertEqual((await client.get('/api/v1/auth/me')).status_code,401)
+            self.assertEqual((await client.post('/api/v1/auth/login',json={'username':str(self.u1),'password':'Temporary-reset-12345'})).status_code,401)
+        async with self.repo.sessions() as s:
+            self.assertIsNotNone(await s.get(User,self.u1))
+            audits=list((await s.scalars(select(Audit))).all())
+            self.assertNotIn('Temporary-reset-12345',str([a.details for a in audits]))
+
+    async def test_live_runs_block_user_changes_and_deletion(self):
+        client, actor, runtime=await self.management_client()
+        run=await self.repo.enqueue(self.u1,self.challenge)
+        async with client:
+            for state in (State.QUEUED,State.RESERVED,State.ACTIVE,State.CLEANING):
+                async with self.repo.sessions.begin() as s: (await s.get(Run,run.id)).state=state
+                self.assertEqual((await client.patch(f'/api/v1/users/{self.u1}',json={'role':4})).status_code,409)
+                self.assertEqual((await client.request('DELETE',f'/api/v1/users/{self.u1}',json={'confirmation':str(self.u1)})).status_code,409)
+            async with self.repo.sessions.begin() as s: (await s.get(Run,run.id)).state=State.RELEASED
+            self.assertEqual((await client.request('DELETE',f'/api/v1/users/{self.u1}',json={'confirmation':str(self.u1)})).status_code,409)
+            self.assertEqual((await client.patch(f'/api/v1/users/{self.u1}',json={'state':'inactivo'})).status_code,200)
+
+    async def test_user_validation_and_username_collision_rollback(self):
+        client, actor, runtime=await self.management_client()
+        async with client:
+            for body in ({},{'username':None},{'role':None},{'state':'deleted'},{'password':'short'},{'token_version':0}):
+                self.assertEqual((await client.patch(f'/api/v1/users/{self.u1}',json=body)).status_code,422)
+            conflict=await client.patch(f'/api/v1/users/{self.u1}',json={'username':str(self.u2),'role':4})
+            self.assertEqual(conflict.status_code,409)
+        async with self.repo.sessions() as s:
+            target=await s.get(User,self.u1)
+            self.assertEqual(target.role,3)
+            self.assertEqual(target.username,str(self.u1))
+
+    async def test_enqueue_race_with_role_change(self):
+        client, actor, runtime=await self.management_client()
+        async with client:
+            queued, changed=await asyncio.gather(self.repo.enqueue(self.u1,self.challenge),client.patch(f'/api/v1/users/{self.u1}',json={'role':2}),return_exceptions=True)
+            if isinstance(queued,Exception):
+                self.assertEqual(changed.status_code,200)
+            else:
+                self.assertEqual(changed.status_code,409)
+        async with self.repo.sessions() as s:
+            target=await s.get(User,self.u1)
+            live=await s.scalar(select(Run.id).where(Run.user_id==self.u1,Run.state==State.QUEUED))
+            self.assertFalse(target.role==2 and live)
 
 
 if __name__ == "__main__": unittest.main()

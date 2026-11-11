@@ -39,15 +39,39 @@ SSH/SCP pedirá la contraseña correspondiente. Copiar los archivos todavía no 
 
 ## 4. Transferir a Kali
 
-En LAB-CTFWEB, para Blue:
+Las cuentas administrativas confirmadas son:
+
+| VM | IP | Usuario Linux / hostname |
+| --- | --- | --- |
+| LAB-KALI-BLUE | 10.10.20.12 | `lab-kali-blue` |
+| LAB-KALI-PURPLE | 10.10.20.11 | `lab-kali-purple` |
+| LAB-KALI | 10.10.20.10 | `lab-kali` |
+
+Ejecuta en la terminal de **LAB-CTFWEB**, no en PowerShell local. Primero entra en la carpeta del proyecto:
 
 ```bash
-read -rp 'Cuenta administrativa Linux de LAB-KALI-BLUE: ' kali_admin
-scp labs/fresh/helpers/ctf-lab-helper.py "${kali_admin}@10.10.20.12:/tmp/ctf-lab-helper.py"
-unset kali_admin
+cd /ctf-plataform/ || exit 1
 ```
 
-Para Purple, repite sustituyendo la IP por `10.10.20.11` y escribiendo su cuenta real. Si vas a usar LAB-KALI, su IP es `10.10.20.10`. No presupongas que todas usan la misma cuenta.
+Para **LAB-KALI-BLUE**:
+
+```bash
+scp labs/fresh/helpers/ctf-lab-helper.py lab-kali-blue@10.10.20.12:/tmp/ctf-lab-helper.py
+```
+
+Para **LAB-KALI-PURPLE**, si también la vas a preparar:
+
+```bash
+scp labs/fresh/helpers/ctf-lab-helper.py lab-kali-purple@10.10.20.11:/tmp/ctf-lab-helper.py
+```
+
+Para **LAB-KALI**, si la vas a utilizar:
+
+```bash
+scp labs/fresh/helpers/ctf-lab-helper.py lab-kali@10.10.20.10:/tmp/ctf-lab-helper.py
+```
+
+Cuando SCP solicite la contraseña, introduce la de mantenimiento de la Kali de destino; no se muestra mientras la escribes. En la primera conexión verifica la huella con el responsable antes de aceptarla. Espera a que cada copia termine sin errores antes de continuar. Ya no necesitas `read` ni `unset`: cada comando incluye su usuario confirmado.
 
 ## 5. Revisar cada destino
 

@@ -6,7 +6,7 @@ Plataforma de laboratorios de ciberseguridad en Nutanix: jugadores y grupos, ret
 
 **[Orden de ejecución para la plataforma desplegada](Docs/00_Inicio/01_LEEME_PRIMERO.md)**. Sigue esa guía antes de copiar comandos de otros documentos. Incluye los requisitos, el servidor de destino y el resultado esperado de cada etapa.
 
-El estado confirmado es: plataforma desplegada, conexión a la BD correcta y acceso con `admin_ctf`. Los laboratorios todavía deben prepararse. No hace falta limpiar bases ni inicializar otra vez el esquema para continuar.
+Estado confirmado el 10 de noviembre de 2026: plataforma desplegada, BD conectada y un jugador ya puede iniciar un reto y abrir SSH en la Kali. Para continuar usa [modales y gestión de usuarios](Docs/01_Plataforma/05_MODALES_Y_GESTION_USUARIOS.md) y después [preparación de Windows y FTP](Docs/02_Laboratorios/09_PREPARACION_WINDOWS_Y_FTP.md). No hace falta limpiar bases ni inicializar otra vez el esquema para continuar.
 
 | Carpeta | Contenido |
 | --- | --- |
@@ -23,7 +23,7 @@ Los números ordenan los documentos **dentro de cada carpeta**. No ejecutes toda
 
 ## Ruta y componentes de la instalación actual
 
-El proyecto del servidor web está en **`/ctf-plataform/`**, con esa escritura exacta. El nombre del repositorio local puede ser `ctf-platform`; eso no cambia la ruta remota. Los secretos siguen en `/opt/cociber-secrets`.
+Las últimas sesiones sitúan el proyecto en **`/home/lab-ctfweb/ctf-platform`**. La ruta nominal anterior era `/ctf-plataform/`; conserva el checkout real y el ajuste de WorkingDirectory del worker. No muevas el despliegue para coincidir con una guía antigua. Los secretos siguen en `/opt/cociber-secrets`.
 
 | Componente | Ubicación / configuración |
 | --- | --- |
@@ -44,7 +44,7 @@ ssh -J lab-rtrfw@10.195.20.20 lab-ctfweb@10.10.10.13
 Ya dentro de LAB-CTFWEB, para consultar el estado:
 
 ```bash
-cd /ctf-plataform/ || exit 1
+cd /home/lab-ctfweb/ctf-platform || exit 1
 sudo docker compose --env-file .env.fresh -f deploy/docker-compose.fresh.yml ps
 ```
 
@@ -52,7 +52,7 @@ Consulta [acceso y comandos base](Docs/00_Inicio/02_ACCESO_Y_COMANDOS_BASE.md) s
 
 ## Alcance de los escenarios
 
-ESC-02 usa SSH didáctico en LAB-LNXVICT (`10.10.30.12:2222`). ESC-03 usa DVWA en LAB-SRVWEB (`10.10.30.20`). Ambos requieren helpers instalados, una Kali preparada, pruebas y piloto antes de publicar. ESC-01/04/05 continúan pendientes para otra fase.
+ESC-02 usa SSH didáctico en LAB-LNXVICT (`10.10.30.12:2222`). ESC-03 usa DVWA en LAB-SRVWEB (`10.10.30.20`). Ambos requieren helpers instalados, una Kali preparada, pruebas y piloto antes de publicar. ESC-01/04/05 continúan deshabilitados. Las nuevas guías preparan Windows 10 Pro A→B y Ubuntu Server 26.04 con FTP para pruebas manuales; sus adaptadores y banderas automáticas siguen pendientes.
 
 La consola integrada del reto es SSH. La demostración de DVWA necesita adicionalmente un navegador dentro de Kali con acceso gráfico comprobado. Un resultado TCP correcto en Guacamole no demuestra que las credenciales ni el escritorio funcionen.
 

@@ -35,12 +35,22 @@ En LAB-CTFWEB:
 ```bash
 scp /tmp/cociber-labops.pub lab-lnxvict@10.10.30.12:/tmp/cociber-labops.pub
 scp /tmp/cociber-labops.pub lab-srvweb@10.10.30.20:/tmp/cociber-labops.pub
-read -rp 'Cuenta administrativa de LAB-KALI-BLUE: ' kali_admin
-scp /tmp/cociber-labops.pub "${kali_admin}@10.10.20.12:/tmp/cociber-labops.pub"
-unset kali_admin
+scp /tmp/cociber-labops.pub lab-kali-blue@10.10.20.12:/tmp/cociber-labops.pub
 ```
 
-Repite para Purple con `.11` y para cualquier otra Kali elegida. **Nunca transfieras `labops_ed25519` sin `.pub` a las víctimas.**
+Si también preparas Purple, ejecuta desde LAB-CTFWEB:
+
+```bash
+scp /tmp/cociber-labops.pub lab-kali-purple@10.10.20.11:/tmp/cociber-labops.pub
+```
+
+Si preparas LAB-KALI:
+
+```bash
+scp /tmp/cociber-labops.pub lab-kali@10.10.20.10:/tmp/cociber-labops.pub
+```
+
+Introduce la contraseña de mantenimiento de cada VM cuando se solicite. Estas cuentas administrativas instalan la clave pública para `labops`; no cambies `SSH_INJECTOR_USER=labops` por el usuario administrativo de Kali. **Nunca transfieras `labops_ed25519` sin `.pub` a las víctimas.**
 
 ## 3. Crear o revisar labops en cada VM
 
@@ -88,42 +98,58 @@ hostname
 sudo ssh-keygen -lf /etc/ssh/ssh_host_ed25519_key.pub
 ```
 
-Vuelve a LAB-CTFWEB y recoge candidatos para **las VM que realmente preparaste**. Ejemplo Blue, Purple y las dos víctimas:
+Vuelve a LAB-CTFWEB y recoge candidatos para **las VM que realmente preparaste**. Este ejemplo incluye las tres Kali y las dos víctimas; si todavía no prepararás alguna, omite su IP tanto en la captura como en las comprobaciones posteriores:
 
 ```bash
-ssh-keyscan -T 5 -t ed25519 10.10.20.12 10.10.20.11 10.10.30.12 10.10.30.20 > /tmp/cociber-known-hosts-candidatos
+ssh-keyscan -T 5 -t ed25519 10.10.20.10 10.10.20.12 10.10.20.11 10.10.30.12 10.10.30.20 > /tmp/cociber-known-hosts-candidatos
 ssh-keygen -lf /tmp/cociber-known-hosts-candidatos
 ```
 
-Compara cada huella con la de su consola. `ssh-keyscan` por sí solo no acredita identidad. Si falta un host o una huella no coincide, corrige el acceso o consulta al responsable; no continúes ni desactives la verificación.
+**`>` reemplaza todo el archivo de candidatos.** No ejecutes después otra captura de una sola IP con `>` sobre el mismo archivo: perderías las entradas anteriores. Si faltó una VM, vuelve a capturar la lista completa. Capturar no modifica el archivo definitivo `/opt/cociber-secrets/known_hosts`.
 
-Solo después de la comparación, revisa si hay un archivo vigente:
+Compara cada huella con la de su consola. `ssh-keyscan` por sí solo no acredita identidad. Esperado para este ejemplo: cinco entradas con sus cinco IP. Si falta un host o una huella no coincide, corrige el acceso o consulta al responsable; no continúes ni desactives la verificación.
 
-```bash
-sudo test -f /opt/cociber-secrets/known_hosts && sudo ssh-keygen -lf /opt/cociber-secrets/known_hosts
-```
+**Solo después de verificar las huellas**, ejecuta completo el siguiente bloque en LAB-CTFWEB. El bloque elige automáticamente qué hacer: si existe known_hosts, lo respalda y agrega las entradas comprobadas; si no existe, lo crea. No necesitas ejecutar dos alternativas manualmente. Si falla el respaldo, se detiene antes de modificar el archivo.
 
-Si ya existe, respáldalo y **añade** las entradas comprobadas; no lo reemplaces ni elimines huellas antiguas por prueba y error:
+Si un host ya registrado tiene ahora otra huella, detente y confirma el motivo con el responsable antes de agregarla. Este procedimiento no resuelve ni elimina por sí solo identidades cambiadas.
 
 ```bash
-sudo cp -a /opt/cociber-secrets/known_hosts "/opt/cociber-secrets/known_hosts.$(date -u +%Y%m%dT%H%M%S).bak"
-sudo tee -a /opt/cociber-secrets/known_hosts < /tmp/cociber-known-hosts-candidatos > /dev/null
+sudo bash <<'BASH'
+set -eu
+candidatos=/tmp/cociber-known-hosts-candidatos
+destino=/opt/cociber-secrets/known_hosts
+test -s "$candidatos"
+ssh-keygen -lf "$candidatos"
+if [ -e "$destino" ]; then
+  cp -a -- "$destino" "${destino}.$(date -u +%Y%m%dT%H%M%S%N).bak"
+  printf '\n' >> "$destino"
+  cat -- "$candidatos" >> "$destino"
+else
+  install -o root -g 10001 -m 0640 "$candidatos" "$destino"
+fi
+chown root:10001 "$destino"
+chmod 0640 "$destino"
+printf '\nHuellas instaladas en %s:\n' "$destino"
+ssh-keygen -lf "$destino"
+BASH
 ```
 
-Si no existía, instala el archivo nuevo:
+Comprueba el **archivo definitivo**, no solamente el de candidatos:
 
 ```bash
-sudo install -o root -g 10001 -m 0640 /tmp/cociber-known-hosts-candidatos /opt/cociber-secrets/known_hosts
+for vm_ip in 10.10.20.10 10.10.20.12 10.10.20.11 10.10.30.12 10.10.30.20; do
+  printf '\nDestino %s\n' "$vm_ip"
+  sudo ssh-keygen -F "$vm_ip" -f /opt/cociber-secrets/known_hosts || printf 'FALTA esta IP: no continúes con su autenticación.\n'
+done
 ```
 
-En ambos casos:
+Cada IP preparada debe mostrar su entrada `ssh-ed25519`. Repetir la incorporación puede dejar entradas idénticas duplicadas; no significa que haya más VM. Lo importante es que cada IP tenga la clave verificada correcta.
 
-```bash
-sudo chown root:10001 /opt/cociber-secrets/known_hosts
-sudo chmod 0640 /opt/cociber-secrets/known_hosts
-```
+**Caso observado el 10 de noviembre de 2026:** la segunda captura, solo de `10.10.20.10`, sobrescribió el archivo temporal. Después se instaló ese archivo con una única entrada. Volver a capturar las cinco IP no actualizó known_hosts, porque faltaba ejecutar la incorporación de este paso. No era un fallo de la contraseña ni de la clave privada de labops.
 
 ## 5. Probar una autenticación real desde LAB-CTFWEB
+
+**Antes:** el paso 4 debe haber instalado y comprobado las huellas en `/opt/cociber-secrets/known_hosts`. Los siguientes comandos usan rutas absolutas y pueden ejecutarse desde cualquier carpeta de LAB-CTFWEB; no requieren `sudo su`.
 
 OpenSSH ejecutado como root puede rechazar la clave privada 0640. Usa esta copia temporal 0600 para la prueba manual; la original sigue legible por el contenedor:
 
@@ -138,6 +164,28 @@ Esperado: `labops`, sin solicitar contraseña. Repite el mismo comando cambiando
 sudo rm -f /run/cociber-labops-prueba
 ```
 
-Si falla, revisa en la VM `sudo journalctl -u ssh.service --since '10 minutes ago' --no-pager`, la cuenta y sus permisos. No publiques claves ni registros con secretos. Conserva las integraciones deshabilitadas hasta resolverlo.
+Si falla, distingue el tipo de error:
+
+| Mensaje | Significado y siguiente paso |
+| --- | --- |
+| `No ED25519 host key is known` / `Host key verification failed` | Falta la identidad del destino o no coincide. Comprueba `sudo ssh-keygen -F 10.10.30.12 -f /opt/cociber-secrets/known_hosts` y completa el paso 4. Todavía no se ha autenticado a labops. |
+| `REMOTE HOST IDENTIFICATION HAS CHANGED` | Hay una identidad diferente de la registrada; confirma si hubo restauración o reinstalación antes de modificar las huellas. |
+| `Permission denied (publickey)` | Ya se superó la identidad del servidor, pero falla el acceso de labops: revisa la clave pública instalada, propietario/permisos y restricciones SSH del destino. |
+| `Connection timed out` / `Connection refused` | Revisa acceso de red, IP, puerto 22 y servicio SSH del destino. |
+
+Para revisar registros de una autenticación fallida hacia LNXVICT, abre **otra ventana PowerShell local** y entra a esa víctima con su cuenta administrativa:
+
+```powershell
+ssh -J lab-rtrfw@10.195.20.20 lab-lnxvict@10.10.30.12
+```
+
+Ya en **LAB-LNXVICT**:
+
+```bash
+hostname
+sudo journalctl -u ssh.service --since '10 minutes ago' --no-pager
+```
+
+Ejecutar ese journalctl en LAB-CTFWEB consulta su servidor SSH local, no el intento saliente hacia LNXVICT. Además, un rechazo de la huella ocurre en el cliente antes de autenticar al usuario. Si el destino usa otra unidad, consulta su nombre real. No publiques claves ni registros con secretos. Conserva las integraciones deshabilitadas hasta resolverlo.
 
 Siguiente: [03. LNXVICT](03_LNXVICT_SSH.md).

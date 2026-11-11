@@ -4,14 +4,25 @@
 
 ## 1. Entrar a la Kali
 
-Desde PowerShell local, escribe la cuenta Linux administrativa real cuando se solicite. No es el usuario de la plataforma:
+Desde PowerShell local, para LAB-KALI-BLUE:
 
 ```powershell
-$kaliAdmin = Read-Host 'Usuario Linux administrador de LAB-KALI-BLUE'
-ssh -J lab-rtrfw@10.195.20.20 "$kaliAdmin@10.10.20.12"
+ssh -J lab-rtrfw@10.195.20.20 lab-kali-blue@10.10.20.12
 ```
 
-Para Purple cambia únicamente la IP por `10.10.20.11` y usa su cuenta administrativa. En la VM:
+Para LAB-KALI-PURPLE, abre otra ventana PowerShell local:
+
+```powershell
+ssh -J lab-rtrfw@10.195.20.20 lab-kali-purple@10.10.20.11
+```
+
+Si preparas LAB-KALI, utiliza desde PowerShell local:
+
+```powershell
+ssh -J lab-rtrfw@10.195.20.20 lab-kali@10.10.20.10
+```
+
+Introduce la contraseña de mantenimiento cuando se solicite. Son cuentas Linux de administración, distintas de los jugadores de CoCiber y de la cuenta técnica `labops`. En la VM elegida:
 
 ```bash
 hostname

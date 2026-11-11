@@ -69,3 +69,7 @@ Al finalizar una práctica sin resolverla, vuelve al reto en CoCiber y pulsa **C
 ## Escenarios de la siguiente fase
 
 ESC-01, ESC-04 y ESC-05 **no están disponibles para iniciar**. Sus objetivos previstos son reconocimiento de un servicio confirmado, movimiento lateral Windows A→B y recuperación/transferencia controlada de un archivo Samba. Las guías finales del jugador se completarán después de validar esos servicios y sus helpers; consulta el [registro de pendientes](../04_Pendientes/01_ESTADO_Y_ENTREGABLES.md).
+
+## Continuar con Windows y FTP
+
+Cuando el acceso SSH a la Kali ya funciona, sigue [09. Preparación de Windows y FTP](09_PREPARACION_WINDOWS_Y_FTP.md). Esas guías preparan servicios y ensayos manuales; la publicación automática de ESC-04/05 continúa pendiente. Para los nuevos formularios y permisos consulta [05. Modales y usuarios](../01_Plataforma/05_MODALES_Y_GESTION_USUARIOS.md).

@@ -45,6 +45,11 @@ class Repository:
 
     async def enqueue(self, user_id, challenge_id, *, pilot=False):
         async with self.sessions.begin() as s:
+            # Comparte el bloqueo con la gestión de usuarios: no admitir una
+            # corrida entre la comprobación de actividad y un cambio de rol/baja.
+            user = await s.scalar(select(User).where(User.id == user_id).with_for_update())
+            if not user or user.state != "activo" or user.role not in ((1, 2) if pilot else (3,)):
+                raise RecursoNoDisponibleError()
             challenge = await s.scalar(select(Challenge).where(Challenge.id == challenge_id).with_for_update())
             if not challenge or (not pilot and challenge.state != "published"):
                 raise RecursoNoDisponibleError()

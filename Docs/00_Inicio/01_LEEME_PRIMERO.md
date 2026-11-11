@@ -1,8 +1,8 @@
 # 01. Empieza aquí: orden de ejecución
 
-Actualización: **9 de noviembre de 2026**. Esta documentación parte del estado confirmado por el operador: la plataforma nueva está desplegada, conecta a PostgreSQL/Redis y permite iniciar sesión como `admin_ctf`. Los laboratorios todavía deben prepararse.
+Actualización: **10 de noviembre de 2026**. La plataforma nueva está desplegada, conecta a PostgreSQL/Redis y un jugador ya puede iniciar un reto y abrir SSH en la Kali. No repitas instalaciones ya verificadas: continúa con [05. Modales y usuarios](../01_Plataforma/05_MODALES_Y_GESTION_USUARIOS.md) y [09. Windows y FTP](../02_Laboratorios/09_PREPARACION_WINDOWS_Y_FTP.md). El recorrido inicial se conserva debajo para instalaciones aún no preparadas.
 
-**Ruta del proyecto en LAB-CTFWEB: `/ctf-plataform/`.** Respeta esa escritura, incluido `plataform`. El nombre del repositorio Git sigue siendo `ctf-platform`; no son la misma cadena.
+**Ruta observada en LAB-CTFWEB: `/home/lab-ctfweb/ctf-platform`.** Las primeras guías usaban la ruta nominal `/ctf-plataform/`: donde aparezca, usa el checkout real comprobado con `pwd -P` y los archivos `.env.fresh` y `deploy/docker-compose.fresh.yml`. No crees otra carpeta ni reinstales el worker con el directorio antiguo.
 
 ## Cómo utilizar las guías
 
@@ -15,7 +15,7 @@ Actualización: **9 de noviembre de 2026**. Esta documentación parte del estado
 
 | Orden | Guía | Equipo | Resultado antes de avanzar |
 | --- | --- | --- | --- |
-| 1 | [Acceso y comandos base](02_ACCESO_Y_COMANDOS_BASE.md) | Equipo local y servidor web | Sabes identificar dónde estás y entrar en `/ctf-plataform/` |
+| 1 | [Acceso y comandos base](02_ACCESO_Y_COMANDOS_BASE.md) | Equipo local y servidor web | Sabes identificar dónde estás y entrar al checkout real |
 | 2 | [Verificar plataforma existente](../01_Plataforma/01_VERIFICAR_PLATAFORMA_EXISTENTE.md) | LAB-CTFWEB | API/web activos y acceso a BD correcto |
 | 3 | [Actualizar interfaz y Guacamole](../01_Plataforma/02_ACTUALIZAR_INTERFAZ_Y_GUACAMOLE.md) | LAB-CTFWEB y navegador | Versión actualizada; omitir reconstrucción si ya está aplicada |
 | 4 | [Comprobar Guacamole y acceso a Kali](../01_Plataforma/03_GUACAMOLE_Y_CONEXIONES.md) | Navegador y Kali | Inventario remoto consultado y acceso de administración verificado |
@@ -47,7 +47,8 @@ Los documentos de `labs/demo-vulnerable` y `labs/operacion-condor` son paquetes 
 
 - **Operador de plataforma:** SSH a LAB-CTFWEB, actualización de contenedores, configuración privada y worker.
 - **Administrador de VM/Nutanix:** snapshots, instalación de helpers y permisos en las VM.
-- **Instructor:** jugadores, grupos, pilotos, publicación y demostración.
+- **Administrador web:** crear, editar, desactivar o eliminar usuarios y asignar los tres roles no administrativos.
+- **Instructor:** consultar jugadores, gestionar grupos, pilotos, publicación y demostración.
 - **Jugador:** únicamente la práctica asignada desde Kali y el envío de su bandera.
 
 Una persona puede tener varios roles, pero las cuentas Linux, el administrador web, las cuentas de los motores y los usuarios de Guacamole son diferentes. No sustituyas una por otra.

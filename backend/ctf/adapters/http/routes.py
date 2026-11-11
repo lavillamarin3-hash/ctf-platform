@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import select, delete, func, text
 from .auth import current, roles, user_view
 from .schemas import *
-from ..persistence.models import User, Group, Member, Machine, Laboratory, LabMachine, Challenge, Hint, HintUse, Assignment, Run, Ranking, Maintenance, Audit
+from ..persistence.models import User, Group, Member, Machine, Laboratory, LabMachine, Challenge, Hint, HintUse, Assignment, Run, Ranking, Maintenance, Audit, Completion
 from ..persistence.repository import audit, now
 from ...application.admin import hasher
 from ...domain.laboratory import SCENARIOS, POINTS, LIVE, State, scenario_for, RecursoNoDisponibleError, INSTRUCTIONS
@@ -42,6 +42,59 @@ async def add_user(body: NewUser, request: Request, actor=Depends(roles(1))):
         return user_view(user)
 
 
+async def editable_user(session, user_id):
+    target = await session.scalar(select(User).where(User.id == user_id).with_for_update())
+    if not target: raise HTTPException(404, "Usuario no encontrado")
+    if target.role == 1:
+        raise HTTPException(409, "La cuenta administradora única está protegida. Cambia su contraseña desde Mi cuenta.")
+    if await session.scalar(select(Run.id).where(Run.user_id == user_id, Run.state.in_((*LIVE, State.QUEUED))).limit(1)):
+        raise HTTPException(409, "Cierra las corridas del usuario y espera su limpieza antes de modificarlo")
+    return target
+
+
+@router.patch("/users/{user_id}")
+async def update_user(user_id: UUID, body: UpdateUser, request: Request, actor=Depends(roles(1))):
+    async with request.app.state.runtime.repo.sessions.begin() as s:
+        target = await editable_user(s, user_id)
+        changes = body.model_dump(exclude_unset=True)
+        modified = []
+        for field in ("username", "role", "state"):
+            if field in changes and getattr(target, field) != changes[field]:
+                setattr(target, field, changes[field])
+                modified.append(field)
+        if "password" in changes:
+            target.password_hash = hasher.hash(changes["password"])
+            target.must_change_password = True
+            modified.append("password")
+        if modified:
+            # Las sesiones existentes no mantienen permisos anteriores.
+            target.token_version += 1
+            if "role" in modified and target.role != 3:
+                await s.execute(delete(Member).where(Member.user_id == user_id))
+            audit(s, "user.updated", user_id, actor.id, fields=modified)
+        await s.flush()
+        return user_view(target)
+
+
+@router.delete("/users/{user_id}")
+async def delete_user(user_id: UUID, body: DeleteUser, request: Request, actor=Depends(roles(1))):
+    async with request.app.state.runtime.repo.sessions.begin() as s:
+        target = await editable_user(s, user_id)
+        if body.confirmation != target.username:
+            raise HTTPException(422, "Escribe el nombre exacto del usuario para confirmar")
+        # No se eliminan en cascada evidencias de aprendizaje ni auditoría.
+        references = ((Run, Run.user_id), (Challenge, Challenge.creator_id), (HintUse, HintUse.user_id),
+                      (Completion, Completion.user_id), (Ranking, Ranking.user_id), (Audit, Audit.user_id),
+                      (Maintenance, Maintenance.resolver_id))
+        for model, column in references:
+            if await s.scalar(select(func.count()).select_from(model).where(column == user_id)):
+                raise HTTPException(409, "El usuario tiene historial. Desactívalo para conservar corridas, puntuaciones y auditoría.")
+        await s.execute(delete(Member).where(Member.user_id == user_id))
+        audit(s, "user.deleted", user_id, actor.id)
+        await s.delete(target)
+    return {"ok": True}
+
+
 @router.get("/groups")
 async def groups(request: Request, user=Depends(roles(1, 2))):
     async with request.app.state.runtime.repo.sessions() as s:
@@ -54,9 +107,9 @@ async def add_group(body: GroupInput, request: Request, user=Depends(roles(1, 2)
         group = Group(code=body.code, name=body.name)
         s.add(group)
         await s.flush()
-        for uid in set(body.users):
-            target = await s.get(User, uid)
-            if not target or target.role != 3: raise HTTPException(422, "Selecciona jugadores existentes")
+        for uid in sorted(set(body.users)):
+            target = await s.scalar(select(User).where(User.id == uid).with_for_update())
+            if not target or target.role != 3 or target.state != "activo": raise HTTPException(422, "Selecciona jugadores activos existentes")
             s.add(Member(group_id=group.id, user_id=uid))
         audit(s, "group.created", group.id, user.id)
         return public_row(group)
@@ -127,7 +180,8 @@ async def challenges(request: Request, user=Depends(current)):
         for challenge in (await s.scalars(query)).unique().all():
             busy = await s.scalar(select(Run.id).where(Run.challenge_id == challenge.id, Run.state.in_(LIVE)).limit(1))
             hints = (await s.scalars(select(Hint).where(Hint.challenge_id == challenge.id).order_by(Hint.order))).all()
-            result.append({**public_row(challenge), "availability": "en cola" if busy else "disponible", "hints": [{"order": h.order, "penalty": h.penalty} for h in hints]})
+            group_ids = list((await s.scalars(select(Assignment.group_id).where(Assignment.challenge_id == challenge.id))).all()) if user.role in (1, 2) else []
+            result.append({**public_row(challenge), "groups": group_ids, "availability": "en cola" if busy else "disponible", "hints": [{"order": h.order, "penalty": h.penalty} for h in hints]})
         return result
 
 

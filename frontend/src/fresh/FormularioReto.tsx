@@ -2,7 +2,7 @@ import { FormEvent, useState } from 'react';
 import { api, Machine, Scenario } from './client';
 import { SelectorMaquina } from './SelectorMaquina';
 
-export function FormularioReto({ machines, scenarios, onSaved }: { machines: Machine[]; scenarios: Scenario[]; onSaved: () => Promise<void> }) {
+export function FormularioReto({ machines, scenarios, onSaved, onBusyChange }: { machines: Machine[]; scenarios: Scenario[]; onSaved: () => Promise<void>; onBusyChange?: (busy: boolean) => void }) {
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
   const [difficulty, setDifficulty] = useState('medio');
@@ -30,9 +30,9 @@ export function FormularioReto({ machines, scenarios, onSaved }: { machines: Mac
     } catch (e) { setError((e as Error).message); }
   }
   async function submit(event: FormEvent) {
-    event.preventDefault(); if (!valid) return; setBusy(true); setError('');
+    event.preventDefault(); if (!valid) return; setBusy(true); onBusyChange?.(true); setError('');
     try { await api('/challenges', { code, name, difficulty, victim_id: victim, strategy, points, description, instructions, duration_minutes: duration ? Number(duration) : null, hints: hints.filter(h => h.trim()).map(text => ({text,penalty:0})), resources: resourceUrl ? [{title:resourceTitle,url:resourceUrl}] : [] }); await onSaved(); }
-    catch (e) { setError((e as Error).message); } finally { setBusy(false); }
+    catch (e) { setError((e as Error).message); } finally { setBusy(false); onBusyChange?.(false); }
   }
   return <form onSubmit={submit} className="fresh-form">
     <p className="fresh-kicker">NUEVO RETO · BORRADOR</p><h2>Prepara una práctica</h2>

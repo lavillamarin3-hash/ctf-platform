@@ -1,5 +1,7 @@
 # 03. ESC-04: guía para documentar Windows A→B
 
+**Actualización del 10 de noviembre:** Windows A y B son Windows 10 Pro, equipos/cuentas administrativas `lab-winvict-a` y `lab-winvict-b`. La [guía ejecutable de Windows A→B](../02_Laboratorios/10_WINDOWS_A_Y_B.md) prepara SSH y SMB con cuentas de ensayo. Este documento conserva el contrato pendiente para automatizar las corridas; no es un segundo procedimiento de instalación.
+
 **Estado:** `LATERAL-SMB-LAB`, T1021.002, avanzado, 500 puntos, **deshabilitado**. La cadena confirmada es LAB-WINVICT-A (10.10.30.10) → LAB-WINVICT-B (10.10.30.11). No se sustituirá por LAB-LNXVICT.
 
 ## 1. Registrar acceso y snapshots

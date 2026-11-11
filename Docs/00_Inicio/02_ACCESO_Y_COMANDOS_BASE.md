@@ -27,13 +27,13 @@ Ahora estás en una terminal **Linux del servidor web**. Ejecuta:
 ```bash
 hostname
 whoami
-cd /ctf-plataform/ || exit 1
+cd /home/lab-ctfweb/ctf-platform || exit 1
 pwd
 ls -l deploy/docker-compose.fresh.yml
 test -f .env.fresh && echo 'Existe la configuración privada'
 ```
 
-`pwd` debe mostrar `/ctf-plataform`. Si la carpeta no existe, comprueba el montaje/ruta con el responsable; no crees otra carpeta para continuar. `cd` cambia la carpeta de la sesión, no mueve archivos.
+`pwd` debe mostrar el checkout real: las últimas sesiones utilizan `/home/lab-ctfweb/ctf-platform`. Las primeras guías usaban `/ctf-plataform`; sustituye esa ruta cuando corresponda. Si la carpeta no existe, comprueba la ruta y los dos archivos anteriores; no crees otra carpeta para continuar. `cd` cambia la carpeta de la sesión, no mueve archivos.
 
 Para ejecutar operaciones administrativas, antepone `sudo` al comando indicado. Su contraseña es la de la cuenta Linux de esa VM, no la de `admin_ctf`, PostgreSQL o Redis.
 
@@ -55,14 +55,27 @@ Dentro de cada sesión, comprueba `hostname` antes de ejecutar instrucciones. No
 
 ## 4. Acceder a Kali y al servidor de datos
 
-Sus cuentas Linux administrativas no están confirmadas. Solicita el nombre real y escríbelo en el prompt. Ejemplo **PowerShell local** para Kali Blue:
+Desde **PowerShell local**, utiliza el comando de la Kali a la que vas a entrar. Para LAB-KALI-BLUE:
 
 ```powershell
-$CuentaKali = Read-Host 'Cuenta Linux administrativa de LAB-KALI-BLUE'
-ssh -J lab-rtrfw@10.195.20.20 "$($CuentaKali)@10.10.20.12"
+ssh -J lab-rtrfw@10.195.20.20 lab-kali-blue@10.10.20.12
 ```
 
-Para Purple cambia el destino a `10.10.20.11`; la cuenta puede ser distinta. Para LAB-DB-POSTGRES:
+Para LAB-KALI-PURPLE, en otra ventana PowerShell local:
+
+```powershell
+ssh -J lab-rtrfw@10.195.20.20 lab-kali-purple@10.10.20.11
+```
+
+Para LAB-KALI, en otra ventana PowerShell local:
+
+```powershell
+ssh -J lab-rtrfw@10.195.20.20 lab-kali@10.10.20.10
+```
+
+Introduce las contraseñas cuando SSH las solicite. En la VM, ejecuta `hostname` y `whoami`: deben corresponder a `lab-kali-blue`, `lab-kali-purple` o `lab-kali`, respectivamente.
+
+La cuenta Linux de **LAB-DB-POSTGRES** todavía debe confirmarse. Solicita su nombre real y escríbelo en el prompt desde PowerShell local:
 
 ```powershell
 $CuentaBD = Read-Host 'Cuenta Linux administrativa de LAB-DB-POSTGRES'
@@ -86,7 +99,7 @@ Cuando termines, `exit` vuelve a la terminal desde la que abriste SSH. Ejecuta `
 En LAB-CTFWEB, para editar configuración:
 
 ```bash
-cd /ctf-plataform/ || exit 1
+cd /home/lab-ctfweb/ctf-platform || exit 1
 nano .env.fresh
 ```
 
@@ -95,7 +108,7 @@ Si el archivo pertenece a root, usa `sudo nano .env.fresh`. En Nano: **Ctrl+O**,
 No imprimas `.env.fresh` ni compartas su contenido. Para comprobar Docker sin revelar valores:
 
 ```bash
-cd /ctf-plataform/ || exit 1
+cd /home/lab-ctfweb/ctf-platform || exit 1
 sudo docker compose --env-file .env.fresh -f deploy/docker-compose.fresh.yml config --quiet
 ```
 

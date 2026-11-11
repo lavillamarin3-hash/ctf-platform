@@ -10,10 +10,15 @@ Desde PowerShell local:
 ssh -J lab-rtrfw@10.195.20.20 lab-ctfweb@10.10.10.13
 ```
 
-En LAB-CTFWEB:
+En LAB-CTFWEB, entra en el clon que contiene tu `.env.fresh` operativo. La ruta prevista en las guías es `/ctf-plataform/`:
 
 ```bash
 cd /ctf-plataform/ || exit 1
+```
+
+**Si esa ruta no existe:** no crees una carpeta vacía ni muevas el despliegue. En las salidas del operador del 10 de noviembre de 2026 el clon está en `~/ctf-platform`. Desde la sesión de `lab-ctfweb`, utiliza `cd ~/ctf-platform` y confirma su ruta absoluta con `pwd -P`. Ejecuta los pasos siguientes únicamente desde el clon que contiene la configuración activa.
+
+```bash
 sudo stat -c '%U:%G %a %n' /opt/cociber-secrets /opt/cociber-secrets/labops_ed25519 /opt/cociber-secrets/known_hosts
 nano .env.fresh
 ```
@@ -88,24 +93,59 @@ sudo docker compose --env-file .env.fresh -f deploy/docker-compose.fresh.yml ps
 
 ## 4. Instalar el worker supervisado
 
-El worker procesa la cola y la limpieza. La API funcionando por sí sola no basta. Revisa la unidad incluida:
+El worker procesa la cola y la limpieza. La API funcionando por sí sola no basta. **WorkingDirectory debe ser una carpeta existente con el proyecto y su configuración activa.** Leer la ruta de la plantilla no comprueba que exista.
+
+### 4.1. Comprobar el clon real
+
+Desde el directorio del proyecto en LAB-CTFWEB:
 
 ```bash
+pwd -P
+test -f .env.fresh && echo 'Configuración privada encontrada'
+test -f deploy/docker-compose.fresh.yml && echo 'Compose encontrado'
 grep '^WorkingDirectory=' deploy/systemd/cociber-fresh-worker.service
 command -v docker
+sudo docker compose --env-file .env.fresh -f deploy/docker-compose.fresh.yml config --quiet
 ```
 
-Debe mostrar `WorkingDirectory=/ctf-plataform` y Docker en `/usr/bin/docker`. Si la instalación usa otra ruta del ejecutable, el administrador debe ajustar ExecStart/ExecStop antes de instalar. Con esas comprobaciones correctas:
+Debes ver ambos mensajes de archivos encontrados, Docker en `/usr/bin/docker` y validación Compose sin errores. Si falta algo, detente y localiza el clon correcto. Si Docker usa otra ruta, ajusta ExecStart/ExecStop antes de instalar.
+
+Si ya intentaste arrancar la unidad y aparece `activating (auto-restart)` o `200/CHDIR`, detén los reintentos:
+
+```bash
+sudo systemctl stop cociber-fresh-worker.service
+```
+
+### 4.2. Instalar la unidad y fijar su ruta local
+
+Con las comprobaciones anteriores correctas, instala la unidad. El archivo complementario registra la ruta absoluta devuelta por `pwd -P`; así la ruta predeterminada del repositorio no sustituye la ubicación real de esta instalación.
 
 ```bash
 sudo install -o root -g root -m 0644 deploy/systemd/cociber-fresh-worker.service /etc/systemd/system/cociber-fresh-worker.service
+sudo install -d -o root -g root -m 0755 /etc/systemd/system/cociber-fresh-worker.service.d
+printf '[Service]\nWorkingDirectory=%s\n' "$(pwd -P)" | sudo tee /etc/systemd/system/cociber-fresh-worker.service.d/10-project-directory.conf > /dev/null
 sudo systemctl daemon-reload
+sudo systemctl show cociber-fresh-worker.service -p WorkingDirectory
+```
+
+La ruta efectiva debe coincidir exactamente con `pwd -P`. En la sesión reportada se espera `/home/lab-ctfweb/ctf-platform`; si tu clon real es `/ctf-plataform`, debe mostrar esa otra ruta. Si no coincide, revisa `sudo systemctl cat cociber-fresh-worker.service` para detectar otros archivos complementarios antes de arrancar. No publiques el contenido de `.env.fresh`.
+
+### 4.3. Arrancar y revisar
+
+```bash
+sudo systemctl reset-failed cociber-fresh-worker.service
 sudo systemctl enable --now cociber-fresh-worker.service
 sudo systemctl status cociber-fresh-worker.service --no-pager
 sudo journalctl -u cociber-fresh-worker.service -n 40 --no-pager
 ```
 
 Esperado: unidad `active (running)`, sin reinicios continuos ni errores de conexión. No inicies otro worker manual mientras esta unidad esté activa.
+
+### Si aparece `status=200/CHDIR`
+
+Ese error significa que systemd no pudo entrar en WorkingDirectory; Docker y el worker todavía no llegaron a ejecutarse. En el caso reportado, la plantilla indicaba `/ctf-plataform`, pero la carpeta no existía y el proyecto se estaba utilizando desde `~/ctf-platform`.
+
+Detén la unidad, entra al clon operativo, completa las comprobaciones de 4.1, configura la ruta local de 4.2 y arranca según 4.3. No se requiere reinstalar Docker, recrear la BD, regenerar claves ni repetir los inyectores para corregir este error. Si después aparece otro mensaje, consulta los registros recientes: corresponde al siguiente punto de diagnóstico, no necesariamente a la ruta.
 
 ## 5. Confirmar las fichas desde la web
 

@@ -10,6 +10,14 @@ Estado acordado el **8 de noviembre de 2026**: configurar las estrategias, conse
 
 Las estrategias aparecen en el formulario avanzado y permiten guardar un borrador. El backend rechaza piloto, publicación e inicio mientras no exista una implementación validada. `WINRM_INJECTOR_ENABLED=true` por sí solo **no** habilita ESC-04. No se sugiere cambiar `enabled` manualmente para evitar la validación.
 
+## Actualización del 10 de noviembre de 2026
+
+Ya funciona el inicio de un reto y el acceso SSH del jugador a la Kali. Windows A/B usan Windows 10 Pro; SRVFSAD usa Ubuntu Server 26.04 y su nueva demo será **FTP**, no Samba. Las [guías 09 a 12](../02_Laboratorios/09_PREPARACION_WINDOWS_Y_FTP.md) configuran los servicios, cuentas de ensayo y pruebas manuales. Todavía no se han ejecutado en estas VM desde esta entrega.
+
+Las cuentas de mantenimiento confirmadas son `lab-winvict-a`, `lab-winvict-b` y `lab-srvfsad`; son distintas de las cuentas de prueba y de la futura cuenta técnica del inyector. No se almacenan sus contraseñas en la documentación. La pertenencia a dominio de Windows se verifica en la guía 10.
+
+El catálogo sigue declarando ESC-05 como `EXFIL-SMB-LAB` deshabilitado. Cambiarlo a FTP requiere implementar y validar una estrategia nueva; no basta con editar su nombre. La [guía 12](../02_Laboratorios/12_VALIDACION_WINDOWS_FTP.md) delimita ese desarrollo y la reserva conjunta de Windows.
+
 ## Paquete que se entregará en la fase siguiente
 
 1. Una ficha por escenario con los campos de su guía.
@@ -27,7 +35,7 @@ Los secretos se instalarán directamente en los archivos privados/montajes del s
 - **ESC04-01:** validar HTTPS WinRM, certificado, cuenta de servicio y permisos mínimos en A y B.
 - **ESC04-02:** definir helper Windows, entrada por stdin y compensación de ambas VM.
 - **ESC04-03:** ampliar reservas para una **cadena de dos víctimas**. El esquema actual reserva una víctima por corrida; no representa todavía la reserva atómica A→B.
-- **ESC05-01:** confirmar recurso Samba, cuentas de práctica y ruta temporal por corrida.
+- **ESC05-01:** sustituir el diseño Samba de SRVFSAD por una estrategia FTP explícita, con cuenta y raíz aisladas por corrida; validar el servicio preparado en la guía 11.
 - **ESC05-02:** definir qué constituye evidencia de exfiltración y el destino controlado autorizado.
 - **COMÚN-01:** añadir pruebas de compensación, idempotencia y concurrencia para cada adaptador.
 - **COMÚN-02:** probar desde LAB-KALI-BLUE y LAB-KALI-PURPLE, incluido acceso desde la consola Guacamole.

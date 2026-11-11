@@ -1,5 +1,7 @@
 # 04. ESC-05: guía para preparar Samba y exfiltración
 
+**Diseño anterior, sustituido para la demo actual:** el operador confirmó Ubuntu Server 26.04 y solicitó FTP en LAB-SRVFSAD. Ejecuta [11. SRVFSAD FTP](../02_Laboratorios/11_SRVFSAD_FTP.md). No instales Samba siguiendo esta ficha para satisfacer la petición FTP. El texto siguiente se conserva como referencia del contrato anterior; `EXFIL-SMB-LAB` sigue deshabilitado y el adaptador FTP está pendiente.
+
 **Estado:** `EXFIL-SMB-LAB`, T1048, avanzado, 500 puntos, **deshabilitado**. Víctima: LAB-SRVFSAD, 10.10.30.21. Atacante: Kali asignada por la plataforma. No se presupone nombre de recurso, cuenta de práctica ni contraseña Samba.
 
 ## 1. Conectarse por la ruta de administración

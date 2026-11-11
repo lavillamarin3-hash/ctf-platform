@@ -1,5 +1,7 @@
 # 02. Actualizar la interfaz y el módulo Guacamole de la instalación nueva
 
+**Continuación del 10 de noviembre:** si ya aplicaste esta interfaz y tienes retos operativos, sigue [05. Modales y gestión de usuarios](05_MODALES_Y_GESTION_USUARIOS.md). Esa guía recoge la ruta real y el worker ya instalado; no repitas esta actualización inicial.
+
 **Antes:** completa [01. Verificar la plataforma](01_VERIFICAR_PLATAFORMA_EXISTENTE.md). Si esta actualización visual ya está aplicada, revisa sus comprobaciones y pasa a [03. Guacamole](03_GUACAMOLE_Y_CONEXIONES.md) sin reconstruir otra vez.
 
 Desde PowerShell local:

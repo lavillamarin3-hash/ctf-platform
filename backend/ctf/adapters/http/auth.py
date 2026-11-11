@@ -17,7 +17,7 @@ DUMMY_HASH = hasher.hash(secrets.token_urlsafe(32))
 
 
 def user_view(user):
-    return {"id": str(user.id), "username": user.username, "role": user.role, "must_change_password": user.must_change_password}
+    return {"id": str(user.id), "username": user.username, "role": user.role, "state": user.state, "must_change_password": user.must_change_password}
 
 
 def issue_token(runtime, user):
