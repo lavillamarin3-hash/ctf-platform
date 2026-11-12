@@ -18,3 +18,19 @@
 .fresh-modal-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 24px;border-bottom:1px solid var(--fresh-line);position:sticky;top:0;background:var(--fresh-panel);z-index:2}
 .fresh-modal-head h2{margin:0}.fresh-modal-body{padding:22px 24px}.fresh-modal-body>.fresh-card,.fresh-modal-body>.fresh-form{margin:0;border:0;padding:0;box-shadow:none}.fresh-fields{border:0;padding:0;margin:0;min-width:0}
 @media(max-width:720px){.fresh .fresh-modal{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);border-radius:12px}.fresh-modal-head{padding:14px 16px}.fresh-modal-body{padding:16px}.fresh-modal-head h2{font-size:1.1rem}}
+/* Acceso a pantalla completa; el pie institucional pertenece solo al login. */
+.fresh.fresh-login{display:flex;flex-direction:column;min-height:100vh;min-height:100dvh;padding:0}
+.fresh-login .fresh-login-frame{flex:1;width:100%;min-height:0;grid-template-columns:minmax(0,1fr) minmax(0,1fr);border:0;border-radius:0;box-shadow:none;overflow:visible}
+.fresh-login .fresh-login-visual{padding:clamp(32px,6vh,90px) 32px}
+.fresh-login .fresh-login-form{padding:76px clamp(28px,6vw,110px) 48px}
+.fresh-login-form form{width:100%;max-width:460px;margin:auto}
+.fresh-login-footer{width:100%;box-sizing:border-box;flex-shrink:0;text-align:center;padding:18px 24px;border-top:1px solid var(--fresh-line);background:var(--fresh-panel);color:var(--fresh-dim);font-size:12px}
+.fresh-login-footer span{display:block;font-size:11px;margin-top:3px}
+.fresh-roadmap{border:1px solid var(--fresh-line);border-radius:14px;padding:20px;background:var(--fresh-panel);margin-bottom:26px}
+.fresh-roadmap .fresh-kicker{margin:0}.fresh-roadmap label{margin:0;max-width:100%;min-width:min(280px,100%)}.fresh-roadmap select{max-width:100%}
+.fresh-roadmap-steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));list-style:none;padding:0;margin:20px 0;gap:12px}
+.fresh-roadmap-steps li{display:flex;gap:8px;align-items:start;border-top:3px solid var(--fresh-line);padding-top:12px;font-size:12px;color:var(--fresh-dim)}
+.fresh-roadmap-steps li>span:first-child,.fresh-step-number{flex-shrink:0;display:grid;place-items:center;width:25px;height:25px;border-radius:50%;background:var(--fresh-field);border:1px solid var(--fresh-line)}
+.fresh-roadmap-steps small{display:block;font-size:10px}.fresh-roadmap-steps .done{border-color:#39ba8b;color:var(--fresh-text)}.fresh-roadmap-steps .done>span:first-child,.fresh-step-number.done{color:#39ba8b;border-color:#39ba8b}.fresh-roadmap-steps .current{border-color:var(--fresh-accent);color:var(--fresh-accent)}
+.fresh-preparation-list{list-style:none;padding:0}.fresh-preparation-list>li{display:flex;gap:16px}.fresh-preparation-list h3{margin:0}.fresh-preparation-list h3 .fresh-badge{margin-left:8px}.fresh-preparation-list p{margin:8px 0 14px}.fresh-preparation-list>li>div{min-width:0}
+@media(max-width:720px){.fresh-login .fresh-login-frame{grid-template-columns:1fr}.fresh-login .fresh-login-visual{padding:28px 20px}.fresh-login .fresh-login-form{padding:64px 24px 32px}.fresh-login-footer{padding:16px;font-size:11px}.fresh-roadmap{padding:16px}.fresh-roadmap .fresh-section-head>label{width:100%}.fresh-preparation-list>li{gap:10px}}

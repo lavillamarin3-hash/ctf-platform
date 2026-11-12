@@ -177,6 +177,17 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         client.headers['Authorization'] = 'Bearer ' + issue_token(app.state.runtime, actor)
         return client, actor, app.state.runtime
 
+    async def test_group_preparation_counts_only_active_players(self):
+        client, actor, runtime = await self.management_client()
+        async with client:
+            response = await client.get('/api/v1/groups')
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()[0]['active_players'], 2)
+            async with self.repo.sessions.begin() as s:
+                (await s.get(User, self.u1)).state = 'inactivo'
+                (await s.get(User, self.u2)).role = 2
+            self.assertEqual((await client.get('/api/v1/groups')).json()[0]['active_players'], 0)
+
     async def test_user_crud_and_single_administrator(self):
         client, actor, runtime = await self.management_client()
         async with client:

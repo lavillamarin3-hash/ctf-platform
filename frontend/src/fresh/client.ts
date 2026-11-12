@@ -1,9 +1,10 @@
 export type User = { id: string; username: string; role: number; state?: string; must_change_password: boolean };
 export type Machine = { id: string; name: string; ip: string; kind: string; vlan: number; state: string; busy: boolean };
 export type Scenario = { code: string; strategy: string; difficulty: string; points: number; victims: string[]; enabled: boolean };
-export type Challenge = { id: string; code: string; name: string; difficulty: string; points: number; description: string; instructions: string; strategy: string; state: string; pilot_passed: boolean; availability: string; groups?: string[]; hints: {order:number;penalty:number}[]; resources: {title:string;url:string}[] };
+export type Challenge = { id: string; code: string; name: string; difficulty: string; points: number; description: string; instructions: string; strategy: string; victim_id: string; state: string; pilot_passed: boolean; availability: string; groups?: string[]; hints: {order:number;penalty:number}[]; resources: {title:string;url:string}[] };
 export type Run = { id: string; challenge_id: string; state: string; outcome?: string; expires: string; pilot: boolean };
-export type Group = { id: string; code: string; name: string; state?: string };
+export type Group = { id: string; code: string; name: string; state?: string; active_players?: number };
+export type Laboratory = { id: string; code: string; name: string; state: string; machines: string[] };
 export type Maintenance = { id: string; machine_id: string; reason: string; state: string; tested: boolean };
 export const token = { get: () => sessionStorage.getItem('ctf-fresh-token'), set: (value: string) => sessionStorage.setItem('ctf-fresh-token', value), clear: () => sessionStorage.removeItem('ctf-fresh-token') };
 

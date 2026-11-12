@@ -48,3 +48,7 @@ firefox http://10.10.30.20/dvwa/
 Si no existe Firefox, usa el navegador instalado desde el menú de Kali. Si no hay escritorio o acceso autorizado, puedes preparar y demostrar ESC-02, pero **deja la demo visual ESC-03 pendiente**. No intentes abrir Firefox desde una consola SSH sin entorno gráfico ni desde Windows esperando alcanzar VLAN30.
 
 Siguiente: [inventario y catálogo](04_INVENTARIO_Y_CATALOGO.md).
+
+## Si una conexión RDP es rechazada
+
+Continúa con [06. Router, Guacamole y escritorios RDP](06_DIAGNOSTICO_RDP_GUACAMOLE.md). No agregues DNAT de 3389: revisa primero el origen real de guacd, la interfaz elegida por LAB-GUAC y el servicio de la VM.

@@ -98,7 +98,7 @@ async def delete_user(user_id: UUID, body: DeleteUser, request: Request, actor=D
 @router.get("/groups")
 async def groups(request: Request, user=Depends(roles(1, 2))):
     async with request.app.state.runtime.repo.sessions() as s:
-        return [public_row(g) for g in (await s.scalars(select(Group).order_by(Group.code))).all()]
+        return [{**public_row(g), "active_players": await s.scalar(select(func.count()).select_from(Member).join(User, User.id == Member.user_id).where(Member.group_id == g.id, User.role == 3, User.state == "activo"))} for g in (await s.scalars(select(Group).order_by(Group.code))).all()]
 
 
 @router.post("/groups", status_code=201)

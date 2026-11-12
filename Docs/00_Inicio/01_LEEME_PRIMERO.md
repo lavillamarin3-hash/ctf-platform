@@ -4,6 +4,12 @@ Actualización: **10 de noviembre de 2026**. La plataforma nueva está desplegad
 
 **Ruta observada en LAB-CTFWEB: `/home/lab-ctfweb/ctf-platform`.** Las primeras guías usaban la ruta nominal `/ctf-plataform/`: donde aparezca, usa el checkout real comprobado con `pwd -P` y los archivos `.env.fresh` y `deploy/docker-compose.fresh.yml`. No crees otra carpeta ni reinstales el worker con el directorio antiguo.
 
+## Cambios del 12 de noviembre
+
+- Si falla el escritorio remoto: [06. Diagnóstico RDP de Guacamole](../01_Plataforma/06_DIAGNOSTICO_RDP_GUACAMOLE.md).
+- Para el fallo confirmado de LAB-KALI-BLUE con Guacamole Docker 1.6.0: [08. Diagnóstico específico](../01_Plataforma/08_KALI_BLUE_RDP_DOCKER.md).
+- Para actualizar y usar el nuevo recorrido: [07. Preparación de retos y login](../01_Plataforma/07_PREPARACION_RETOS_Y_LOGIN.md).
+
 ## Cómo utilizar las guías
 
 1. Lee [02. Acceso y comandos base](02_ACCESO_Y_COMANDOS_BASE.md). Explica cómo abrir la terminal correcta, conectarte, cambiar de carpeta, editar y salir.

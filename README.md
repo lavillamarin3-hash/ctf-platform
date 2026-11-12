@@ -21,6 +21,11 @@ Estado confirmado el 10 de noviembre de 2026: plataforma desplegada, BD conectad
 
 Los números ordenan los documentos **dentro de cada carpeta**. No ejecutes todas las carpetas de forma consecutiva: `DocumentacionBD`, referencia e histórico son rutas condicionadas; el índice de inicio indica cuándo utilizarlas.
 
+## Actualización del 12 de noviembre de 2026
+
+- [Diagnóstico RDP: router, Guacamole, Windows y Kali](Docs/01_Plataforma/06_DIAGNOSTICO_RDP_GUACAMOLE.md). La publicación CTF declarada ahora usa `10.195.20.56:443`; confirmar su asignación en el router.
+- [Preparación de retos y login a pantalla completa](Docs/01_Plataforma/07_PREPARACION_RETOS_Y_LOGIN.md). Recorrido por reto con siete pasos calculados desde la plataforma y footer institucional exclusivo del login.
+
 ## Ruta y componentes de la instalación actual
 
 Las últimas sesiones sitúan el proyecto en **`/home/lab-ctfweb/ctf-platform`**. La ruta nominal anterior era `/ctf-plataform/`; conserva el checkout real y el ajuste de WorkingDirectory del worker. No muevas el despliegue para coincidir con una guía antigua. Los secretos siguen en `/opt/cociber-secrets`.
