@@ -13,7 +13,7 @@ La ruta observada es `/home/lab-ctfweb/ctf-platform`; conserva el WorkingDirecto
 1. Entra como administrador o instructor y abre **Preparación de retos**. También puedes pulsar **Nuevo reto** desde Retos.
 2. Selecciona un reto existente en el selector superior o elige **Nuevo reto**. La selección se mantiene al navegar entre módulos durante esta sesión de la página.
 3. Sigue los pasos: **Máquinas → Laboratorios → Crear reto → Integración → Jugadores → Piloto → Publicar**.
-4. Los botones llevan al módulo correspondiente o abren el formulario. Vuelve mediante **Gestionar preparación**, visible sobre el contenido de cada módulo.
+4. Los botones llevan al módulo correspondiente o abren el formulario. Vuelve mediante **Gestionar preparación**, visible sobre el contenido de los módulos que participan: **Preparación de retos, Retos, Máquinas, Laboratorios, Grupos, Corridas y Guacamole**. Guacamole permite comprobar el acceso remoto y Corridas permite seguir el piloto. El recorrido y la ayuda lateral de preparación se ocultan en Usuarios, Mantenimiento, Ranking y Mi cuenta.
 5. Al guardar el borrador, aparece «Reto creado correctamente» y el paso de creación queda completado. Esto no lo publica.
 6. Asigna al menos un grupo con jugadores activos. Si el grupo está vacío, crea el grupo con sus jugadores y asígnalo; crear una cuenta sin pertenencia a grupo no completa el paso.
 7. Ejecuta el piloto. Mientras está en cola, preparando o limpiando, consulta **Corridas**. La aprobación solo se completa cuando la plataforma registra éxito y limpieza.
@@ -45,7 +45,7 @@ Se conservan tema claro/oscuro, mostrar contraseña, mensajes de error y cambio 
 - Revisar un reto con integración deshabilitada: no debe poder ejecutar piloto ni publicarse.
 - Asignar un grupo vacío y luego uno con jugadores activos: solo el segundo completa Jugadores.
 - Completar un piloto y su limpieza, publicar y comprobar que el jugador del grupo ve el reto.
-- Cambiar de módulo y confirmar que el recorrido sigue mostrando el reto elegido; cerrar sesión y verificar que el jugador no ve administración ni el recorrido.
+- Cambiar entre los módulos participantes y confirmar que el recorrido sigue mostrando el reto elegido. Entrar en Usuarios, Mantenimiento, Ranking y Mi cuenta: no deben mostrar el recorrido ni la ayuda lateral de preparación. Volver a Retos: se conserva la selección. Cerrar sesión y verificar que el jugador no ve administración ni el recorrido.
 
 Las verificaciones locales de interfaz y lógica no sustituyen la prueba del worker y de las VM reales. Esta entrega no cambia nftables ni instala RDP en Nutanix automáticamente.
 

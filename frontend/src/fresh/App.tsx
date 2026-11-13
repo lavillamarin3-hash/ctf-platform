@@ -8,7 +8,7 @@ import { Login, Shell, Theme, AccountPassword, stateLabel } from './Layout';
 import { GuacamoleAdmin } from './GuacamoleAdmin';
 import { Modal } from './Modal';
 import { UsersAdmin } from './UsersAdmin';
-import { preparation, PreparationStep } from './preparation';
+import { preparation, preparationModules, PreparationStep } from './preparation';
 import { PreparationBar, PreparationManager } from './PreparationRoadmap';
 
 class ErrorBoundary extends Component<{children: ReactNode}, {failed: boolean}> {
@@ -117,7 +117,7 @@ function FreshApp() {
     navigate(step.destination);
   }
   return <Shell user={user} tab={activeTab} tabs={tabs} navigate={navigate} logout={() => {void api('/auth/logout', {}).catch(() => {}).finally(() => {token.clear(); window.dispatchEvent(new Event('fresh-logout'));});}} theme={theme} toggleTheme={toggleTheme} machineCount={machines.length} labCount={labs.length} readyLabs={labs.filter(l => l.state === 'ready').length} challengeCount={challenges.length} publishedCount={challenges.filter(c => c.state === 'published').length} liveRuns={runs.filter(r => ['en_cola','reservada','activa','reiniciando'].includes(r.state)).length} notice={notice}>
-      {manager && <PreparationBar roadmap={roadmap} challenge={preparationChallenge} challenges={challenges} select={setSelected} synced={preparationSynced} open={()=>navigate('preparacion')}/> }
+      {manager && preparationModules.has(activeTab) && <PreparationBar roadmap={roadmap} challenge={preparationChallenge} challenges={challenges} select={setSelected} synced={preparationSynced} open={()=>navigate('preparacion')}/> }
       {activeTab === 'preparacion' && manager && <PreparationManager input={preparationInput} roadmap={roadmap} challenges={challenges} select={setSelected} startNew={startNewPreparation} act={preparationAction} busy={busy} synced={preparationSynced}/> }
       {newChallenge && manager && <Modal title="Nuevo reto" busy={busy} onClose={()=>setNewChallenge(false)}><FormularioReto machines={machines} scenarios={scenarios} onBusyChange={setBusy} onSaved={async created=>{setNewChallenge(false);setSelected(created.id);navigate('preparacion');setNotice('Reto creado correctamente. Continúa con los pasos pendientes antes de publicarlo.');await refresh();}}/></Modal>}
       {activeTab === 'guacamole' && user.role === 1 && <GuacamoleAdmin />}

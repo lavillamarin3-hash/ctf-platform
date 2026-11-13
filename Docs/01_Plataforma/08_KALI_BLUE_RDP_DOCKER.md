@@ -7,7 +7,25 @@ Actualizado el **12 de noviembre de 2026**. Datos confirmados por el operador:
 - Destino: LAB-KALI-BLUE, `10.10.20.12`; cuenta administrativa `lab-kali-blue`.
 - Mensaje al abrir la conexión: «El servidor de escritorio remoto no está disponible actualmente».
 
-El mensaje no identifica por sí solo la causa. **No se ha comprobado aún si xrdp escucha ni si guacd alcanza la Kali.** No reinstales MariaDB ni reinicialices las conexiones para diagnosticarlo.
+El mensaje es genérico, pero las últimas salidas confirman un bloqueo en Kali: **Xfce está instalado, falta xorgxrdp, no existen las unidades xrdp/xrdp-sesman y no hay escucha en 3389 ni 3390.** Falta preparar el servicio RDP y después comprobar el recorrido desde guacd. No reinstales MariaDB ni reinicialices las conexiones para diagnosticarlo.
+
+## Hallazgos de las salidas recibidas
+
+| Comprobación | Evidencia | Conclusión |
+| --- | --- | --- |
+| Ruta del host a Kali | `via 10.10.10.1 dev ens3 src 10.10.10.10` | La selección de interfaz/origen es correcta; no aplicar cambios de rutas del paso 3 de la guía 06 |
+| Ruta del host a Windows A | Mismo gateway, interfaz y origen | También correcta desde el host |
+| TCP3389 hacia Kali | `Connection refused` | Rechazo activo; comprobar primero escucha/puerto de xrdp y firewall de Kali |
+| Escritorio de Kali | `kali-desktop-xfce 2026.2.12` y `/usr/bin/startxfce4` | Xfce ya está instalado |
+| Servidor RDP de Kali | Falta xorgxrdp, unidades xrdp/xrdp-sesman ausentes y ningún puerto escuchando | Instalar los paquetes RDP según la sección 2.1; el nombre `xrdp` sin versión en dpkg-query no acredita una instalación completa |
+| TCP3389 hacia Windows A/B | Timeout | No hubo respuesta a tiempo; verificar RDP, firewall local y retorno por separado |
+| Unidad guacd nativa | No existe | Esperado: este despliegue usa Docker |
+| Contenedores | Web activo; guacd y MariaDB activos y healthy | Los procesos están funcionando; no acredita una sesión RDP completa |
+| Red Docker | `docker0` DOWN y puentes personalizados UP | No demuestra un fallo: Compose puede utilizar los puentes personalizados |
+
+La cuenta de mantenimiento confirmada de LAB-GUAC es **`labadmin`**. Contenedores: `guacamole-guacamole-1`, `guacamole-guacd-1` y `guacamole-db-1`.
+
+**Siguiente paso: ejecutar la sección 2.1 en Kali.** La ausencia de escucha ya está confirmada. Después se debe repetir la prueba desde LAB-GUAC y desde el espacio de red de guacd; todavía no se ha validado una sesión completa. Las reglas compartidas ya permiten VLAN 10 hacia VLAN 20: este hallazgo no requiere abrir otro puerto en el router.
 
 ## 1. Distinguir los tres tramos
 
@@ -55,13 +73,50 @@ sudo journalctl -u xrdp -u xrdp-sesman --since '10 minutes ago' --no-pager
 
 Las otras secciones de xrdp pueden contener parámetros `port` para sus sesiones; no hagas una sustitución global de todos ellos.
 
+### 2.1. Corregir la instalación RDP ausente en Kali
+
+Ejecuta estos comandos **en LAB-KALI-BLUE**, conectado como `lab-kali-blue`. Xfce ya existe: basta con instalar el servidor RDP y su integración con Xorg. Esta combinación está documentada por [Kali: Xfce con RDP](https://www.kali.org/docs/general-use/xfce-with-rdp/).
+
+Primero actualiza el índice de paquetes:
+
+```bash
+sudo apt-get update
+```
+
+Si hay errores de DNS, repositorios o descarga, detente y conserva la salida. Solo después de actualizar correctamente, instala:
+
+```bash
+sudo apt-get install xrdp xorgxrdp
+```
+
+Acepta la instalación cuando se solicite. Si termina correctamente, habilita el servicio:
+
+```bash
+sudo systemctl enable --now xrdp
+```
+
+Comprueba el resultado:
+
+```bash
+dpkg-query -W -f='${binary:Package}\t${db:Status-Abbrev}\t${Version}\n' xrdp xorgxrdp
+sudo systemctl status xrdp xrdp-sesman --no-pager
+sudo ss -lntp '( sport = :3389 or sport = :3390 )'
+```
+
+Espera paquetes con estado `ii`, servicios `active (running)` y escucha en **3389** accesible desde la red. Si aparece otro puerto, sigue la revisión de `[Globals]` de la sección 2. Si falla el arranque, recoge el error antes de continuar:
+
+```bash
+sudo journalctl -u xrdp -u xrdp-sesman -n 80 --no-pager
+```
+
+Una vez que exista escucha, continúa con las secciones 3 y 4 **en LAB-GUAC**. El éxito de la instalación no confirma todavía autenticación, certificados ni apertura del escritorio. Para la primera prueba usa la conexión administrativa de la sección 7 y selecciona Xorg si xrdp presenta un selector de sesión.
+
 ## 3. Identificar los contenedores en LAB-GUAC
 
 Abre otra terminal y entra a **LAB-GUAC** con su cuenta Linux administrativa habitual. Si necesitas conectarte desde PowerShell:
 
 ```powershell
-$cuentaGuac = Read-Host 'Cuenta Linux administrativa de LAB-GUAC'
-ssh -J lab-rtrfw@10.195.20.20 "$($cuentaGuac)@10.10.10.10"
+ssh -J lab-rtrfw@10.195.20.20 labadmin@10.10.10.10
 ```
 
 Ya en LAB-GUAC, ejecuta:
@@ -69,12 +124,12 @@ Ya en LAB-GUAC, ejecuta:
 ```bash
 hostname
 sudo docker ps -a --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
-read -rp 'Nombre exacto del contenedor de la aplicación Guacamole: ' guac_web
-read -rp 'Nombre exacto del contenedor guacd: ' guacd_container
+guac_web=guacamole-guacamole-1
+guacd_container=guacamole-guacd-1
 sudo docker inspect --format '{{.Name}} {{.Config.Image}} estado={{.State.Status}} red={{.HostConfig.NetworkMode}} {{range $name,$net := .NetworkSettings.Networks}}{{$name}}={{$net.IPAddress}} {{end}}' "$guac_web" "$guacd_container"
 ```
 
-Toma los nombres reales de la primera salida, no los deduzcas del nombre de la imagen. Ambos deben estar en ejecución. En la modalidad bridge habitual deben compartir una red Docker que permita su comunicación; si usan una arquitectura distinta, registra esa diferencia.
+Los nombres anteriores están confirmados en las salidas recibidas. Si el despliegue se recreó con otro nombre, actualízalos según `docker ps`. Ambos deben estar en ejecución. En la modalidad bridge habitual deben compartir una red Docker que permita su comunicación; si usan una arquitectura distinta, registra esa diferencia.
 
 Consulta solo las variables de conexión a guacd, sin imprimir contraseñas de BD:
 

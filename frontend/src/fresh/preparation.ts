@@ -3,6 +3,9 @@ import type { Challenge, Group, Laboratory, Machine, Run, Scenario } from './cli
 export type PreparationInput = { challenge?: Challenge; machines: Machine[]; labs: Laboratory[]; groups: Group[]; scenarios: Scenario[]; runs: Run[] };
 export type PreparationStep = { id: string; label: string; done: boolean; detail: string; destination: string };
 
+// Módulos del recorrido y de la comprobación de acceso a las máquinas.
+export const preparationModules = new Set(['preparacion', 'retos', 'maquinas', 'laboratorios', 'grupos', 'corridas', 'guacamole']);
+
 // Estado derivado: no hay casillas locales que puedan certificar una prueba remota.
 export function preparation({challenge, machines, labs, groups, scenarios, runs}: PreparationInput) {
   const scenario = scenarios.find(s => s.strategy === challenge?.strategy);
